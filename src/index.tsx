@@ -1,1 +1,0 @@
-export { createGatewayProxy } from "./proxy";
