@@ -12,8 +12,6 @@
 	"scripts": {
 		"build": "tsup src/index.tsx --format esm,cjs --dts --external react",
 		"dev": "tsup src/index.tsx --format esm,cjs --watch --dts --external react",
-		"check": "biome check .",
-		"check:fix": "biome check . --write",
 		"tsc": "tsc --noEmit",
 		"clean": "rm -rf .turbo && rm -rf node_modules && rm -rf dist"
 	},
@@ -22,7 +20,6 @@
 		"@vercel/oidc": "catalog:"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "catalog:",
 		"@sferadev/tsconfig": "workspace:*",
 		"@types/node": "catalog:",
 		"tsup": "catalog:",
