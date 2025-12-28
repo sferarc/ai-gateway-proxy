@@ -11,15 +11,29 @@ import { createGateway } from "@ai-sdk/gateway";
 import { generateText, streamText } from "ai";
 import { describe, expect, it } from "vitest";
 import { createGatewayProxy } from "./proxy";
-import type { GatewayResponse } from "./types";
+import type { CreateGatewayProxyOptions, GatewayResponse } from "./types";
 
 const hasApiKey = !!process.env.AI_GATEWAY_API_KEY;
 const TEST_MODEL = "google/gemini-2.0-flash";
 
+type TestServerOptions = {
+	proxyOptions?: CreateGatewayProxyOptions;
+	/**
+	 * The name of the segments parameter to use when passing to the proxy.
+	 * @default "segments"
+	 */
+	segmentsParam?: string;
+	/**
+	 * If true, call the proxy without context (for testing extractPath).
+	 */
+	noContext?: boolean;
+};
+
 /**
  * Creates a test server running the proxy and returns the gateway client
  */
-function createTestServer(proxyOptions: Parameters<typeof createGatewayProxy>[0] = {}) {
+function createTestServer(options: TestServerOptions = {}) {
+	const { proxyOptions = {}, segmentsParam = "segments", noContext = false } = options;
 	const proxy = createGatewayProxy(proxyOptions);
 
 	const server = createServer(async (req, res) => {
@@ -43,10 +57,12 @@ function createTestServer(proxyOptions: Parameters<typeof createGatewayProxy>[0]
 			body: req.method !== "GET" && req.method !== "HEAD" ? body : undefined,
 		});
 
-		// Call the proxy
-		const response = await proxy(request, {
-			params: Promise.resolve({ segments }),
-		});
+		// Call the proxy - with or without context based on noContext flag
+		const response = noContext
+			? await proxy(request)
+			: await proxy(request, {
+					params: Promise.resolve({ [segmentsParam]: segments }),
+				});
 
 		// Send the response
 		res.statusCode = response.status;
@@ -96,7 +112,7 @@ function createTestServer(proxyOptions: Parameters<typeof createGatewayProxy>[0]
 describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 	describe("generateText (non-streaming)", () => {
 		it("proxies a simple request successfully", async () => {
-			const { gateway, close } = await createTestServer();
+			const { gateway, close } = await createTestServer({});
 
 			try {
 				const result = await generateText({
@@ -118,10 +134,12 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 			let capturedMaxTokens: number | undefined;
 
 			const { gateway, close } = await createTestServer({
-				beforeRequest: ({ request }) => {
-					capturedMaxTokens = request.maxOutputTokens;
-					// Override to very small limit
-					return { ...request, maxOutputTokens: 5 };
+				proxyOptions: {
+					beforeRequest: ({ request }) => {
+						capturedMaxTokens = request.maxOutputTokens;
+						// Override to very small limit
+						return { ...request, maxOutputTokens: 5 };
+					},
 				},
 			});
 
@@ -145,12 +163,14 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 			let capturedResponse: GatewayResponse | undefined;
 
 			const { gateway, close } = await createTestServer({
-				afterResponse: ({ response }) => {
-					capturedResponse = response;
-					return {
-						...response,
-						providerMetadata: { custom: { modified: true } },
-					};
+				proxyOptions: {
+					afterResponse: ({ response }) => {
+						capturedResponse = response;
+						return {
+							...response,
+							providerMetadata: { custom: { modified: true } },
+						};
+					},
 				},
 			});
 
@@ -172,7 +192,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 
 	describe("streamText (streaming)", () => {
 		it("streams text successfully", async () => {
-			const { gateway, close } = await createTestServer();
+			const { gateway, close } = await createTestServer({});
 
 			try {
 				const result = streamText({
@@ -198,9 +218,11 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 			let capturedMaxTokens: number | undefined;
 
 			const { gateway, close } = await createTestServer({
-				beforeRequest: ({ request }) => {
-					capturedMaxTokens = request.maxOutputTokens;
-					return { ...request, maxOutputTokens: 5 };
+				proxyOptions: {
+					beforeRequest: ({ request }) => {
+						capturedMaxTokens = request.maxOutputTokens;
+						return { ...request, maxOutputTokens: 5 };
+					},
 				},
 			});
 
@@ -230,13 +252,15 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 			let capturedResponse: GatewayResponse | undefined;
 
 			const { gateway, close } = await createTestServer({
-				afterResponse: ({ response }) => {
-					capturedResponse = response;
-					// Return modified response
-					return {
-						...response,
-						providerMetadata: { custom: { streamModified: true } },
-					};
+				proxyOptions: {
+					afterResponse: ({ response }) => {
+						capturedResponse = response;
+						// Return modified response
+						return {
+							...response,
+							providerMetadata: { custom: { streamModified: true } },
+						};
+					},
 				},
 			});
 
@@ -269,9 +293,11 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 			let aggregatedContent: GatewayResponse["content"] | undefined;
 
 			const { gateway, close } = await createTestServer({
-				afterResponse: ({ response }) => {
-					aggregatedContent = response.content;
-					return response;
+				proxyOptions: {
+					afterResponse: ({ response }) => {
+						aggregatedContent = response.content;
+						return response;
+					},
 				},
 			});
 
@@ -308,9 +334,11 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 			let capturedError: unknown;
 
 			const { gateway, close } = await createTestServer({
-				onError: ({ error, status }) => {
-					capturedError = { error, status };
-					return error;
+				proxyOptions: {
+					onError: ({ error, status }) => {
+						capturedError = { error, status };
+						return error;
+					},
 				},
 			});
 
@@ -333,13 +361,15 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 			const order: string[] = [];
 
 			const { gateway, close } = await createTestServer({
-				beforeRequest: ({ request }) => {
-					order.push("beforeRequest");
-					return request;
-				},
-				afterResponse: ({ response }) => {
-					order.push("afterResponse");
-					return response;
+				proxyOptions: {
+					beforeRequest: ({ request }) => {
+						order.push("beforeRequest");
+						return request;
+					},
+					afterResponse: ({ response }) => {
+						order.push("afterResponse");
+						return response;
+					},
 				},
 			});
 
@@ -360,13 +390,15 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 			const order: string[] = [];
 
 			const { gateway, close } = await createTestServer({
-				beforeRequest: ({ request }) => {
-					order.push("beforeRequest");
-					return request;
-				},
-				afterResponse: ({ response }) => {
-					order.push("afterResponse");
-					return response;
+				proxyOptions: {
+					beforeRequest: ({ request }) => {
+						order.push("beforeRequest");
+						return request;
+					},
+					afterResponse: ({ response }) => {
+						order.push("afterResponse");
+						return response;
+					},
 				},
 			});
 
@@ -387,6 +419,84 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 
 				// Both hooks should have been called in order
 				expect(order).toEqual(["beforeRequest", "afterResponse"]);
+			} finally {
+				await close();
+			}
+		}, 30000);
+	});
+
+	describe("segmentsParam option", () => {
+		it("uses custom segmentsParam name", async () => {
+			const { gateway, close } = await createTestServer({
+				segmentsParam: "path",
+				proxyOptions: {
+					segmentsParam: "path",
+				},
+			});
+
+			try {
+				const result = await generateText({
+					model: gateway(TEST_MODEL),
+					prompt: "Say 'test'",
+					maxOutputTokens: 10,
+				});
+
+				expect(result.text).toBeDefined();
+			} finally {
+				await close();
+			}
+		}, 30000);
+	});
+
+	describe("extractPath option", () => {
+		it("uses extractPath to extract path from request URL", async () => {
+			const { gateway, close } = await createTestServer({
+				noContext: true,
+				proxyOptions: {
+					extractPath: (request) => {
+						const url = new URL(request.url);
+						return url.pathname.split("/").filter(Boolean).join("/");
+					},
+				},
+			});
+
+			try {
+				const result = await generateText({
+					model: gateway(TEST_MODEL),
+					prompt: "Say 'hello'",
+					maxOutputTokens: 10,
+				});
+
+				expect(result.text).toBeDefined();
+			} finally {
+				await close();
+			}
+		}, 30000);
+
+		it("works with streaming when using extractPath", async () => {
+			const { gateway, close } = await createTestServer({
+				noContext: true,
+				proxyOptions: {
+					extractPath: (request) => {
+						const url = new URL(request.url);
+						return url.pathname.split("/").filter(Boolean).join("/");
+					},
+				},
+			});
+
+			try {
+				const result = streamText({
+					model: gateway(TEST_MODEL),
+					prompt: "Say 'world'",
+					maxOutputTokens: 10,
+				});
+
+				let fullText = "";
+				for await (const chunk of result.textStream) {
+					fullText += chunk;
+				}
+
+				expect(fullText.length).toBeGreaterThan(0);
 			} finally {
 				await close();
 			}
