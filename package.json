@@ -4,6 +4,11 @@
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/SferaDev/SferaDev.git",
+		"directory": "packages/ai-gateway-proxy"
+	},
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
