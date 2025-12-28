@@ -10,20 +10,27 @@
 		"dist/**"
 	],
 	"scripts": {
-		"build": "tsup src/index.tsx --format esm,cjs --dts --external react",
-		"dev": "tsup src/index.tsx --format esm,cjs --watch --dts --external react",
+		"build": "tsup src/index.ts --format esm,cjs --dts",
+		"dev": "tsup src/index.ts --format esm,cjs --watch --dts",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"tsc": "tsc --noEmit",
 		"clean": "rm -rf .turbo && rm -rf node_modules && rm -rf dist"
 	},
 	"dependencies": {
 		"@ai-sdk/provider": "catalog:",
+		"@ai-sdk/provider-utils": "catalog:",
 		"@vercel/oidc": "catalog:"
 	},
 	"devDependencies": {
+		"@ai-sdk/gateway": "catalog:",
 		"@sferadev/tsconfig": "workspace:*",
 		"@types/node": "catalog:",
+		"ai": "catalog:",
+		"dotenv": "catalog:",
 		"tsup": "catalog:",
-		"typescript": "catalog:"
+		"typescript": "catalog:",
+		"vitest": "catalog:"
 	},
 	"publishConfig": {
 		"access": "public"
