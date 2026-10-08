@@ -623,6 +623,61 @@ describe("createGatewayProxy", () => {
 			expect(await response.text()).toBe("Error proxying request to AI Gateway");
 		});
 
+		it("returns 500 when a successful response body is not JSON", async () => {
+			mockFetch.mockResolvedValueOnce(new Response("not json", { status: 200 }));
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(500);
+			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+		});
+
+		it("returns 500 when afterResponse throws", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+
+			const proxy = createGatewayProxy({
+				afterResponse: async () => {
+					throw new Error("hook failed");
+				},
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(500);
+			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+		});
+
+		it("returns 500 when onError throws", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse(
+					{ error: { message: "Bad", type: "gateway_error" } },
+					{ status: 400 },
+				),
+			);
+
+			const proxy = createGatewayProxy({
+				onError: async () => {
+					throw new Error("hook failed");
+				},
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(500);
+			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+		});
+
 		it("handles empty segments", async () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 

@@ -228,7 +228,7 @@ export const createGatewayProxy = ({
 			// Handle error responses
 			if (!res.ok) {
 				const errorBody = await parseErrorBody(res);
-				return createErrorResponse(res, errorBody, requestBody, onError);
+				return await createErrorResponse(res, errorBody, requestBody, onError);
 			}
 
 			// Handle successful responses
@@ -236,7 +236,7 @@ export const createGatewayProxy = ({
 				return handleStreamingResponse(res, requestBody, afterResponse);
 			}
 
-			return handleJsonResponse(res, requestBody, afterResponse);
+			return await handleJsonResponse(res, requestBody, afterResponse);
 		} catch {
 			return new Response("Error proxying request to AI Gateway", { status: 500 });
 		}

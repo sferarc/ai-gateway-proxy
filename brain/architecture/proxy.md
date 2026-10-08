@@ -12,6 +12,6 @@
 6. `fetch` upstream with the request's method, the re-serialised body and the headers from `buildRequestHeaders`: `content-type`, the caller's `headers`, then `authorization: Bearer`, `ai-gateway-auth-method`, `ai-gateway-protocol-version` (`0.0.1`), `ai-language-model-id` and `ai-language-model-streaming`, the last two copied from the incoming request.
 7. On a non-OK status, parse the error body (falling back to `{ error: { message: statusText, type: "gateway_error" } }`) and pass it to `onError`, which may return a replacement body or a whole `Response`.
 8. On success, a streamed request (incoming `ai-language-model-streaming: true`) goes through [[streaming]]; otherwise the JSON body goes through `afterResponse` and is re-serialised.
-9. Any thrown error from step 6 onwards returns `500 Error proxying request to AI Gateway`.
+9. Any thrown error from step 6 onwards returns `500 Error proxying request to AI Gateway`. That includes a non-JSON success body and a throwing `afterResponse` or `onError`, which is why the handler `await`s `handleJsonResponse` and `createErrorResponse` inside its `try`: a bare `return promise` lets the rejection escape the `catch` (tests under `error handling` in `src/proxy.test.ts`). A throwing `afterResponse` on a streamed request errors the stream instead, since the response has already started ([[streaming]]).
 
 Tests: `src/proxy.test.ts` mocks `fetch` and `@vercel/oidc` and covers each step, the hooks and the HTTP method exports.
