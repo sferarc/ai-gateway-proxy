@@ -1,0 +1,18 @@
+# Formats and lints staged files the way CI checks them. pnpm install sets up
+# the hook; `pnpm exec lefthook install` does it by hand.
+pre-commit:
+  jobs:
+    - name: biome
+      glob: "*.{js,ts,tsx,json}"
+      run: pnpm exec biome check --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+# Refuses Claude Code's attribution in a commit: a trailer, a footer, a session
+# link, or Claude as the author.
+commit-msg:
+  jobs:
+    - name: no-claude-attribution
+      run: >-
+        ! grep -qiE '^[[:space:]]*(co-authored-by:[[:space:]]*claude|claude-session:|https://claude\.ai/code/session_)|generated (with|by) \[claude code\]\(' {1}
+        && ! git var GIT_AUTHOR_IDENT | grep -qi 'noreply@anthropic\.com'
+        || { echo "Remove Claude Code attribution: a Co-Authored-By or Claude-Session trailer, a Generated with Claude Code footer, a session link, or Claude as the author."; exit 1; }

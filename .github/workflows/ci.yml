@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Public repository, so CI runs on GitHub-hosted runners: public repos get free
+# minutes and the self-hosted pool is kept for private repos. Actions are pinned
+# to full commit SHAs because the sferarc organisation requires it.
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Node and pnpm come from mise.toml, checked against mise.lock.
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      # CI never commits, so the hooks never run here. This at least fails on a
+      # lefthook.yml that lefthook would not load.
+      - name: Hook config
+        run: pnpm exec lefthook validate
+
+      - name: Unused files, exports and dependencies
+        run: pnpm knip
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # The integration tests call the real gateway and skip without
+      # AI_GATEWAY_API_KEY. No key is stored here on purpose: every call costs money.
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # Consumers rely on unused exports being dropped from their bundles.
+      - name: Tree-shakable
+        run: pnpm is-tree-shakable

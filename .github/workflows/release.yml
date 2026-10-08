@@ -1,0 +1,44 @@
+name: Release
+
+# Changesets flow: pending changesets on main open a version PR, and merging
+# that PR publishes. Nothing runs until the repository variable RELEASE_ENABLED
+# is `true`, so the first release from this repository is the owner's decision.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release
+    if: vars.RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      # npm trusted publishing exchanges this OIDC token for a publish credential,
+      # so no npm token is stored anywhere. Each package's trusted publisher on
+      # npmjs.com must name this repository and release.yml.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The npm bundled with the Node in mise.toml is the one that publishes, and
+      # trusted publishing needs npm 11.5.1 or newer.
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+
+      - run: pnpm install --frozen-lockfile
+
+      # GIT_TOKEN rather than github.token: a version PR merged by the Actions
+      # bot pushes to main without triggering this workflow, so it would never publish.
+      - name: Create version PR or publish
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          publish-script: pnpm release
+          github-token: ${{ secrets.GIT_TOKEN }}

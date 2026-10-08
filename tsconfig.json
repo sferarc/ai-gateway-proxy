@@ -1,9 +1,19 @@
 {
-	"extends": "@sferadev/tsconfig/react-library.json",
+	"$schema": "https://json.schemastore.org/tsconfig",
 	"compilerOptions": {
+		"declaration": true,
+		"declarationMap": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"isolatedModules": true,
+		"jsx": "react-jsx",
+		"lib": ["dom", "ESNext"],
 		"module": "ESNext",
-		"moduleResolution": "bundler"
+		"moduleResolution": "bundler",
+		"skipLibCheck": true,
+		"strict": true,
+		"target": "ESNext"
 	},
 	"include": ["."],
-	"exclude": ["dist", "build", "node_modules"]
+	"exclude": ["dist", "node_modules"]
 }
