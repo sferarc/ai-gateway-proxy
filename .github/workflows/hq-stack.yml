@@ -1,0 +1,897 @@
+name: HQ approved stack
+
+# Rendered by `pnpm stack:render --standalone` in sferarc/hq from policy/stack.json and
+# src/stack/check.ts. Do not edit: this repository is public and cannot call HQ's private
+# workflow, so it carries a copy, which HQ's dependency updater refreshes.
+
+on:
+  pull_request:
+    # `edited` so a corrected description is checked again: a re-run reads the event as it was.
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hq-stack-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stack:
+    name: Approved stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Only mise itself: the check needs Node 26 and none of the repository's own tools.
+      - name: Install mise
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install: false
+          cache: false
+          working_directory: ${{ runner.temp }}
+
+      - name: Check the approved stack
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/stack-policy.json" <<'HQ_STACK_POLICY'
+          {
+            "$comment": "The owner-approved stack as rules CI can check. The page that explains it is kb/company/tech-stack.md. `hq-stack.yml` in every tenant runs these through .github/workflows/stack.yml, which `pnpm stack:render` regenerates from this file.",
+            "repositories": {
+              "sferarc/hq": "enforce",
+              "sferarc/platform": "enforce",
+              "sferarc/pgbeam": "warn",
+              "sferarc/pgseek": "enforce",
+              "sferarc/peeksafe": "enforce",
+              "sferarc/openapi": "warn",
+              "sferarc/ai-gateway-proxy": "enforce",
+              "sferarc/rollup-plugin-import-cdn": "enforce",
+              "sferarc/vscode-ai-gateway": "enforce"
+            },
+            "rules": [
+              {
+                "id": "date-fns",
+                "ecosystem": "npm",
+                "match": [
+                  "date-fns",
+                  "date-fns-tz",
+                  "@date-fns/*",
+                  "moment",
+                  "moment-timezone",
+                  "dayjs",
+                  "luxon"
+                ],
+                "replacement": "Temporal through temporal-polyfill"
+              },
+              {
+                "id": "swr",
+                "ecosystem": "npm",
+                "match": [
+                  "swr"
+                ],
+                "replacement": "React Server Components, or @tanstack/react-query where client caching helps"
+              },
+              {
+                "id": "tslog",
+                "ecosystem": "npm",
+                "match": [
+                  "tslog"
+                ],
+                "replacement": "the shared observability package (BetterStack, OpenTelemetry and PostHog)"
+              },
+              {
+                "id": "pg",
+                "ecosystem": "npm",
+                "match": [
+                  "pg",
+                  "@types/pg",
+                  "pg-pool"
+                ],
+                "replacement": "postgres (postgres.js), through drizzle-orm/postgres-js"
+              },
+              {
+                "id": "orm",
+                "ecosystem": "npm",
+                "match": [
+                  "prisma",
+                  "@prisma/client",
+                  "typeorm",
+                  "sequelize",
+                  "knex"
+                ],
+                "replacement": "drizzle-orm with drizzle-kit"
+              },
+              {
+                "id": "prettier",
+                "ecosystem": "npm",
+                "match": [
+                  "prettier",
+                  "prettier-plugin-*",
+                  "@prettier/*"
+                ],
+                "replacement": "@biomejs/biome; Prettier stays only for Markdown, through an allowlist entry that says so"
+              },
+              {
+                "id": "eslint",
+                "ecosystem": "npm",
+                "match": [
+                  "eslint",
+                  "eslint-config-*",
+                  "eslint-plugin-*",
+                  "@eslint/*",
+                  "typescript-eslint",
+                  "@typescript-eslint/*",
+                  "@next/eslint-plugin-next"
+                ],
+                "replacement": "@biomejs/biome"
+              },
+              {
+                "id": "radix-individual",
+                "ecosystem": "npm",
+                "match": [
+                  "@radix-ui/react-*"
+                ],
+                "except": [
+                  "@radix-ui/react-icons"
+                ],
+                "replacement": "the radix-ui umbrella package"
+              },
+              {
+                "id": "radix-icons",
+                "ecosystem": "npm",
+                "match": [
+                  "@radix-ui/react-icons"
+                ],
+                "replacement": "lucide-react"
+              },
+              {
+                "id": "framer-motion",
+                "ecosystem": "npm",
+                "match": [
+                  "framer-motion"
+                ],
+                "replacement": "motion"
+              },
+              {
+                "id": "tailwindcss-animate",
+                "ecosystem": "npm",
+                "match": [
+                  "tailwindcss-animate"
+                ],
+                "replacement": "tw-animate-css"
+              },
+              {
+                "id": "test-runners",
+                "ecosystem": "npm",
+                "match": [
+                  "jest",
+                  "@jest/*",
+                  "ts-jest",
+                  "babel-jest",
+                  "mocha",
+                  "ava",
+                  "cypress"
+                ],
+                "replacement": "vitest, and @playwright/test for end to end"
+              },
+              {
+                "id": "git-hooks",
+                "ecosystem": "npm",
+                "match": [
+                  "husky",
+                  "lint-staged",
+                  "simple-git-hooks"
+                ],
+                "replacement": "lefthook"
+              },
+              {
+                "id": "typescript-7",
+                "ecosystem": "npm",
+                "match": [
+                  "typescript"
+                ],
+                "minimumMajor": 7,
+                "replacement": "typescript 7 or later"
+              },
+              {
+                "id": "tailwind-4",
+                "ecosystem": "npm",
+                "match": [
+                  "tailwindcss"
+                ],
+                "minimumMajor": 4,
+                "replacement": "tailwindcss 4 or later"
+              },
+              {
+                "id": "effect-4",
+                "ecosystem": "npm",
+                "match": [
+                  "effect"
+                ],
+                "minimumMajor": 4,
+                "replacement": "effect 4 or later"
+              },
+              {
+                "id": "node-26",
+                "ecosystem": "mise",
+                "match": [
+                  "node"
+                ],
+                "minimumMajor": 26,
+                "replacement": "node 26 or later in mise.toml"
+              },
+              {
+                "id": "go-postgres",
+                "ecosystem": "go",
+                "match": [
+                  "github.com/lib/pq",
+                  "gorm.io/*"
+                ],
+                "replacement": "github.com/jackc/pgx/v5 with sqlc"
+              },
+              {
+                "id": "go-http",
+                "ecosystem": "go",
+                "match": [
+                  "github.com/gin-gonic/gin",
+                  "github.com/go-chi/chi*",
+                  "github.com/gorilla/mux"
+                ],
+                "replacement": "github.com/labstack/echo"
+              },
+              {
+                "id": "go-migrations",
+                "ecosystem": "go",
+                "match": [
+                  "github.com/golang-migrate/migrate*"
+                ],
+                "replacement": "github.com/pressly/goose"
+              },
+              {
+                "id": "per-repo-updater",
+                "ecosystem": "file",
+                "match": [
+                  ".github/dependabot.yml",
+                  ".github/dependabot.yaml",
+                  "renovate.json",
+                  "renovate.json5",
+                  ".renovaterc",
+                  ".renovaterc.json",
+                  ".github/renovate.json",
+                  ".github/renovate.json5"
+                ],
+                "replacement": "HQ's central dependency updater (sferarc/hq, update-dependencies.yml)"
+              },
+              {
+                "id": "lockfile",
+                "ecosystem": "file",
+                "match": [
+                  "package-lock.json",
+                  "yarn.lock",
+                  "bun.lock",
+                  "bun.lockb",
+                  "npm-shrinkwrap.json"
+                ],
+                "replacement": "pnpm-lock.yaml (Bun only for the print bridge, through an allowlist entry)"
+              },
+              {
+                "id": "eslint-config",
+                "ecosystem": "file",
+                "match": [
+                  ".eslintrc",
+                  ".eslintrc.*",
+                  "eslint.config.*"
+                ],
+                "replacement": "biome.json"
+              },
+              {
+                "id": "node-version-file",
+                "ecosystem": "file",
+                "match": [
+                  ".nvmrc",
+                  ".node-version",
+                  ".tool-versions"
+                ],
+                "replacement": "mise.toml"
+              }
+            ]
+          }
+          HQ_STACK_POLICY
+          cat > "$RUNNER_TEMP/stack-check.ts" <<'HQ_STACK_CHECK'
+          /**
+           * The approved-stack check every tenant runs in CI (`policy/stack.json`).
+           *
+           * It ships inside `.github/workflows/stack.yml` and runs there under plain Node
+           * with type stripping, so it imports only `node:` builtins and uses only
+           * erasable syntax. A tenant excuses a finding in `.github/stack-allowlist.json`,
+           * and every excuse names its reason and the condition that ends it.
+           */
+
+          import { appendFileSync, readdirSync, readFileSync, statSync } from "node:fs";
+          import { join, posix, relative, sep } from "node:path";
+
+          export type Ecosystem = "npm" | "go" | "mise" | "file";
+          export type Mode = "warn" | "enforce";
+
+          export interface StackRule {
+            id: string;
+            ecosystem: Ecosystem;
+            match: string[];
+            except?: string[];
+            minimumMajor?: number;
+            replacement: string;
+          }
+
+          export interface StackPolicy {
+            repositories: Record<string, Mode>;
+            rules: StackRule[];
+          }
+
+          export interface AllowEntry {
+            rule: string;
+            package?: string;
+            path?: string;
+            reason: string;
+            exit: string;
+          }
+
+          export interface Finding {
+            rule: string;
+            path: string;
+            name: string;
+            message: string;
+          }
+
+          export interface CheckResult {
+            violations: Finding[];
+            allowed: { finding: Finding; entry: AllowEntry }[];
+            staleEntries: AllowEntry[];
+            invalidEntries: string[];
+          }
+
+          export const ALLOWLIST_PATH = ".github/stack-allowlist.json";
+
+          const SKIPPED_DIRS = new Set([
+            "node_modules",
+            ".git",
+            ".next",
+            ".turbo",
+            "dist",
+            "build",
+            "target",
+            "vendor",
+            ".vercel",
+          ]);
+
+          /** Exact names, or a trailing `*` for a prefix. */
+          export function matchesName(pattern: string, name: string): boolean {
+            if (pattern.endsWith("*")) return name.startsWith(pattern.slice(0, -1));
+            return pattern === name;
+          }
+
+          /** A pattern with a `/` names a path from the root; one without names a file anywhere. */
+          export function matchesFile(pattern: string, path: string): boolean {
+            const target = pattern.includes("/") ? path : posix.basename(path);
+            const regex = new RegExp(
+              `^${pattern
+                .split("*")
+                .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+                .join("[^/]*")}$`,
+            );
+            return regex.test(target);
+          }
+
+          function ruleMatches(rule: StackRule, name: string): boolean {
+            if (rule.except?.some((pattern) => matchesName(pattern, name))) return false;
+            return rule.match.some((pattern) => matchesName(pattern, name));
+          }
+
+          /** The leading major version of a spec (`^7.0.2`, `7`, `>=26.1`), or undefined. */
+          export function majorOf(spec: string): number | undefined {
+            const bare = spec.replace(/^npm:(?:@[^/]+\/)?[^@]+@/, "");
+            const found = /^[\^~>=v\s]*(\d+)(?:[.\s]|$)/.exec(bare);
+            return found ? Number(found[1]) : undefined;
+          }
+
+          /**
+           * The default and named catalogs of a `pnpm-workspace.yaml`. A line reader
+           * rather than a YAML parser, because the check carries no dependencies; it reads
+           * the two block shapes pnpm writes and nothing else.
+           */
+          export function readCatalogs(yaml: string): Map<string, Map<string, string>> {
+            const catalogs = new Map<string, Map<string, string>>();
+            let section: "catalog" | "catalogs" | undefined;
+            let named: string | undefined;
+            const entry = /^\s+["']?([^"':]+(?::[^"':\s]+)?)["']?\s*:\s*["']?([^"'#\s]+)["']?/;
+            for (const raw of yaml.split("\n")) {
+              const line = raw.replace(/\s+#.*$/, "");
+              if (line.trim() === "") continue;
+              if (/^\S/.test(line)) {
+                section = line.startsWith("catalog:")
+                  ? "catalog"
+                  : line.startsWith("catalogs:")
+                    ? "catalogs"
+                    : undefined;
+                named = undefined;
+                continue;
+              }
+              if (section === "catalog") {
+                const found = entry.exec(line);
+                if (!found) continue;
+                const map = catalogs.get("default") ?? new Map<string, string>();
+                map.set(found[1], found[2]);
+                catalogs.set("default", map);
+              } else if (section === "catalogs") {
+                const header = /^ {2}["']?([^"':]+)["']?:\s*$/.exec(line);
+                if (header) {
+                  named = header[1];
+                  continue;
+                }
+                const found = entry.exec(line);
+                if (!found || !named) continue;
+                const map = catalogs.get(named) ?? new Map<string, string>();
+                map.set(found[1], found[2]);
+                catalogs.set(named, map);
+              }
+            }
+            return catalogs;
+          }
+
+          /** Versions in `[tools]` of a `mise.toml`, by tool name. */
+          export function readMiseTools(toml: string): Map<string, string> {
+            const tools = new Map<string, string>();
+            let inTools = false;
+            for (const raw of toml.split("\n")) {
+              const line = raw.replace(/\s+#.*$/, "").trim();
+              if (line.startsWith("[")) {
+                inTools = line === "[tools]";
+                continue;
+              }
+              if (!inTools) continue;
+              const found = /^["']?([^"'=\s]+)["']?\s*=\s*(.+)$/.exec(line);
+              if (!found) continue;
+              const version = /["']([^"']+)["']/.exec(found[2]);
+              if (version) tools.set(found[1], version[1]);
+            }
+            return tools;
+          }
+
+          /** Module paths a `go.mod` requires directly. Indirect requirements are a dependency's choice. */
+          export function readGoRequires(gomod: string): string[] {
+            const modules: string[] = [];
+            let inBlock = false;
+            for (const raw of gomod.split("\n")) {
+              const line = raw.trim();
+              if (line.startsWith("require (")) {
+                inBlock = true;
+                continue;
+              }
+              if (inBlock && line === ")") {
+                inBlock = false;
+                continue;
+              }
+              const body = inBlock ? line : line.startsWith("require ") ? line.slice(8).trim() : "";
+              if (!body || body.startsWith("//") || body.includes("// indirect")) continue;
+              modules.push(body.split(/\s+/)[0]);
+            }
+            return modules;
+          }
+
+          /** Every file under `root`, as a `/`-separated path relative to it. */
+          export function listFiles(root: string): string[] {
+            const out: string[] = [];
+            const walk = (dir: string) => {
+              for (const name of readdirSync(dir)) {
+                if (SKIPPED_DIRS.has(name)) continue;
+                const full = join(dir, name);
+                const stat = statSync(full, { throwIfNoEntry: false });
+                if (!stat) continue;
+                if (stat.isDirectory()) walk(full);
+                else out.push(relative(root, full).split(sep).join("/"));
+              }
+            };
+            walk(root);
+            return out.sort();
+          }
+
+          const DEPENDENCY_FIELDS = [
+            "dependencies",
+            "devDependencies",
+            "peerDependencies",
+            "optionalDependencies",
+          ] as const;
+
+          /** What the policy finds in a tree, before the allowlist. `read` returns a file's text. */
+          export function findViolations(
+            policy: StackPolicy,
+            files: readonly string[],
+            read: (path: string) => string,
+          ): Finding[] {
+            const findings: Finding[] = [];
+            const workspace = files.includes("pnpm-workspace.yaml")
+              ? readCatalogs(read("pnpm-workspace.yaml"))
+              : new Map<string, Map<string, string>>();
+            const npmRules = policy.rules.filter((rule) => rule.ecosystem === "npm");
+            const goRules = policy.rules.filter((rule) => rule.ecosystem === "go");
+            const miseRules = policy.rules.filter((rule) => rule.ecosystem === "mise");
+            const fileRules = policy.rules.filter((rule) => rule.ecosystem === "file");
+
+            for (const path of files) {
+              for (const rule of fileRules) {
+                if (rule.match.some((pattern) => matchesFile(pattern, path))) {
+                  findings.push({
+                    rule: rule.id,
+                    path,
+                    name: path,
+                    message: `${path} is not on the approved stack: use ${rule.replacement}`,
+                  });
+                }
+              }
+
+              if (posix.basename(path) === "package.json") {
+                let manifest: Record<string, unknown>;
+                try {
+                  manifest = JSON.parse(read(path));
+                } catch {
+                  continue;
+                }
+                for (const field of DEPENDENCY_FIELDS) {
+                  const deps = manifest[field];
+                  if (!deps || typeof deps !== "object") continue;
+                  for (const [name, rawSpec] of Object.entries(deps as Record<string, string>)) {
+                    let spec = String(rawSpec);
+                    if (spec.startsWith("catalog:")) {
+                      const catalog = spec.slice("catalog:".length) || "default";
+                      spec = workspace.get(catalog)?.get(name) ?? spec;
+                    }
+                    for (const rule of npmRules) {
+                      if (!ruleMatches(rule, name)) continue;
+                      if (rule.minimumMajor === undefined) {
+                        findings.push({
+                          rule: rule.id,
+                          path,
+                          name,
+                          message: `${name} (${field}) is not on the approved stack: use ${rule.replacement}`,
+                        });
+                        continue;
+                      }
+                      const major = majorOf(spec);
+                      if (major !== undefined && major < rule.minimumMajor) {
+                        findings.push({
+                          rule: rule.id,
+                          path,
+                          name,
+                          message: `${name} ${spec} (${field}) is behind the approved major: use ${rule.replacement}`,
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+
+              if (posix.basename(path) === "go.mod") {
+                for (const module of readGoRequires(read(path))) {
+                  for (const rule of goRules) {
+                    if (!ruleMatches(rule, module)) continue;
+                    findings.push({
+                      rule: rule.id,
+                      path,
+                      name: module,
+                      message: `${module} is not on the approved stack: use ${rule.replacement}`,
+                    });
+                  }
+                }
+              }
+
+              if (posix.basename(path) === "mise.toml") {
+                for (const [tool, version] of readMiseTools(read(path))) {
+                  for (const rule of miseRules) {
+                    if (!ruleMatches(rule, tool) || rule.minimumMajor === undefined) continue;
+                    const major = majorOf(version);
+                    if (major !== undefined && major < rule.minimumMajor) {
+                      findings.push({
+                        rule: rule.id,
+                        path,
+                        name: tool,
+                        message: `${tool} ${version} is behind the approved major: use ${rule.replacement}`,
+                      });
+                    }
+                  }
+                }
+              }
+            }
+            return findings;
+          }
+
+          /** The allowlist's entries, and a line for each one that does not say why or until when. */
+          export function parseAllowlist(text: string | undefined): {
+            entries: AllowEntry[];
+            invalid: string[];
+          } {
+            if (text === undefined) return { entries: [], invalid: [] };
+            let parsed: unknown;
+            try {
+              parsed = JSON.parse(text);
+            } catch (error) {
+              return { entries: [], invalid: [`${ALLOWLIST_PATH} is not JSON: ${String(error)}`] };
+            }
+            const list = (parsed as { allow?: unknown }).allow;
+            if (!Array.isArray(list)) {
+              return { entries: [], invalid: [`${ALLOWLIST_PATH} has no "allow" array`] };
+            }
+            const entries: AllowEntry[] = [];
+            const invalid: string[] = [];
+            list.forEach((item, index) => {
+              const entry = item as Partial<AllowEntry>;
+              const missing = (["rule", "reason", "exit"] as const).filter(
+                (key) => typeof entry[key] !== "string" || entry[key].trim() === "",
+              );
+              if (missing.length > 0) {
+                invalid.push(`${ALLOWLIST_PATH} entry ${index} has no ${missing.join(", ")}`);
+                return;
+              }
+              entries.push(entry as AllowEntry);
+            });
+            return { entries, invalid };
+          }
+
+          function excuses(entry: AllowEntry, finding: Finding): boolean {
+            if (entry.rule !== finding.rule) return false;
+            if (entry.package !== undefined && !matchesName(entry.package, finding.name)) return false;
+            if (entry.path === undefined) return true;
+            return (
+              matchesFile(entry.path, finding.path) ||
+              finding.path.startsWith(entry.path.replace(/\/?$/, "/"))
+            );
+          }
+
+          export function checkStack(
+            policy: StackPolicy,
+            files: readonly string[],
+            read: (path: string) => string,
+          ): CheckResult {
+            const { entries, invalid } = parseAllowlist(
+              files.includes(ALLOWLIST_PATH) ? read(ALLOWLIST_PATH) : undefined,
+            );
+            const used = new Set<AllowEntry>();
+            const violations: Finding[] = [];
+            const allowed: CheckResult["allowed"] = [];
+            for (const finding of findViolations(policy, files, read)) {
+              const entry = entries.find((candidate) => excuses(candidate, finding));
+              if (entry) {
+                used.add(entry);
+                allowed.push({ finding, entry });
+              } else {
+                violations.push(finding);
+              }
+            }
+            return {
+              violations,
+              allowed,
+              staleEntries: entries.filter((entry) => !used.has(entry)),
+              invalidEntries: invalid,
+            };
+          }
+
+          export function modeFor(policy: StackPolicy, repository: string | undefined): Mode {
+            return (repository && policy.repositories[repository]) || "warn";
+          }
+
+          /** GitHub annotations, the job summary, and whether the job fails. */
+          export function report(
+            result: CheckResult,
+            mode: Mode,
+          ): { lines: string[]; summary: string; failed: boolean } {
+            const level = mode === "enforce" ? "error" : "warning";
+            const encode = (text: string) =>
+              text.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+            const lines = [
+              ...result.violations.map(
+                (finding) =>
+                  `::${level} file=${finding.path},title=stack/${finding.rule}::${encode(finding.message)}`,
+              ),
+              ...result.invalidEntries.map((line) => `::${level} file=${ALLOWLIST_PATH}::${encode(line)}`),
+              ...result.staleEntries.map(
+                (entry) =>
+                  `::warning file=${ALLOWLIST_PATH}::${encode(`allowlist entry for ${entry.rule}${entry.package ? ` (${entry.package})` : ""} matches nothing: remove it`)}`,
+              ),
+            ];
+            const summary = [
+              `## Approved stack (${mode})`,
+              "",
+              result.violations.length === 0
+                ? "No violations."
+                : `${result.violations.length} violation(s)${mode === "warn" ? ", reported only: this repository is not enforcing yet" : ""}.`,
+              "",
+              ...(result.violations.length > 0 ? ["| Rule | File | Finding |", "| --- | --- | --- |"] : []),
+              ...result.violations.map(
+                (f) => `| ${f.rule} | ${f.path} | ${f.message.replace(/\|/g, "\\|")} |`,
+              ),
+              ...(result.allowed.length > 0 ? ["", `${result.allowed.length} allowlisted:`, ""] : []),
+              ...result.allowed.map(
+                ({ finding, entry }) =>
+                  `- ${finding.rule} in ${finding.path} (${finding.name}): ${entry.reason} Until: ${entry.exit}`,
+              ),
+              "",
+            ].join("\n");
+            const failed =
+              mode === "enforce" && (result.violations.length > 0 || result.invalidEntries.length > 0);
+            return { lines, summary, failed };
+          }
+
+          function argument(name: string): string | undefined {
+            const index = process.argv.indexOf(`--${name}`);
+            return index === -1 ? undefined : process.argv[index + 1];
+          }
+
+          if (import.meta.main) {
+            const policyPath = argument("policy");
+            if (!policyPath) {
+              console.error(
+                "usage: node check.ts --policy <stack.json> [--root <dir>] [--repository <owner/name>] [--mode warn|enforce]",
+              );
+              process.exit(2);
+            }
+            const root = argument("root") ?? ".";
+            const policy = JSON.parse(readFileSync(policyPath, "utf8")) as StackPolicy;
+            const repository = argument("repository") ?? process.env.GITHUB_REPOSITORY;
+            const mode = (argument("mode") as Mode | undefined) ?? modeFor(policy, repository);
+            const result = checkStack(policy, listFiles(root), (path) =>
+              readFileSync(join(root, path), "utf8"),
+            );
+            const { lines, summary, failed } = report(result, mode);
+            for (const line of lines) console.log(line);
+            console.log(summary);
+            if (process.env.GITHUB_STEP_SUMMARY) {
+              appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+            }
+            process.exit(failed ? 1 : 0);
+          }
+          HQ_STACK_CHECK
+          cd "$RUNNER_TEMP"
+          mise exec node@26 -- node stack-check.ts --policy stack-policy.json --root "$GITHUB_WORKSPACE" --repository "$REPOSITORY"
+
+  attribution:
+    name: No Claude attribution
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install mise
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install: false
+          cache: false
+          working_directory: ${{ runner.temp }}
+
+      - name: Check what would land for Claude attribution
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/attribution.ts" <<'HQ_STACK_ATTRIBUTION'
+          /**
+           * Fails a pull request that would land Claude Code's attribution on main: a
+           * Co-Authored-By or Claude-Session trailer, the "Generated with Claude Code"
+           * footer or a claude.ai session link in its title or description, or Claude as
+           * its author. Every tenant squash-merges with the pull request's title and
+           * description as the commit message, so the branch's own commits never reach
+           * main; their attribution is reported as a warning only.
+           *
+           * It ships inside `.github/workflows/stack.yml` next to the stack check, so it
+           * imports only `node:` builtins and uses only erasable syntax. Lines are matched
+           * whole, so prose that mentions a trailer is not a finding.
+           */
+
+          import { execFileSync } from "node:child_process";
+
+          const ATTRIBUTION_LINE = [
+            /^\s*co-authored-by:\s*claude\b/i,
+            /^\s*claude-session:/i,
+            /^\s*(?:🤖\s*)?_?generated (?:with|by) \[claude code\]/i,
+            /^\s*https:\/\/claude\.ai\/code\/session_\w+\s*$/i,
+          ];
+
+          const CLAUDE_AUTHOR = /<noreply@anthropic\.com>/i;
+
+          /** The lines of `text` that are Claude Code attribution. */
+          export function attributionLines(text: string): string[] {
+            return text.split("\n").filter((line) => ATTRIBUTION_LINE.some((rule) => rule.test(line)));
+          }
+
+          export interface Commit {
+            sha: string;
+            author: string;
+            message: string;
+          }
+
+          const CLAUDE_LOGIN = /^claude(?:\[bot\])?$/i;
+
+          /** What would land on main: the squash commit's message and its author. */
+          export function findLanding(title: string, body: string, author: string): string[] {
+            const findings: string[] = [];
+            if (CLAUDE_LOGIN.test(author)) findings.push(`the pull request is authored by ${author}`);
+            for (const line of attributionLines(`${title}\n${body}`)) {
+              findings.push(`description: ${line.trim()}`);
+            }
+            return findings;
+          }
+
+          /** Attribution in the branch's commits, which the squash merge leaves behind. */
+          export function findInCommits(commits: readonly Commit[]): string[] {
+            const findings: string[] = [];
+            for (const commit of commits) {
+              const short = commit.sha.slice(0, 7);
+              if (CLAUDE_AUTHOR.test(commit.author)) {
+                findings.push(`commit ${short} is authored as ${commit.author}`);
+              }
+              for (const line of attributionLines(commit.message)) {
+                findings.push(`commit ${short}: ${line.trim()}`);
+              }
+            }
+            return findings;
+          }
+
+          /** `git log` of `range` as commits; a NUL ends each record. */
+          export function readCommits(range: string): Commit[] {
+            const out = execFileSync("git", ["log", "--format=%H%n%an <%ae>%n%B%x00", range], {
+              encoding: "utf8",
+            });
+            return out
+              .split("\0")
+              .map((record) => record.replace(/^\n+/, ""))
+              .filter((record) => record.trim() !== "")
+              .map((record) => {
+                const [sha = "", author = "", ...message] = record.split("\n");
+                return { sha, author, message: message.join("\n") };
+              });
+          }
+
+          if (import.meta.main) {
+            const base = process.env.BASE_SHA;
+            const head = process.env.HEAD_SHA;
+            if (!base || !head) {
+              console.error(
+                "usage: BASE_SHA=<sha> HEAD_SHA=<sha> [PR_TITLE=<text>] [PR_BODY=<text>] [PR_AUTHOR=<login>] node attribution.ts",
+              );
+              process.exit(2);
+            }
+            for (const finding of findInCommits(readCommits(`${base}..${head}`))) {
+              console.log(`::warning title=Claude attribution (not landed)::${finding}`);
+            }
+            const findings = findLanding(
+              process.env.PR_TITLE ?? "",
+              process.env.PR_BODY ?? "",
+              process.env.PR_AUTHOR ?? "",
+            );
+            for (const finding of findings) console.log(`::error title=Claude attribution::${finding}`);
+            if (findings.length > 0) {
+              console.log(
+                "Edit the description: the edit runs this check again, while a re-run reads the description as it was. Set attribution.commit and attribution.pr to empty strings and attribution.sessionUrl to false in Claude Code's settings.",
+              );
+            }
+            process.exit(findings.length > 0 ? 1 : 0);
+          }
+          HQ_STACK_ATTRIBUTION
+          cd "$RUNNER_TEMP"
+          GIT_DIR="$GITHUB_WORKSPACE/.git" mise exec node@26 -- node attribution.ts
