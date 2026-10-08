@@ -60,3 +60,15 @@ For full documentation including configuration options, hooks, and API reference
 ## License
 
 MIT
+
+## Development
+
+The toolchain is pinned in `mise.toml`. With [mise](https://mise.jdx.dev) installed:
+
+```bash
+mise install
+pnpm install
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
+```
+
+The integration tests call the real AI Gateway and run only when `AI_GATEWAY_API_KEY` is set. Add a changeset with `pnpm changeset` for any change that should be released.

@@ -1,0 +1,33 @@
+catalog:
+  '@ai-sdk/gateway': 4.0.103
+  '@ai-sdk/provider': 4.0.21
+  '@ai-sdk/provider-utils': 5.0.53
+  '@biomejs/biome': 2.5.15
+  '@changesets/cli': 3.0.3
+  '@types/node': 26.6.4
+  '@vercel/oidc': 4.0.0
+  ai: 7.0.127
+  bunchee: 7.0.1
+  dotenv: 18.0.5
+  is-tree-shakable: 0.5.0
+  knip: 6.39.0
+  lefthook: 2.1.16
+  # bunchee emits declarations through the TypeScript 6 JavaScript API, which TypeScript 7
+  # dropped; it looks for this shim by name. Remove it once bunchee builds .d.ts on TS 7 alone.
+  typescript: 7.0.2
+  '@typescript/typescript6': 6.0.2
+  vitest: 5.0.3
+catalogMode: strict
+cleanupUnusedCatalogs: true
+saveExact: true
+allowBuilds:
+  '@swc/core': false
+  esbuild: false
+  # lefthook's postinstall fetches its binary.
+  lefthook: true
+# Security floors carried over from the SferaDev/SferaDev monorepo for the packages this repo resolves.
+overrides:
+  postcss@<=8.5.17: ^8.5.18
+  postcss@<=8.5.22: ^8.5.23
+  rollup@>=4.0.0 <4.59.0: ^4.59.0
+  undici@>=8.0.0 <8.10.2: ^8.10.2

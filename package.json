@@ -6,9 +6,10 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/SferaDev/SferaDev.git",
-		"directory": "packages/ai-gateway-proxy"
+		"url": "git+https://github.com/sferarc/ai-gateway-proxy.git"
 	},
+	"homepage": "https://github.com/sferarc/ai-gateway-proxy#readme",
+	"bugs": "https://github.com/sferarc/ai-gateway-proxy/issues",
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -27,9 +28,13 @@
 		"dev": "bunchee --watch",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"tsc": "tsc --noEmit",
 		"is-tree-shakable": "is-tree-shakable",
-		"clean": "rm -rf .turbo && rm -rf node_modules && rm -rf dist"
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check .",
+		"fix": "biome check --write .",
+		"knip": "knip",
+		"changeset": "changeset",
+		"release": "pnpm build && changeset publish"
 	},
 	"dependencies": {
 		"@ai-sdk/provider": "catalog:",
@@ -38,16 +43,22 @@
 	},
 	"devDependencies": {
 		"@ai-sdk/gateway": "catalog:",
-		"@sferadev/tsconfig": "workspace:*",
+		"@biomejs/biome": "catalog:",
+		"@changesets/cli": "catalog:",
 		"@types/node": "catalog:",
+		"@typescript/typescript6": "catalog:",
 		"ai": "catalog:",
 		"bunchee": "catalog:",
 		"dotenv": "catalog:",
+		"is-tree-shakable": "catalog:",
+		"knip": "catalog:",
+		"lefthook": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	},
 	"publishConfig": {
 		"access": "public",
 		"provenance": true
-	}
+	},
+	"packageManager": "pnpm@12.10.1"
 }
