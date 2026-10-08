@@ -47,15 +47,7 @@ jobs:
           {
             "$comment": "The owner-approved stack as rules CI can check. The page that explains it is kb/company/tech-stack.md. `hq-stack.yml` in every tenant runs these through .github/workflows/stack.yml, which `pnpm stack:render` regenerates from this file.",
             "repositories": {
-              "sferarc/hq": "enforce",
-              "sferarc/platform": "enforce",
-              "sferarc/pgbeam": "warn",
-              "sferarc/pgseek": "enforce",
-              "sferarc/peeksafe": "enforce",
-              "sferarc/openapi": "warn",
-              "sferarc/ai-gateway-proxy": "enforce",
-              "sferarc/rollup-plugin-import-cdn": "enforce",
-              "sferarc/vscode-ai-gateway": "enforce"
+              "sferarc/ai-gateway-proxy": "enforce"
             },
             "rules": [
               {
