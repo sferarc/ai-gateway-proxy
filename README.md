@@ -57,10 +57,6 @@ The proxy automatically handles authentication using one of the following method
 
 For full documentation including configuration options, hooks, and API reference, see the [documentation](https://sferadev.com/docs/packages/ai-gateway-proxy).
 
-## License
-
-MIT
-
 ## Development
 
 The toolchain is pinned in `mise.toml`. With [mise](https://mise.jdx.dev) installed:
@@ -72,3 +68,7 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
 The integration tests call the real AI Gateway and run only when `AI_GATEWAY_API_KEY` is set. Add a changeset with `pnpm changeset` for any change that should be released.
+
+## License
+
+MIT
