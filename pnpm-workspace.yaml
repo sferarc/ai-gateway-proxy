@@ -1,17 +1,17 @@
 catalog:
-  '@ai-sdk/gateway': 4.0.103
-  '@ai-sdk/provider': 4.0.21
-  '@ai-sdk/provider-utils': 5.0.53
+  '@ai-sdk/gateway': 4.0.110
+  '@ai-sdk/provider': 4.0.26
+  '@ai-sdk/provider-utils': 5.0.58
   '@biomejs/biome': 2.5.15
   '@changesets/cli': 3.0.3
-  '@types/node': 26.6.4
+  '@types/node': 26.6.5
   '@vercel/oidc': 4.0.0
-  ai: 7.0.127
+  ai: 7.0.137
   bunchee: 7.0.1
-  dotenv: 18.0.5
+  dotenv: 18.0.7
   is-tree-shakable: 0.5.0
-  knip: 6.39.0
-  lefthook: 2.1.16
+  knip: 6.41.0
+  lefthook: 2.2.1
   # bunchee emits declarations through the TypeScript 6 JavaScript API, which TypeScript 7
   # dropped; it looks for this shim by name. Remove it once bunchee builds .d.ts on TS 7 alone.
   typescript: 7.0.2
