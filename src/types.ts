@@ -76,6 +76,8 @@ export type CreateGatewayProxyOptions = {
 	 * For streaming responses, this is called when the stream completes with
 	 * the aggregated response. The content has already been streamed, but you
 	 * can modify the finish event metadata (usage, finishReason, providerMetadata).
+	 * If the hook throws while handling a stream, the error is logged and the
+	 * original finish event is forwarded unchanged.
 	 */
 	afterResponse?: (context: {
 		request: LanguageModelV3CallOptions;
