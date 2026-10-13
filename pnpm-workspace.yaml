@@ -1,12 +1,12 @@
 catalog:
-  '@ai-sdk/gateway': 4.0.110
-  '@ai-sdk/provider': 4.0.26
-  '@ai-sdk/provider-utils': 5.0.58
+  '@ai-sdk/gateway': 4.0.111
+  '@ai-sdk/provider': 4.0.27
+  '@ai-sdk/provider-utils': 5.0.59
   '@biomejs/biome': 2.5.15
   '@changesets/cli': 3.0.3
   '@types/node': 26.6.5
   '@vercel/oidc': 4.0.0
-  ai: 7.0.137
+  ai: 7.0.138
   bunchee: 7.0.1
   dotenv: 18.0.7
   is-tree-shakable: 0.5.0
@@ -16,7 +16,7 @@ catalog:
   # dropped; it looks for this shim by name. Remove it once bunchee builds .d.ts on TS 7 alone.
   typescript: 7.0.2
   '@typescript/typescript6': 6.0.2
-  vitest: 5.0.3
+  vitest: 5.0.4
 catalogMode: strict
 cleanupUnusedCatalogs: true
 saveExact: true
