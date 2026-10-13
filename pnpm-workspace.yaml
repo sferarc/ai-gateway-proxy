@@ -16,7 +16,7 @@ catalog:
   # dropped; it looks for this shim by name. Remove it once bunchee builds .d.ts on TS 7 alone.
   typescript: 7.0.2
   '@typescript/typescript6': 6.0.2
-  vitest: 5.0.3
+  vitest: 5.0.4
 catalogMode: strict
 cleanupUnusedCatalogs: true
 saveExact: true
