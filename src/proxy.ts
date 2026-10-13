@@ -32,13 +32,47 @@ async function extractPathFromRequest(
 	return "";
 }
 
+function isSafePath(path: string): boolean {
+	if (path.startsWith("/") || path.includes("://")) {
+		return false;
+	}
+
+	for (const segment of path.split("/")) {
+		let decoded: string;
+		try {
+			decoded = decodeURIComponent(segment);
+		} catch {
+			return false;
+		}
+		if (decoded === "." || decoded === ".." || /[/\\\0]/.test(decoded)) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 /**
  * Builds the upstream URL from base URL, path, and query params.
+ * Returns null when the path would leave the base URL.
  */
-function buildUpstreamUrl(baseUrl: string, path: string, requestUrl: string): string {
-	const searchParams = new URL(requestUrl).searchParams;
-	const queryString = searchParams.toString();
-	return `${baseUrl}/${path}${queryString ? `?${queryString}` : ""}`;
+function buildUpstreamUrl(baseUrl: string, path: string, requestUrl: string): string | null {
+	if (!isSafePath(path)) {
+		return null;
+	}
+
+	const base = new URL(baseUrl.replace(/\/?$/, "/"));
+	// The "./" prefix keeps a segment containing ":" from being parsed as a scheme.
+	const url = new URL(`./${path}`, base);
+	if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) {
+		return null;
+	}
+
+	const queryString = new URL(requestUrl).searchParams.toString();
+	if (queryString) {
+		url.search = queryString;
+	}
+	return url.toString();
 }
 
 /**
@@ -196,6 +230,9 @@ export const createGatewayProxy = ({
 		// Build upstream URL
 		const path = await extractPathFromRequest(request, context, { extractPath, segmentsParam });
 		const upstream = buildUpstreamUrl(baseUrl, path, request.url);
+		if (!upstream) {
+			return new Response("Invalid path", { status: 400 });
+		}
 
 		// Parse request body
 		let requestBody: LanguageModelV3CallOptions;
@@ -217,6 +254,7 @@ export const createGatewayProxy = ({
 				method: request.method,
 				body: JSON.stringify(requestBody),
 				duplex: "half",
+				signal: request.signal,
 				headers: buildRequestHeaders(
 					auth,
 					isStreaming,
@@ -238,6 +276,9 @@ export const createGatewayProxy = ({
 
 			return await handleJsonResponse(res, requestBody, afterResponse);
 		} catch {
+			if (request.signal.aborted) {
+				return new Response(null, { status: 499 });
+			}
 			return new Response("Error proxying request to AI Gateway", { status: 500 });
 		}
 	};
