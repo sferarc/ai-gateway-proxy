@@ -1,6 +1,7 @@
-import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
-import { describe, expect, it } from "vitest";
-import { StreamContentAggregator } from "./stream";
+import type { LanguageModelV3CallOptions, LanguageModelV3StreamPart } from "@ai-sdk/provider";
+import { describe, expect, it, vi } from "vitest";
+import { createStreamTransformer, StreamContentAggregator } from "./stream";
+import type { GatewayResponse } from "./types";
 
 describe("StreamContentAggregator", () => {
 	describe("text content", () => {
@@ -367,5 +368,149 @@ describe("StreamContentAggregator", () => {
 			expect(response.content[0]).toEqual({ type: "reasoning", text: "Thinking" });
 			expect(response.content[1]).toEqual({ type: "text", text: "Answer" });
 		});
+	});
+});
+
+const encoder = new TextEncoder();
+const requestBody = { prompt: [] } as unknown as LanguageModelV3CallOptions;
+
+const usage = {
+	inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+	outputTokens: { total: 5, text: undefined, reasoning: undefined },
+};
+
+const finishEvent = {
+	type: "finish",
+	finishReason: { unified: "stop", raw: "stop" },
+	usage,
+};
+
+function sse(data: unknown): string {
+	return `data: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`;
+}
+
+function sourceOf(chunks: string[]): ReadableStream<Uint8Array> {
+	return new ReadableStream({
+		start(controller) {
+			for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+			controller.close();
+		},
+	});
+}
+
+async function readAll(stream: ReadableStream<Uint8Array>): Promise<string> {
+	return new Response(stream).text();
+}
+
+const passThroughHook = ({ response }: { response: GatewayResponse }) => response;
+
+describe("createStreamTransformer", () => {
+	it("passes text events through unchanged", async () => {
+		const events = [
+			{ type: "text-start", id: "t1" },
+			{ type: "text-delta", id: "t1", delta: "Hi" },
+			{ type: "text-end", id: "t1" },
+		];
+		const output = await readAll(
+			createStreamTransformer(sourceOf(events.map(sse)), requestBody, passThroughHook),
+		);
+
+		expect(output).toBe(events.map(sse).join(""));
+	});
+
+	it("passes [DONE] and non-JSON data through", async () => {
+		const output = await readAll(
+			createStreamTransformer(
+				sourceOf([sse("not json"), sse("[DONE]")]),
+				requestBody,
+				passThroughHook,
+			),
+		);
+
+		expect(output).toBe("data: not json\n\ndata: [DONE]\n\n");
+	});
+
+	it("replaces the finish event with the hook result", async () => {
+		const hook = vi.fn(
+			({ response }: { request: LanguageModelV3CallOptions; response: GatewayResponse }) => ({
+				...response,
+				finishReason: { unified: "length" as const, raw: "max_tokens" },
+				usage: { ...usage, outputTokens: { total: 99, text: undefined, reasoning: undefined } },
+				providerMetadata: { gateway: { cost: "0.01" } },
+			}),
+		);
+		const output = await readAll(
+			createStreamTransformer(
+				sourceOf([
+					sse({ type: "text-start", id: "t1" }),
+					sse({ type: "text-delta", id: "t1", delta: "Hello " }),
+					sse({ type: "text-delta", id: "t1", delta: "there" }),
+					sse({ type: "text-end", id: "t1" }),
+					sse(finishEvent),
+				]),
+				requestBody,
+				hook,
+			),
+		);
+
+		expect(hook).toHaveBeenCalledOnce();
+		expect(hook.mock.calls[0]?.[0].request).toBe(requestBody);
+		expect(hook.mock.calls[0]?.[0].response.content).toEqual([
+			{ type: "text", text: "Hello there" },
+		]);
+
+		const lastEvent = output.trim().split("\n\n").at(-1) ?? "";
+		expect(JSON.parse(lastEvent.slice("data: ".length))).toEqual({
+			type: "finish",
+			finishReason: { unified: "length", raw: "max_tokens" },
+			usage: { ...usage, outputTokens: { total: 99 } },
+			providerMetadata: { gateway: { cost: "0.01" } },
+		});
+	});
+
+	it("forwards the original finish event when the hook throws", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const output = await readAll(
+			createStreamTransformer(
+				sourceOf([sse(finishEvent), sse("[DONE]")]),
+				requestBody,
+				async () => {
+					throw new Error("hook failed");
+				},
+			),
+		);
+
+		expect(output).toBe(`${sse(finishEvent)}data: [DONE]\n\n`);
+		expect(consoleError).toHaveBeenCalledOnce();
+		consoleError.mockRestore();
+	});
+
+	it("cancels the source when the output stream is cancelled", async () => {
+		const cancel = vi.fn();
+		const source = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(encoder.encode(sse({ type: "text-start", id: "t1" })));
+			},
+			cancel,
+		});
+		const reader = createStreamTransformer(source, requestBody, passThroughHook).getReader();
+
+		await reader.read();
+		await reader.cancel("client went away");
+
+		await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith("client went away"));
+	});
+
+	it("parses an event split across chunks mid-JSON", async () => {
+		const event = sse({ type: "text-delta", id: "t1", delta: "split" });
+		const output = await readAll(
+			createStreamTransformer(
+				sourceOf([event.slice(0, 20), event.slice(20)]),
+				requestBody,
+				passThroughHook,
+			),
+		);
+
+		expect(output).toBe(event);
 	});
 });

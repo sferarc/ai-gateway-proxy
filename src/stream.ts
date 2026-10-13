@@ -189,11 +189,10 @@ export function createStreamTransformer(
 	const eventStream = body
 		.pipeThrough(new TextDecoderStream() as TransformStream<Uint8Array, string>)
 		.pipeThrough(new EventSourceParserStream());
+	const reader = eventStream.getReader();
 
 	return new ReadableStream({
 		async start(controller) {
-			const reader = eventStream.getReader();
-
 			try {
 				while (true) {
 					const { done, value } = await reader.read();
@@ -222,10 +221,17 @@ export function createStreamTransformer(
 
 					// Handle finish event specially - call afterResponse hook
 					if (parsed.type === "finish") {
-						const modifiedResponse = await afterResponse({
-							request: requestBody,
-							response: aggregator.getResponse(),
-						});
+						let modifiedResponse: GatewayResponse;
+						try {
+							modifiedResponse = await afterResponse({
+								request: requestBody,
+								response: aggregator.getResponse(),
+							});
+						} catch (error) {
+							console.error("afterResponse hook failed, forwarding original finish event:", error);
+							controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+							continue;
+						}
 
 						// Emit modified finish event
 						const modifiedFinish: LanguageModelV3StreamPart = {
@@ -249,6 +255,9 @@ export function createStreamTransformer(
 			} finally {
 				reader.releaseLock();
 			}
+		},
+		cancel(reason) {
+			return reader.cancel(reason);
 		},
 	});
 }
