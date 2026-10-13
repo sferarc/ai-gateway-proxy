@@ -18,10 +18,12 @@ function createMockRequest(
 		method?: string;
 		body?: unknown;
 		headers?: Record<string, string>;
+		signal?: AbortSignal;
 	} = {},
 ): Request {
 	return new Request(url, {
 		method: options.method ?? "POST",
+		signal: options.signal,
 		body: options.body ? JSON.stringify(options.body) : undefined,
 		headers: {
 			"content-type": "application/json",
@@ -188,6 +190,75 @@ describe("createGatewayProxy", () => {
 				expect.any(Object),
 			);
 		});
+
+		it("accepts a custom baseUrl with a trailing slash", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+
+			const proxy = createGatewayProxy({
+				baseUrl: "https://custom-gateway.example.com/api/",
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			await proxy(request, createMockContext(["chat"]));
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				"https://custom-gateway.example.com/api/chat",
+				expect.any(Object),
+			);
+		});
+
+		it("forwards a nested path under the default baseUrl", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				body: { prompt: [] },
+			});
+
+			await proxy(request, createMockContext(["language-model"]));
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				"https://ai-gateway.vercel.sh/v1/ai/language-model",
+				expect.any(Object),
+			);
+		});
+
+		it.each([
+			[["..", "x"]],
+			[["a", "..", "..", "b"]],
+			[["%2e%2e", "x"]],
+			[["%2E%2E", "x"]],
+			[["a%2F..%2F..", "x"]],
+			[["..\\x"]],
+		])("returns 400 without calling fetch for segments %j", async (segments) => {
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/ai/x", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(segments));
+
+			expect(response.status).toBe(400);
+			expect(await response.text()).toBe("Invalid path");
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
+
+		it.each(["../x", "/x", "https://evil.example.com/x"])(
+			"returns 400 without calling fetch when extractPath returns %j",
+			async (path) => {
+				const proxy = createGatewayProxy({ extractPath: () => path });
+				const request = createMockRequest("http://localhost/api/ai/x", {
+					body: { prompt: [] },
+				});
+
+				const response = await proxy(request);
+
+				expect(response.status).toBe(400);
+				expect(mockFetch).not.toHaveBeenCalled();
+			},
+		);
 
 		it("includes custom headers", async () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
@@ -621,6 +692,31 @@ describe("createGatewayProxy", () => {
 
 			expect(response.status).toBe(500);
 			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+		});
+
+		it("forwards the client signal and returns 499 when the client aborts", async () => {
+			mockFetch.mockImplementationOnce(
+				(_url: string, init: RequestInit) =>
+					new Promise((_resolve, reject) => {
+						init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+					}),
+			);
+
+			const controller = new AbortController();
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+				signal: controller.signal,
+			});
+
+			const pending = proxy(request, createMockContext(["chat"]));
+			await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
+			controller.abort();
+			const response = await pending;
+
+			const init = mockFetch.mock.calls[0]?.[1] as RequestInit;
+			expect(init.signal).toBe(request.signal);
+			expect(response.status).toBe(499);
 		});
 
 		it("returns 500 when a successful response body is not JSON", async () => {
