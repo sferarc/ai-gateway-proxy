@@ -8,6 +8,7 @@ export type GatewayAuthToken = {
 /**
  * Get authentication token for the AI Gateway.
  * Tries API key first (AI_GATEWAY_API_KEY env var), then falls back to Vercel OIDC.
+ * Returns `null` when neither is available, and the proxy then answers 500.
  */
 export async function getGatewayAuthToken(): Promise<GatewayAuthToken | null> {
 	const apiKey = process.env.AI_GATEWAY_API_KEY;
