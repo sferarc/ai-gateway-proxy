@@ -23,7 +23,7 @@ The handler speaks the AI SDK gateway language model protocol, version 3 types, 
 
 - **Tree-shakable.** `package.json` sets `sideEffects: false` and CI runs `pnpm is-tree-shakable` after the build (`.github/workflows/ci.yml`). Consumers rely on unused exports being dropped.
 - **The caller cannot override authentication.** In `buildRequestHeaders` the custom `headers` option is spread before `authorization` and the `ai-gateway-*` and `ai-language-model-*` headers, so those always win (`src/proxy.ts`).
-- **Failures become responses, not throws.** Missing auth returns 500, an unparseable body 400, and a failed `fetch` 500 (`src/proxy.ts`, tested in `src/proxy.test.ts`).
+- **Failures become responses, not throws.** Missing auth returns 500, a path that would leave `baseUrl` `400 Invalid path` (#10), an unparseable body `400 Invalid JSON body`, and a client abort 499 with no body (#10). A failed `fetch`, a non-JSON success body, and a throwing `extractPath`, `beforeRequest`, `afterResponse` or `onError` return `500 Error proxying request to AI Gateway` (#5, #17). A throwing `afterResponse` on a stream is logged and the original `finish` event is forwarded, since the response has already started (#11, `src/stream.ts`). See [[proxy]]; tested under `request handling` and `error handling` in `src/proxy.test.ts` and by `forwards the original finish event when the hook throws` in `src/stream.test.ts`.
 
 ## History
 
