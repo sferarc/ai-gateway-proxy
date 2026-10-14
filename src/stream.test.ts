@@ -1,5 +1,5 @@
 import type { LanguageModelV3CallOptions, LanguageModelV3StreamPart } from "@ai-sdk/provider";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { createStreamTransformer, StreamContentAggregator } from "./stream";
 import type { GatewayResponse } from "./types";
 
@@ -405,6 +405,25 @@ async function readAll(stream: ReadableStream<Uint8Array>): Promise<string> {
 const passThroughHook = ({ response }: { response: GatewayResponse }) => response;
 
 describe("createStreamTransformer", () => {
+	let consoleWarn: MockInstance<typeof console.warn>;
+	let consoleError: MockInstance<typeof console.error>;
+
+	beforeEach(() => {
+		consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	function loggedText(): string {
+		return [...consoleWarn.mock.calls, ...consoleError.mock.calls]
+			.flat()
+			.map((arg) => (arg instanceof Error ? `${arg.message} ${arg.stack}` : String(arg)))
+			.join("\n");
+	}
+
 	it("passes text events through unchanged", async () => {
 		const events = [
 			{ type: "text-start", id: "t1" },
@@ -469,7 +488,6 @@ describe("createStreamTransformer", () => {
 	});
 
 	it("forwards the original finish event when the hook throws", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const output = await readAll(
 			createStreamTransformer(
 				sourceOf([sse(finishEvent), sse("[DONE]")]),
@@ -482,7 +500,7 @@ describe("createStreamTransformer", () => {
 
 		expect(output).toBe(`${sse(finishEvent)}data: [DONE]\n\n`);
 		expect(consoleError).toHaveBeenCalledOnce();
-		consoleError.mockRestore();
+		expect(consoleWarn).not.toHaveBeenCalled();
 	});
 
 	it("cancels the source when the output stream is cancelled", async () => {
@@ -499,6 +517,79 @@ describe("createStreamTransformer", () => {
 		await reader.cancel("client went away");
 
 		await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith("client went away"));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(consoleError).not.toHaveBeenCalled();
+		expect(consoleWarn).not.toHaveBeenCalled();
+	});
+
+	it("logs once and errors the client stream when the upstream body fails mid-stream", async () => {
+		const failure = new Error("connection reset");
+		let sent = false;
+		const source = new ReadableStream<Uint8Array>({
+			pull(controller) {
+				if (sent) {
+					controller.error(failure);
+					return;
+				}
+				sent = true;
+				controller.enqueue(encoder.encode(sse({ type: "text-delta", id: "t1", delta: "secret" })));
+			},
+		});
+		const hook = vi.fn(passThroughHook);
+
+		await expect(readAll(createStreamTransformer(source, requestBody, hook))).rejects.toThrow(
+			"connection reset",
+		);
+
+		expect(consoleError).toHaveBeenCalledOnce();
+		expect(consoleError.mock.calls[0]?.[0]).toMatch(/^upstream stream failed/);
+		expect(consoleError.mock.calls[0]?.[1]).toBe(failure);
+		expect(hook).not.toHaveBeenCalled();
+		expect(loggedText()).not.toContain("secret");
+	});
+
+	it("warns once and closes normally when the upstream ends without a finish event", async () => {
+		const hook = vi.fn(passThroughHook);
+		const events = [sse({ type: "text-delta", id: "t1", delta: "secret" }), sse("[DONE]")];
+
+		const output = await readAll(createStreamTransformer(sourceOf(events), requestBody, hook));
+
+		expect(output).toBe(events.join(""));
+		expect(hook).not.toHaveBeenCalled();
+		expect(consoleWarn).toHaveBeenCalledOnce();
+		expect(consoleWarn.mock.calls[0]?.[0]).toMatch(
+			/without a finish event, afterResponse was not called/,
+		);
+		expect(consoleError).not.toHaveBeenCalled();
+		expect(loggedText()).not.toContain("secret");
+	});
+
+	it("warns once per stream about non-JSON events without logging their payload", async () => {
+		const output = await readAll(
+			createStreamTransformer(
+				sourceOf([sse("secret one"), sse("secret two"), sse(finishEvent), sse("[DONE]")]),
+				requestBody,
+				passThroughHook,
+			),
+		);
+
+		expect(output).toContain("data: secret one\n\ndata: secret two\n\n");
+		expect(consoleWarn).toHaveBeenCalledOnce();
+		expect(consoleWarn.mock.calls[0]?.[0]).toMatch(/not valid JSON/);
+		expect(loggedText()).not.toContain("secret");
+	});
+
+	it("does not warn when the stream finishes normally", async () => {
+		await readAll(
+			createStreamTransformer(
+				sourceOf([sse({ type: "text-start", id: "t1" }), sse(finishEvent), sse("[DONE]")]),
+				requestBody,
+				passThroughHook,
+			),
+		);
+
+		expect(consoleWarn).not.toHaveBeenCalled();
+		expect(consoleError).not.toHaveBeenCalled();
 	});
 
 	it("parses an event split across chunks mid-JSON", async () => {
