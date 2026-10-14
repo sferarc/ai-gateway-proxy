@@ -95,11 +95,25 @@ function buildRequestHeaders(
 	};
 }
 
-function proxyFailureResponse(request: Request): Response {
+type ProxyErrorType = "authentication_error" | "invalid_request_error" | "proxy_error";
+
+/**
+ * Builds a response for an error the proxy raises itself, in the same shape as upstream errors.
+ */
+function proxyErrorResponse(status: number, type: ProxyErrorType, message: string): Response {
+	const body: GatewayError = { error: { message, type } };
+	return new Response(JSON.stringify(body), {
+		status,
+		headers: { "content-type": "application/json" },
+	});
+}
+
+function proxyFailureResponse(request: Request, error: unknown): Response {
 	if (request.signal.aborted) {
 		return new Response(null, { status: 499 });
 	}
-	return new Response("Error proxying request to AI Gateway", { status: 500 });
+	console.error("AI Gateway proxy request failed:", error);
+	return proxyErrorResponse(500, "proxy_error", "Error proxying request to AI Gateway");
 }
 
 /**
@@ -129,8 +143,8 @@ async function forwardBodylessRequest(
 			statusText: res.statusText,
 			headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
 		});
-	} catch {
-		return proxyFailureResponse(request);
+	} catch (error) {
+		return proxyFailureResponse(request, error);
 	}
 }
 
@@ -193,7 +207,7 @@ function handleStreamingResponse(
 	afterResponse: CreateGatewayProxyOptions["afterResponse"],
 ): Response {
 	if (!res.body) {
-		return new Response("No response body", { status: 500 });
+		return proxyErrorResponse(500, "proxy_error", "No response body");
 	}
 
 	const contentType = res.headers.get("content-type") || "text/event-stream";
@@ -263,7 +277,11 @@ export const createGatewayProxy = ({
 		// Authenticate with the gateway
 		const auth = await getGatewayAuthToken();
 		if (!auth) {
-			return new Response("AI Gateway authentication not configured", { status: 500 });
+			return proxyErrorResponse(
+				500,
+				"authentication_error",
+				"AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled",
+			);
 		}
 
 		try {
@@ -271,7 +289,7 @@ export const createGatewayProxy = ({
 			const path = await extractPathFromRequest(request, context, { extractPath, segmentsParam });
 			const upstream = buildUpstreamUrl(baseUrl, path, request.url);
 			if (!upstream) {
-				return new Response("Invalid path", { status: 400 });
+				return proxyErrorResponse(400, "invalid_request_error", "Invalid path");
 			}
 
 			if (request.method === "GET" || request.method === "HEAD") {
@@ -283,7 +301,7 @@ export const createGatewayProxy = ({
 			try {
 				requestBody = await request.clone().json();
 			} catch {
-				return new Response("Invalid JSON body", { status: 400 });
+				return proxyErrorResponse(400, "invalid_request_error", "Invalid JSON body");
 			}
 
 			// Apply beforeRequest hook
@@ -318,8 +336,8 @@ export const createGatewayProxy = ({
 			}
 
 			return await handleJsonResponse(res, requestBody, afterResponse);
-		} catch {
-			return proxyFailureResponse(request);
+		} catch (error) {
+			return proxyFailureResponse(request, error);
 		}
 	};
 
