@@ -145,6 +145,38 @@ describe("createGatewayProxy", () => {
 			);
 		});
 
+		it("keeps gateway headers authoritative over custom headers in any casing", async () => {
+			vi.mocked(getVercelOidcToken).mockResolvedValueOnce("oidc-token-123");
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+
+			const proxy = createGatewayProxy({
+				headers: {
+					Authorization: "Bearer user-token",
+					"AI-Gateway-Auth-Method": "api-key",
+					"AI-Gateway-Protocol-Version": "9.9.9",
+					"AI-Language-Model-Id": "custom-model",
+					"AI-Language-Model-Streaming": "true",
+					"Content-Type": "text/plain",
+					"x-custom": "value",
+				},
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+				headers: { "ai-language-model-id": "gpt-4" },
+			});
+
+			await proxy(request, createMockContext(["chat"]));
+
+			const sent = new Headers(mockFetch.mock.calls[0][1].headers);
+			expect(sent.get("authorization")).toBe("Bearer oidc-token-123");
+			expect(sent.get("ai-gateway-auth-method")).toBe("oidc");
+			expect(sent.get("ai-gateway-protocol-version")).toBe("0.0.1");
+			expect(sent.get("ai-language-model-id")).toBe("gpt-4");
+			expect(sent.get("ai-language-model-streaming")).toBe("false");
+			expect(sent.get("content-type")).toBe("application/json");
+			expect(sent.get("x-custom")).toBe("value");
+		});
+
 		it("returns 500 when no authentication is available", async () => {
 			vi.mocked(getVercelOidcToken).mockRejectedValueOnce(new Error("No OIDC token"));
 
@@ -769,6 +801,26 @@ describe("createGatewayProxy", () => {
 			expect(beforeRequest).not.toHaveBeenCalled();
 			expect(afterResponse).not.toHaveBeenCalled();
 			expect(onError).not.toHaveBeenCalled();
+		});
+
+		it("keeps gateway headers authoritative over custom headers in any casing on GET", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(models));
+
+			const proxy = createGatewayProxy({
+				headers: {
+					Authorization: "Bearer user-token",
+					"AI-Gateway-Auth-Method": "oidc",
+					"AI-Gateway-Protocol-Version": "9.9.9",
+				},
+			});
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+
+			await proxy.GET(request, createMockContext(["config"]));
+
+			const sent = new Headers(mockFetch.mock.calls[0][1].headers);
+			expect(sent.get("authorization")).toBe("Bearer test-api-key");
+			expect(sent.get("ai-gateway-auth-method")).toBe("api-key");
+			expect(sent.get("ai-gateway-protocol-version")).toBe("0.0.1");
 		});
 
 		it("returns the upstream status and body when GET fails", async () => {
