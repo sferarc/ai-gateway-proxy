@@ -76,6 +76,21 @@ function buildUpstreamUrl(baseUrl: string, path: string, requestUrl: string): st
 }
 
 /**
+ * Applies the proxy's own headers over the caller's `headers`. `Headers` matches names
+ * case-insensitively, so a custom `Authorization` cannot sit beside the gateway's `authorization`.
+ */
+function withGatewayHeaders(
+	customHeaders: Record<string, string> | undefined,
+	gatewayHeaders: Record<string, string>,
+): Record<string, string> {
+	const headers = new Headers(customHeaders);
+	for (const [name, value] of Object.entries(gatewayHeaders)) {
+		headers.set(name, value);
+	}
+	return Object.fromEntries(headers);
+}
+
+/**
  * Builds the headers for the upstream request.
  */
 function buildRequestHeaders(
@@ -84,15 +99,14 @@ function buildRequestHeaders(
 	modelId: string | null,
 	customHeaders?: Record<string, string>,
 ): Record<string, string> {
-	return {
+	return withGatewayHeaders(customHeaders, {
 		"content-type": "application/json",
-		...customHeaders,
 		authorization: `Bearer ${auth.token}`,
 		"ai-gateway-auth-method": auth.authMethod,
 		"ai-gateway-protocol-version": PROTOCOL_VERSION,
 		"ai-language-model-id": modelId ?? "",
 		"ai-language-model-streaming": isStreaming ? "true" : "false",
-	};
+	});
 }
 
 function proxyFailureResponse(request: Request): Response {
@@ -116,12 +130,11 @@ async function forwardBodylessRequest(
 		const res = await fetch(upstream, {
 			method: request.method,
 			signal: request.signal,
-			headers: {
-				...customHeaders,
+			headers: withGatewayHeaders(customHeaders, {
 				authorization: `Bearer ${auth.token}`,
 				"ai-gateway-auth-method": auth.authMethod,
 				"ai-gateway-protocol-version": PROTOCOL_VERSION,
-			},
+			}),
 		});
 
 		return new Response(res.body, {
