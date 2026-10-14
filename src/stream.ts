@@ -190,6 +190,9 @@ export function createStreamTransformer(
 		.pipeThrough(new TextDecoderStream() as TransformStream<Uint8Array, string>)
 		.pipeThrough(new EventSourceParserStream());
 	const reader = eventStream.getReader();
+	let cancelled = false;
+	let finishSeen = false;
+	let warnedNonJson = false;
 
 	return new ReadableStream({
 		async start(controller) {
@@ -211,7 +214,10 @@ export function createStreamTransformer(
 					try {
 						parsed = JSON.parse(data);
 					} catch {
-						// Not valid JSON, pass through as-is
+						if (!warnedNonJson) {
+							warnedNonJson = true;
+							console.warn("upstream stream event is not valid JSON, passing it through unparsed");
+						}
 						controller.enqueue(encoder.encode(`data: ${data}\n\n`));
 						continue;
 					}
@@ -221,6 +227,7 @@ export function createStreamTransformer(
 
 					// Handle finish event specially - call afterResponse hook
 					if (parsed.type === "finish") {
+						finishSeen = true;
 						let modifiedResponse: GatewayResponse;
 						try {
 							modifiedResponse = await afterResponse({
@@ -249,14 +256,23 @@ export function createStreamTransformer(
 					controller.enqueue(encoder.encode(`data: ${data}\n\n`));
 				}
 
+				if (!finishSeen && !cancelled) {
+					console.warn(
+						"upstream stream ended without a finish event, afterResponse was not called",
+					);
+				}
 				controller.close();
 			} catch (error) {
+				if (!cancelled) {
+					console.error("upstream stream failed, erroring the client stream:", error);
+				}
 				controller.error(error);
 			} finally {
 				reader.releaseLock();
 			}
 		},
 		cancel(reason) {
+			cancelled = true;
 			return reader.cancel(reason);
 		},
 	});
