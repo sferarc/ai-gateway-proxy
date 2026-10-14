@@ -5,7 +5,7 @@
 | File | What it covers |
 | --- | --- |
 | `src/proxy.test.ts` | The request path with `fetch` and `@vercel/oidc` mocked: auth selection, URL and header building, the three hooks, error handling, method exports |
-| `src/stream.test.ts` | `StreamContentAggregator` over each stream part type, and `createStreamTransformer` in isolation |
+| `src/stream.test.ts` | Two suites. `StreamContentAggregator`: each stream part type. `createStreamTransformer` in isolation: pass-through, `[DONE]` and non-JSON data, `finish` replaced by the hook result, original `finish` forwarded when the hook throws, cancellation reaching the source, an event split across chunks |
 | `src/proxy-stream.test.ts` | `createGatewayProxy` streaming with an `afterResponse` spy over a mocked SSE upstream: the usage and content the hook sees, the rewritten `finish` the client gets, no `finish`, upstream error, client cancel |
 | `src/integration.test.ts` | Real calls through the proxy to the AI Gateway |
 
