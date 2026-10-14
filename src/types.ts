@@ -65,6 +65,8 @@ export type CreateGatewayProxyOptions = {
 	/**
 	 * Called before the request is sent to the gateway.
 	 * Allows modification of the request body.
+	 *
+	 * Not called for GET or HEAD requests, which are forwarded as is.
 	 */
 	beforeRequest?: (context: {
 		request: LanguageModelV3CallOptions;
@@ -78,6 +80,8 @@ export type CreateGatewayProxyOptions = {
 	 * can modify the finish event metadata (usage, finishReason, providerMetadata).
 	 * If the hook throws while handling a stream, the error is logged and the
 	 * original finish event is forwarded unchanged.
+	 *
+	 * Not called for GET or HEAD requests, which are forwarded as is.
 	 */
 	afterResponse?: (context: {
 		request: LanguageModelV3CallOptions;
@@ -86,6 +90,8 @@ export type CreateGatewayProxyOptions = {
 	/**
 	 * Called when the gateway returns an error response.
 	 * Allows custom error handling or modification.
+	 *
+	 * Not called for GET or HEAD requests, which are forwarded as is.
 	 */
 	onError?: (context: {
 		request: LanguageModelV3CallOptions;
