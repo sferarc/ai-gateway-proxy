@@ -10,6 +10,9 @@ import type {
 
 const DEFAULT_BASE_URL = "https://ai-gateway.vercel.sh/v1/ai";
 const PROTOCOL_VERSION = "0.0.1";
+const MAX_ERROR_EXCERPT_LENGTH = 200;
+// Vercel's request id (the header @ai-sdk/gateway reads it from); operators match it to gateway-side logs.
+const FORWARDED_RESPONSE_HEADERS = ["x-vercel-id"] as const;
 
 /**
  * Extracts the path from the request using either a custom extractor or route params.
@@ -148,19 +151,39 @@ async function forwardBodylessRequest(
 }
 
 /**
- * Parses the error response from the gateway.
+ * Parses the error response from the gateway. A non-JSON body, such as an HTML page from an
+ * edge or load balancer, becomes a `gateway_error` naming the status and a short excerpt.
  */
 async function parseErrorBody(res: Response): Promise<GatewayError> {
+	const text = await res.text().catch(() => "");
 	try {
-		return await res.json();
+		return JSON.parse(text);
 	} catch {
+		const excerpt = text.replace(/\s+/g, " ").trim().slice(0, MAX_ERROR_EXCERPT_LENGTH);
+		const message = excerpt
+			? `AI Gateway returned ${res.status}: ${excerpt}`
+			: `AI Gateway returned ${res.status} ${res.statusText}`.trimEnd();
 		return {
 			error: {
-				message: res.statusText || "Unknown error",
+				message,
 				type: "gateway_error",
 			},
 		};
 	}
+}
+
+/**
+ * Builds response headers with the given content type plus the upstream correlation headers.
+ */
+function responseHeaders(res: Response, contentType: string): Headers {
+	const headers = new Headers({ "content-type": contentType });
+	for (const name of FORWARDED_RESPONSE_HEADERS) {
+		const value = res.headers.get(name);
+		if (value !== null) {
+			headers.set(name, value);
+		}
+	}
+	return headers;
 }
 
 /**
@@ -186,14 +209,14 @@ async function createErrorResponse(
 		return new Response(JSON.stringify(result), {
 			status: res.status,
 			statusText: res.statusText,
-			headers: { "content-type": "application/json" },
+			headers: responseHeaders(res, "application/json"),
 		});
 	}
 
 	return new Response(JSON.stringify(errorBody), {
 		status: res.status,
 		statusText: res.statusText,
-		headers: { "content-type": "application/json" },
+		headers: responseHeaders(res, "application/json"),
 	});
 }
 
@@ -216,7 +239,7 @@ function handleStreamingResponse(
 		return new Response(res.body, {
 			status: res.status,
 			statusText: res.statusText,
-			headers: { "content-type": contentType },
+			headers: responseHeaders(res, contentType),
 		});
 	}
 
@@ -226,7 +249,7 @@ function handleStreamingResponse(
 	return new Response(transformedStream, {
 		status: res.status,
 		statusText: res.statusText,
-		headers: { "content-type": contentType },
+		headers: responseHeaders(res, contentType),
 	});
 }
 
@@ -250,7 +273,7 @@ async function handleJsonResponse(
 	return new Response(JSON.stringify(responseBody), {
 		status: res.status,
 		statusText: res.statusText,
-		headers: { "content-type": "application/json" },
+		headers: responseHeaders(res, "application/json"),
 	});
 }
 
