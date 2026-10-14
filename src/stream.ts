@@ -185,7 +185,6 @@ export function createStreamTransformer(
 	const encoder = new TextEncoder();
 	const aggregator = new StreamContentAggregator();
 
-	// Use EventSourceParserStream for SSE parsing (re-exported from eventsource-parser via @ai-sdk/provider-utils)
 	const eventStream = body
 		.pipeThrough(new TextDecoderStream() as TransformStream<Uint8Array, string>)
 		.pipeThrough(new EventSourceParserStream());

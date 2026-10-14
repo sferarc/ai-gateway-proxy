@@ -30,7 +30,7 @@ Biome only (`biome.json`): tabs, 100 columns, double quotes, the recommended pre
 
 ## TypeScript
 
-`tsconfig.json`: `strict`, `module` `ESNext`, `moduleResolution` `bundler`, `isolatedModules`, `skipLibCheck`. The `typescript` package is 7. bunchee emits declarations through the TypeScript 6 JavaScript API, so `@typescript/typescript6` is installed as a shim and ignored by knip (`pnpm-workspace.yaml`, `knip.json`). See [[decisions/2026-10-08-typescript6-shim-for-bunchee]].
+`tsconfig.json`: `strict`, `module` `ESNext`, `moduleResolution` `bundler`, `isolatedModules`, `skipLibCheck`. `lib` keeps `dom` beside `ESNext`: without it the fetch types come from `@types/node`, where `Request.json()` and `Response.json()` return `Promise<unknown>`, and the proxy and its tests stop typechecking. The `typescript` package is 7. bunchee emits declarations through the TypeScript 6 JavaScript API, so `@typescript/typescript6` is installed as a shim and ignored by knip (`pnpm-workspace.yaml`, `knip.json`). See [[decisions/2026-10-08-typescript6-shim-for-bunchee]].
 
 ## Dependencies
 
