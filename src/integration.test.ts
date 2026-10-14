@@ -6,113 +6,18 @@
  * Requires AI_GATEWAY_API_KEY environment variable.
  */
 
-import { createServer } from "node:http";
-import { createGateway } from "@ai-sdk/gateway";
 import { generateText, streamText } from "ai";
 import { describe, expect, it } from "vitest";
-import { createGatewayProxy } from "./proxy";
-import type { CreateGatewayProxyOptions, GatewayResponse } from "./types";
+import { startProxyServer } from "./test-server";
+import type { GatewayResponse } from "./types";
 
 const hasApiKey = !!process.env.AI_GATEWAY_API_KEY;
 const TEST_MODEL = "google/gemini-2.0-flash";
 
-type TestServerOptions = {
-	proxyOptions?: CreateGatewayProxyOptions;
-	/**
-	 * The name of the segments parameter to use when passing to the proxy.
-	 * @default "segments"
-	 */
-	segmentsParam?: string;
-	/**
-	 * If true, call the proxy without context (for testing extractPath).
-	 */
-	noContext?: boolean;
-};
-
-/**
- * Creates a test server running the proxy and returns the gateway client
- */
-function createTestServer(options: TestServerOptions = {}) {
-	const { proxyOptions = {}, segmentsParam = "segments", noContext = false } = options;
-	const proxy = createGatewayProxy(proxyOptions);
-
-	const server = createServer(async (req, res) => {
-		// Parse the URL to get the path segments
-		const url = new URL(req.url || "/", `http://${req.headers.host}`);
-		const segments = url.pathname.split("/").filter(Boolean);
-
-		// Read the request body
-		const chunks: Buffer[] = [];
-		for await (const chunk of req) {
-			chunks.push(chunk);
-		}
-		const body = Buffer.concat(chunks).toString();
-
-		// Create a Request object
-		const request = new Request(url.toString(), {
-			method: req.method,
-			headers: Object.fromEntries(
-				Object.entries(req.headers).filter(([, v]) => v !== undefined) as [string, string][],
-			),
-			body: req.method !== "GET" && req.method !== "HEAD" ? body : undefined,
-		});
-
-		// Call the proxy - with or without context based on noContext flag
-		const response = noContext
-			? await proxy(request)
-			: await proxy(request, {
-					params: Promise.resolve({ [segmentsParam]: segments }),
-				});
-
-		// Send the response
-		res.statusCode = response.status;
-		response.headers.forEach((value, key) => {
-			res.setHeader(key, value);
-		});
-
-		if (response.body) {
-			const reader = response.body.getReader();
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				res.write(value);
-			}
-		}
-		res.end();
-	});
-
-	return new Promise<{
-		gateway: ReturnType<typeof createGateway>;
-		server: ReturnType<typeof createServer>;
-		close: () => Promise<void>;
-	}>((resolve) => {
-		server.listen(0, () => {
-			const address = server.address();
-			const port = typeof address === "object" ? address?.port : 0;
-			const baseURL = `http://localhost:${port}`;
-
-			const gateway = createGateway({
-				baseURL,
-				// The proxy handles auth, so we pass a dummy key
-				apiKey: "proxy-handles-auth",
-			});
-
-			resolve({
-				gateway,
-				server,
-				close: () =>
-					new Promise<void>((resolve) => {
-						server.close(() => resolve());
-					}),
-			});
-		});
-	});
-}
-
 describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 	describe("generateText (non-streaming)", () => {
 		it("proxies a simple request successfully", async () => {
-			const { gateway, close } = await createTestServer({});
+			const { gateway, close } = await startProxyServer({});
 
 			try {
 				const result = await generateText({
@@ -133,7 +38,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 		it("applies beforeRequest hook", async () => {
 			let capturedMaxTokens: number | undefined;
 
-			const { gateway, close } = await createTestServer({
+			const { gateway, close } = await startProxyServer({
 				proxyOptions: {
 					beforeRequest: ({ request }) => {
 						capturedMaxTokens = request.maxOutputTokens;
@@ -162,7 +67,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 		it("applies afterResponse hook", async () => {
 			let capturedResponse: GatewayResponse | undefined;
 
-			const { gateway, close } = await createTestServer({
+			const { gateway, close } = await startProxyServer({
 				proxyOptions: {
 					afterResponse: ({ response }) => {
 						capturedResponse = response;
@@ -192,7 +97,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 
 	describe("streamText (streaming)", () => {
 		it("streams text successfully", async () => {
-			const { gateway, close } = await createTestServer({});
+			const { gateway, close } = await startProxyServer({});
 
 			try {
 				const result = streamText({
@@ -217,7 +122,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 		it("applies beforeRequest hook during streaming", async () => {
 			let capturedMaxTokens: number | undefined;
 
-			const { gateway, close } = await createTestServer({
+			const { gateway, close } = await startProxyServer({
 				proxyOptions: {
 					beforeRequest: ({ request }) => {
 						capturedMaxTokens = request.maxOutputTokens;
@@ -251,7 +156,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 		it("applies afterResponse hook during streaming", async () => {
 			let capturedResponse: GatewayResponse | undefined;
 
-			const { gateway, close } = await createTestServer({
+			const { gateway, close } = await startProxyServer({
 				proxyOptions: {
 					afterResponse: ({ response }) => {
 						capturedResponse = response;
@@ -292,7 +197,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 		it("aggregates content correctly in afterResponse", async () => {
 			let aggregatedContent: GatewayResponse["content"] | undefined;
 
-			const { gateway, close } = await createTestServer({
+			const { gateway, close } = await startProxyServer({
 				proxyOptions: {
 					afterResponse: ({ response }) => {
 						aggregatedContent = response.content;
@@ -333,7 +238,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 		it("handles model not found errors", async () => {
 			let capturedError: unknown;
 
-			const { gateway, close } = await createTestServer({
+			const { gateway, close } = await startProxyServer({
 				proxyOptions: {
 					onError: ({ error, status }) => {
 						capturedError = { error, status };
@@ -360,7 +265,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 		it("calls hooks in correct order", async () => {
 			const order: string[] = [];
 
-			const { gateway, close } = await createTestServer({
+			const { gateway, close } = await startProxyServer({
 				proxyOptions: {
 					beforeRequest: ({ request }) => {
 						order.push("beforeRequest");
@@ -389,7 +294,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 		it("calls hooks in correct order for streaming", async () => {
 			const order: string[] = [];
 
-			const { gateway, close } = await createTestServer({
+			const { gateway, close } = await startProxyServer({
 				proxyOptions: {
 					beforeRequest: ({ request }) => {
 						order.push("beforeRequest");
@@ -427,7 +332,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 
 	describe("segmentsParam option", () => {
 		it("uses custom segmentsParam name", async () => {
-			const { gateway, close } = await createTestServer({
+			const { gateway, close } = await startProxyServer({
 				segmentsParam: "path",
 				proxyOptions: {
 					segmentsParam: "path",
@@ -450,7 +355,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 
 	describe("extractPath option", () => {
 		it("uses extractPath to extract path from request URL", async () => {
-			const { gateway, close } = await createTestServer({
+			const { gateway, close } = await startProxyServer({
 				noContext: true,
 				proxyOptions: {
 					extractPath: (request) => {
@@ -474,7 +379,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 		}, 30000);
 
 		it("works with streaming when using extractPath", async () => {
-			const { gateway, close } = await createTestServer({
+			const { gateway, close } = await startProxyServer({
 				noContext: true,
 				proxyOptions: {
 					extractPath: (request) => {

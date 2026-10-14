@@ -1,13 +1,21 @@
 # Testing
 
-`pnpm test` runs vitest over the `*.test.ts` files in `src/` (`vitest.config.ts`, node environment, globals). On 2026-10-15 without a key, on vitest 5.0.4: 4 files, 86 tests, 73 passed and 13 skipped.
+`pnpm test` runs vitest over the `*.test.ts` files in `src/` (`vitest.config.ts`, node environment, globals). On 2026-10-15 without a key, on vitest 5.0.4: 5 files, 96 tests, 83 passed and 13 skipped (the skipped ones are `src/integration.test.ts`).
 
 | File | What it covers |
 | --- | --- |
 | `src/proxy.test.ts` | The request path with `fetch` and `@vercel/oidc` mocked: auth selection, URL and header building, the three hooks, error handling, method exports |
 | `src/stream.test.ts` | Two suites. `StreamContentAggregator`: each stream part type. `createStreamTransformer` in isolation: pass-through, `[DONE]` and non-JSON data, `finish` replaced by the hook result, original `finish` forwarded when the hook throws, cancellation reaching the source, an event split across chunks |
 | `src/proxy-stream.test.ts` | `createGatewayProxy` streaming with an `afterResponse` spy over a mocked SSE upstream: the usage and content the hook sees, the rewritten `finish` the client gets, no `finish`, upstream error, client cancel |
+| `src/e2e.test.ts` | A real `@ai-sdk/gateway` client calling `generateText` and `streamText` through the proxy over HTTP to a local fake gateway: text round-trip, the path and gateway headers upstream, `beforeRequest` reaching upstream, `afterResponse` content in both modes, client aborts closing the upstream request |
 | `src/integration.test.ts` | Real calls through the proxy to the AI Gateway |
+| `src/test-server.ts` | Not a test: `startProxyServer`, the node:http bridge both suites above serve the proxy with |
+
+## Keyless end-to-end tests
+
+`src/e2e.test.ts` runs in CI. It stubs `AI_GATEWAY_API_KEY` with a dummy through `vi.stubEnv`, starts a node:http fake gateway on `127.0.0.1` that records each request and answers `POST /v1/ai/language-model` with a canned JSON result or SSE stream (the `LanguageModelV4` generate result and stream parts that `@ai-sdk/gateway` 4.x parses in `doGenerate` and `doStream`), and points the proxy's `baseUrl` at it. No outbound network and no real key.
+
+`startProxyServer` aborts `request.signal` when the client disconnects and cancels the response body, as a framework route handler does. The two abort tests separate the paths: an abort before the gateway answers can only reach upstream through the signal passed to `fetch` (#10), and the mid-stream abort runs with `forwardAbortSignal: false`, so only the stream cancellation in `createStreamTransformer` (#11) can close upstream. Removing either one fails its test.
 
 ## Integration tests
 
