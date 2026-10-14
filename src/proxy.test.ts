@@ -1,3 +1,4 @@
+import { createGatewayProvider } from "@ai-sdk/gateway";
 import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGatewayProxy } from "./proxy";
@@ -672,6 +673,113 @@ describe("createGatewayProxy", () => {
 			expect(response.status).toBe(200);
 			expect(response.headers.get("content-type")).toBe("text/event-stream");
 			expect(await response.text()).toBe(streamBody);
+		});
+	});
+
+	describe("bodyless requests", () => {
+		const models = {
+			models: [
+				{
+					id: "openai/gpt-5",
+					name: "GPT-5",
+					specification: { specificationVersion: "v4", provider: "openai", modelId: "gpt-5" },
+					modelType: "language",
+				},
+			],
+		};
+
+		beforeEach(() => {
+			process.env.AI_GATEWAY_API_KEY = "test-api-key";
+		});
+
+		it("forwards GET without a body and returns the upstream JSON", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(models));
+
+			const proxy = createGatewayProxy({ headers: { "x-custom": "value" } });
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+
+			const response = await proxy.GET(request, createMockContext(["config"]));
+
+			expect(response.status).toBe(200);
+			expect(await response.json()).toEqual(models);
+			const [url, init] = mockFetch.mock.calls[0];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/config");
+			expect(init.method).toBe("GET");
+			expect(init.body).toBeUndefined();
+			expect(init.headers).toEqual({
+				"x-custom": "value",
+				authorization: "Bearer test-api-key",
+				"ai-gateway-auth-method": "api-key",
+				"ai-gateway-protocol-version": "0.0.1",
+			});
+		});
+
+		it("does not call the hooks for GET", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(models));
+			const beforeRequest = vi.fn();
+			const afterResponse = vi.fn();
+			const onError = vi.fn();
+
+			const proxy = createGatewayProxy({ beforeRequest, afterResponse, onError });
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+
+			const response = await proxy.GET(request, createMockContext(["config"]));
+
+			expect(response.status).toBe(200);
+			expect(beforeRequest).not.toHaveBeenCalled();
+			expect(afterResponse).not.toHaveBeenCalled();
+			expect(onError).not.toHaveBeenCalled();
+		});
+
+		it("returns the upstream status and body when GET fails", async () => {
+			const errorBody = { error: { message: "Unauthorized", type: "authentication_error" } };
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse(errorBody, { status: 401, statusText: "Unauthorized" }),
+			);
+			const onError = vi.fn();
+
+			const proxy = createGatewayProxy({ onError });
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+
+			const response = await proxy.GET(request, createMockContext(["config"]));
+
+			expect(response.status).toBe(401);
+			expect(await response.json()).toEqual(errorBody);
+			expect(onError).not.toHaveBeenCalled();
+		});
+
+		it("returns 500 when a GET fetch throws", async () => {
+			mockFetch.mockRejectedValueOnce(new Error("Network error"));
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+
+			const response = await proxy.GET(request, createMockContext(["config"]));
+
+			expect(response.status).toBe(500);
+			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+		});
+
+		it("serves getAvailableModels from @ai-sdk/gateway through the proxy", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(models));
+			const proxy = createGatewayProxy();
+			const gateway = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: async (input, init) => {
+					const request = new Request(input, init);
+					const path = new URL(request.url).pathname.replace(/^\/api\/ai\/?/, "");
+					return proxy(request, createMockContext(path.split("/")));
+				},
+			});
+
+			const result = await gateway.getAvailableModels();
+
+			expect(result.models.map((model) => model.id)).toEqual(["openai/gpt-5"]);
+			const [url, init] = mockFetch.mock.calls[0];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/config");
+			expect(init.method).toBe("GET");
+			expect(init.headers.authorization).toBe("Bearer test-api-key");
 		});
 	});
 

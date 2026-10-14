@@ -95,6 +95,45 @@ function buildRequestHeaders(
 	};
 }
 
+function proxyFailureResponse(request: Request): Response {
+	if (request.signal.aborted) {
+		return new Response(null, { status: 499 });
+	}
+	return new Response("Error proxying request to AI Gateway", { status: 500 });
+}
+
+/**
+ * Forwards a GET or HEAD request, such as the gateway's `/config` model list, without a body.
+ * The hooks are typed for language model calls, so none of them run here.
+ */
+async function forwardBodylessRequest(
+	request: Request,
+	upstream: string,
+	auth: GatewayAuthToken,
+	customHeaders?: Record<string, string>,
+): Promise<Response> {
+	try {
+		const res = await fetch(upstream, {
+			method: request.method,
+			signal: request.signal,
+			headers: {
+				...customHeaders,
+				authorization: `Bearer ${auth.token}`,
+				"ai-gateway-auth-method": auth.authMethod,
+				"ai-gateway-protocol-version": PROTOCOL_VERSION,
+			},
+		});
+
+		return new Response(res.body, {
+			status: res.status,
+			statusText: res.statusText,
+			headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+		});
+	} catch {
+		return proxyFailureResponse(request);
+	}
+}
+
 /**
  * Parses the error response from the gateway.
  */
@@ -235,6 +274,10 @@ export const createGatewayProxy = ({
 				return new Response("Invalid path", { status: 400 });
 			}
 
+			if (request.method === "GET" || request.method === "HEAD") {
+				return await forwardBodylessRequest(request, upstream, auth, headers);
+			}
+
 			// Parse request body
 			let requestBody: LanguageModelV3CallOptions;
 			try {
@@ -276,10 +319,7 @@ export const createGatewayProxy = ({
 
 			return await handleJsonResponse(res, requestBody, afterResponse);
 		} catch {
-			if (request.signal.aborted) {
-				return new Response(null, { status: 499 });
-			}
-			return new Response("Error proxying request to AI Gateway", { status: 500 });
+			return proxyFailureResponse(request);
 		}
 	};
 
