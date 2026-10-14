@@ -788,6 +788,57 @@ describe("createGatewayProxy", () => {
 			process.env.AI_GATEWAY_API_KEY = "test-key";
 		});
 
+		it("returns 500 without calling fetch when a sync beforeRequest throws", async () => {
+			const proxy = createGatewayProxy({
+				beforeRequest: () => {
+					throw new Error("hook failed");
+				},
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(500);
+			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
+
+		it("returns 500 without calling fetch when an async beforeRequest throws", async () => {
+			const proxy = createGatewayProxy({
+				beforeRequest: async () => {
+					throw new Error("hook failed");
+				},
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(500);
+			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
+
+		it("returns 500 without calling fetch when extractPath throws", async () => {
+			const proxy = createGatewayProxy({
+				extractPath: () => {
+					throw new Error("bad path");
+				},
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request);
+
+			expect(response.status).toBe(500);
+			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
+
 		it("returns 500 on fetch error", async () => {
 			mockFetch.mockRejectedValueOnce(new Error("Network error"));
 

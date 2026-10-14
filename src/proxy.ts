@@ -266,33 +266,33 @@ export const createGatewayProxy = ({
 			return new Response("AI Gateway authentication not configured", { status: 500 });
 		}
 
-		// Build upstream URL
-		const path = await extractPathFromRequest(request, context, { extractPath, segmentsParam });
-		const upstream = buildUpstreamUrl(baseUrl, path, request.url);
-		if (!upstream) {
-			return new Response("Invalid path", { status: 400 });
-		}
-
-		if (request.method === "GET" || request.method === "HEAD") {
-			return forwardBodylessRequest(request, upstream, auth, headers);
-		}
-
-		// Parse request body
-		let requestBody: LanguageModelV3CallOptions;
 		try {
-			requestBody = await request.clone().json();
-		} catch {
-			return new Response("Invalid JSON body", { status: 400 });
-		}
+			// Build upstream URL
+			const path = await extractPathFromRequest(request, context, { extractPath, segmentsParam });
+			const upstream = buildUpstreamUrl(baseUrl, path, request.url);
+			if (!upstream) {
+				return new Response("Invalid path", { status: 400 });
+			}
 
-		// Apply beforeRequest hook
-		if (beforeRequest) {
-			requestBody = await beforeRequest({ request: requestBody });
-		}
+			if (request.method === "GET" || request.method === "HEAD") {
+				return await forwardBodylessRequest(request, upstream, auth, headers);
+			}
 
-		const isStreaming = request.headers.get("ai-language-model-streaming") === "true";
+			// Parse request body
+			let requestBody: LanguageModelV3CallOptions;
+			try {
+				requestBody = await request.clone().json();
+			} catch {
+				return new Response("Invalid JSON body", { status: 400 });
+			}
 
-		try {
+			// Apply beforeRequest hook
+			if (beforeRequest) {
+				requestBody = await beforeRequest({ request: requestBody });
+			}
+
+			const isStreaming = request.headers.get("ai-language-model-streaming") === "true";
+
 			const res = await fetch(upstream, {
 				method: request.method,
 				body: JSON.stringify(requestBody),
