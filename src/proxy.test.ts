@@ -685,11 +685,45 @@ describe("createGatewayProxy", () => {
 		});
 
 		it("handles non-JSON error response from gateway", async () => {
+			const html = `<html>
+	<head><title>502 Bad Gateway</title></head>
+	<body>  <h1>502 Bad Gateway</h1>${"x".repeat(400)}</body>
+</html>`;
 			mockFetch.mockResolvedValueOnce(
-				new Response("Bad Gateway", {
+				new Response(html, {
 					status: 502,
-					statusText: "Bad Gateway",
+					statusText: "",
+					headers: { "content-type": "text/html" },
 				}),
+			);
+
+			let receivedError: GatewayError | undefined;
+			const proxy = createGatewayProxy({
+				onError: ({ error }) => {
+					receivedError = error;
+					return error;
+				},
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+			const body = await response.json();
+
+			expect(response.status).toBe(502);
+			expect(response.headers.get("content-type")).toBe("application/json");
+			expect(body.error.type).toBe("gateway_error");
+			expect(body.error.message).toMatch(
+				/^AI Gateway returned 502: <html> <head><title>502 Bad Gateway<\/title><\/head> <body> <h1>502 Bad Gateway<\/h1>x+$/,
+			);
+			expect(body.error.message).toHaveLength("AI Gateway returned 502: ".length + 200);
+			expect(receivedError).toEqual(body);
+		});
+
+		it("names the status when a failed response has an empty body", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(null, { status: 503, statusText: "Service Unavailable" }),
 			);
 
 			const proxy = createGatewayProxy();
@@ -700,9 +734,123 @@ describe("createGatewayProxy", () => {
 			const response = await proxy(request, createMockContext(["chat"]));
 			const body = await response.json();
 
+			expect(response.status).toBe(503);
+			expect(body.error).toEqual({
+				message: "AI Gateway returned 503 Service Unavailable",
+				type: "gateway_error",
+			});
+		});
+
+		it("names the status when an empty failed response has no status text", async () => {
+			mockFetch.mockResolvedValueOnce(new Response("  ", { status: 503, statusText: "" }));
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const body = await (await proxy(request, createMockContext(["chat"]))).json();
+
+			expect(body.error.message).toBe("AI Gateway returned 503");
+		});
+	});
+
+	describe("upstream correlation headers", () => {
+		beforeEach(() => {
+			process.env.AI_GATEWAY_API_KEY = "test-key";
+		});
+
+		const upstreamHeaders = {
+			"x-vercel-id": "fra1::iad1::abc-123",
+			"x-internal-secret": "do-not-forward",
+			"set-cookie": "session=1",
+		};
+
+		function expectOnlyAllowlisted(response: Response) {
+			expect(response.headers.get("x-vercel-id")).toBe("fra1::iad1::abc-123");
+			expect(response.headers.get("x-internal-secret")).toBeNull();
+			expect(response.headers.get("set-cookie")).toBeNull();
+		}
+
+		it("forwards x-vercel-id on a JSON response", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(JSON.stringify(createMockGatewayResponse()), {
+					status: 200,
+					headers: { "content-type": "application/json", ...upstreamHeaders },
+				}),
+			);
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/chat", { body: { prompt: [] } });
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(200);
+			expect(response.headers.get("content-type")).toBe("application/json");
+			expectOnlyAllowlisted(response);
+		});
+
+		it.each([
+			["without afterResponse", undefined],
+			["with afterResponse", ({ response }: { response: GatewayResponse }) => response],
+		])("forwards x-vercel-id on a streamed response %s", async (_, afterResponse) => {
+			mockFetch.mockResolvedValueOnce(
+				new Response('data: {"type":"finish"}\n\n', {
+					status: 200,
+					headers: { "content-type": "text/event-stream", ...upstreamHeaders },
+				}),
+			);
+
+			const proxy = createGatewayProxy({ afterResponse });
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+				headers: { "ai-language-model-streaming": "true" },
+			});
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.headers.get("content-type")).toBe("text/event-stream");
+			expectOnlyAllowlisted(response);
+			await response.text();
+		});
+
+		it("forwards x-vercel-id on an error response", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(JSON.stringify({ error: { message: "Rate limited", type: "rate_limit" } }), {
+					status: 429,
+					headers: { "content-type": "application/json", ...upstreamHeaders },
+				}),
+			);
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/chat", { body: { prompt: [] } });
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(429);
+			expectOnlyAllowlisted(response);
+		});
+
+		it("forwards x-vercel-id when onError returns a replacement body", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response("upstream down", { status: 502, headers: upstreamHeaders }),
+			);
+
+			const proxy = createGatewayProxy({
+				onError: () => ({ error: { message: "Try again later", type: "gateway_error" } }),
+			});
+			const request = createMockRequest("http://localhost/api/chat", { body: { prompt: [] } });
+			const response = await proxy(request, createMockContext(["chat"]));
+
 			expect(response.status).toBe(502);
-			expect(body.error.type).toBe("gateway_error");
-			expect(body.error.message).toBe("Bad Gateway");
+			expectOnlyAllowlisted(response);
+		});
+
+		it("omits x-vercel-id when the gateway does not send it", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/chat", { body: { prompt: [] } });
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.headers.has("x-vercel-id")).toBe(false);
 		});
 	});
 

@@ -6,15 +6,17 @@
 
 ## Commands
 
-From `package.json` and `README.md`:
+From `package.json`. `pnpm check` is the one to run before a pull request; the rest are its steps and helpers.
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm check            # everything CI runs, in CI order, stopping at the first failure
 pnpm lint             # biome check . (lint and format, read-only)
 pnpm fix              # biome check --write .
 pnpm knip             # unused files, exports and dependencies
 pnpm typecheck        # tsc --noEmit
 pnpm test             # vitest run
+pnpm test:integration # only src/integration.test.ts; skipped without AI_GATEWAY_API_KEY
 pnpm build            # bunchee, emits dist/index.{mjs,cjs,d.ts}
 pnpm is-tree-shakable # after build
 pnpm changeset        # describe a change for the next release

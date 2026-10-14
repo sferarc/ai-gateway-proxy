@@ -8,7 +8,7 @@ export type GatewayAuthToken = {
 /**
  * Get authentication token for the AI Gateway.
  * Tries API key first (AI_GATEWAY_API_KEY env var), then falls back to Vercel OIDC.
- * Returns `null` when neither is available, and the proxy then answers 500.
+ * Returns `null` when neither is available, after logging why OIDC failed, and the proxy then answers 500.
  */
 export async function getGatewayAuthToken(): Promise<GatewayAuthToken | null> {
 	const apiKey = process.env.AI_GATEWAY_API_KEY;
@@ -19,7 +19,12 @@ export async function getGatewayAuthToken(): Promise<GatewayAuthToken | null> {
 	try {
 		const oidcToken = await getVercelOidcToken();
 		return { token: oidcToken, authMethod: "oidc" };
-	} catch {
+	} catch (error) {
+		// Only the message: the error object could carry token material.
+		console.error(
+			"AI Gateway auth: no AI_GATEWAY_API_KEY and Vercel OIDC token unavailable:",
+			error instanceof Error ? error.message : String(error),
+		);
 		return null;
 	}
 }
