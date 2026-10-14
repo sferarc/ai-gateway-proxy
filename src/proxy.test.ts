@@ -1,6 +1,6 @@
 import { createGatewayProvider } from "@ai-sdk/gateway";
 import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { createGatewayProxy } from "./proxy";
 import type { GatewayError, GatewayResponse } from "./types";
 
@@ -65,15 +65,39 @@ function createMockHttpResponse(
 	});
 }
 
+async function expectGatewayError(
+	response: Response,
+	status: number,
+	type: string,
+	message: string,
+): Promise<void> {
+	expect(response.status).toBe(status);
+	expect(response.headers.get("content-type")).toBe("application/json");
+	expect(await response.json()).toEqual({ error: { message, type } });
+}
+
 describe("createGatewayProxy", () => {
+	let consoleError: MockInstance<typeof console.error>;
+
 	beforeEach(() => {
 		vi.resetAllMocks();
 		delete process.env.AI_GATEWAY_API_KEY;
+		consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 	});
 
 	afterEach(() => {
 		delete process.env.AI_GATEWAY_API_KEY;
+		consoleError.mockRestore();
 	});
+
+	async function expectProxyFailure(response: Response): Promise<void> {
+		await expectGatewayError(response, 500, "proxy_error", "Error proxying request to AI Gateway");
+		expect(consoleError).toHaveBeenCalledOnce();
+		expect(consoleError).toHaveBeenCalledWith(
+			"AI Gateway proxy request failed:",
+			expect.any(Error),
+		);
+	}
 
 	describe("authentication", () => {
 		it("uses API key when AI_GATEWAY_API_KEY is set", async () => {
@@ -163,8 +187,12 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			expect(response.status).toBe(500);
-			expect(await response.text()).toBe("AI Gateway authentication not configured");
+			await expectGatewayError(
+				response,
+				500,
+				"authentication_error",
+				"AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled",
+			);
 			expect(mockFetch).not.toHaveBeenCalled();
 		});
 	});
@@ -273,8 +301,7 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(segments));
 
-			expect(response.status).toBe(400);
-			expect(await response.text()).toBe("Invalid path");
+			await expectGatewayError(response, 400, "invalid_request_error", "Invalid path");
 			expect(mockFetch).not.toHaveBeenCalled();
 		});
 
@@ -288,7 +315,7 @@ describe("createGatewayProxy", () => {
 
 				const response = await proxy(request);
 
-				expect(response.status).toBe(400);
+				await expectGatewayError(response, 400, "invalid_request_error", "Invalid path");
 				expect(mockFetch).not.toHaveBeenCalled();
 			},
 		);
@@ -350,8 +377,7 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			expect(response.status).toBe(400);
-			expect(await response.text()).toBe("Invalid JSON body");
+			await expectGatewayError(response, 400, "invalid_request_error", "Invalid JSON body");
 		});
 	});
 
@@ -854,6 +880,20 @@ describe("createGatewayProxy", () => {
 			expect(response.headers.get("content-type")).toBe("text/event-stream");
 			expect(await response.text()).toBe(streamBody);
 		});
+
+		it("returns a JSON 500 when a streamed response has no body", async () => {
+			mockFetch.mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+				headers: { "ai-language-model-streaming": "true" },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			await expectGatewayError(response, 500, "proxy_error", "No response body");
+		});
 	});
 
 	describe("bodyless requests", () => {
@@ -956,8 +996,7 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy.GET(request, createMockContext(["config"]));
 
-			expect(response.status).toBe(500);
-			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+			await expectProxyFailure(response);
 		});
 
 		it("serves getAvailableModels from @ai-sdk/gateway through the proxy", async () => {
@@ -1000,8 +1039,7 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			expect(response.status).toBe(500);
-			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+			await expectProxyFailure(response);
 			expect(mockFetch).not.toHaveBeenCalled();
 		});
 
@@ -1017,8 +1055,7 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			expect(response.status).toBe(500);
-			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+			await expectProxyFailure(response);
 			expect(mockFetch).not.toHaveBeenCalled();
 		});
 
@@ -1034,8 +1071,7 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request);
 
-			expect(response.status).toBe(500);
-			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+			await expectProxyFailure(response);
 			expect(mockFetch).not.toHaveBeenCalled();
 		});
 
@@ -1049,8 +1085,7 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			expect(response.status).toBe(500);
-			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+			await expectProxyFailure(response);
 		});
 
 		it("forwards the client signal and returns 499 when the client aborts", async () => {
@@ -1076,6 +1111,8 @@ describe("createGatewayProxy", () => {
 			const init = mockFetch.mock.calls[0]?.[1] as RequestInit;
 			expect(init.signal).toBe(request.signal);
 			expect(response.status).toBe(499);
+			expect(response.body).toBeNull();
+			expect(consoleError).not.toHaveBeenCalled();
 		});
 
 		it("returns 500 when a successful response body is not JSON", async () => {
@@ -1088,8 +1125,7 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			expect(response.status).toBe(500);
-			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+			await expectProxyFailure(response);
 		});
 
 		it("returns 500 when afterResponse throws", async () => {
@@ -1106,8 +1142,7 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			expect(response.status).toBe(500);
-			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+			await expectProxyFailure(response);
 		});
 
 		it("returns 500 when onError throws", async () => {
@@ -1129,8 +1164,7 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			expect(response.status).toBe(500);
-			expect(await response.text()).toBe("Error proxying request to AI Gateway");
+			await expectProxyFailure(response);
 		});
 
 		it("handles empty segments", async () => {
