@@ -2,8 +2,8 @@
  * Integration tests using the AI SDK to make real API calls through the proxy.
  * These tests verify the proxy works correctly with generateText and streamText.
  *
- * Run with: pnpm test -- integration.test.ts
- * Requires AI_GATEWAY_API_KEY environment variable.
+ * Run with: pnpm test:integration
+ * Requires AI_GATEWAY_API_KEY; without it the suite is skipped, not failed.
  */
 
 import { createServer } from "node:http";
