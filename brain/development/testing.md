@@ -1,11 +1,12 @@
 # Testing
 
-`pnpm test` runs vitest over the `*.test.ts` files in `src/` (`vitest.config.ts`, node environment, globals). On 2026-10-13 without a key, on vitest 5.0.4: 3 files, 73 tests, 60 passed and 13 skipped.
+`pnpm test` runs vitest over the `*.test.ts` files in `src/` (`vitest.config.ts`, node environment, globals). On 2026-10-15 without a key, on vitest 5.0.4: 4 files, 86 tests, 73 passed and 13 skipped.
 
 | File | What it covers |
 | --- | --- |
 | `src/proxy.test.ts` | The request path with `fetch` and `@vercel/oidc` mocked: auth selection, URL and header building, the three hooks, error handling, method exports |
-| `src/stream.test.ts` | `StreamContentAggregator` over each stream part type |
+| `src/stream.test.ts` | `StreamContentAggregator` over each stream part type, and `createStreamTransformer` in isolation |
+| `src/proxy-stream.test.ts` | `createGatewayProxy` streaming with an `afterResponse` spy over a mocked SSE upstream: the usage and content the hook sees, the rewritten `finish` the client gets, no `finish`, upstream error, client cancel |
 | `src/integration.test.ts` | Real calls through the proxy to the AI Gateway |
 
 ## Integration tests
