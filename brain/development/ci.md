@@ -12,7 +12,7 @@ Steps 3 to 9 are the `check` script in `package.json`, kept as separate steps so
 4. `pnpm exec lefthook validate`. CI never commits, so this only checks that `lefthook.yml` loads.
 5. `pnpm knip`
 6. `pnpm typecheck`
-7. `pnpm test`. The integration tests skip because no `AI_GATEWAY_API_KEY` is stored ([[testing]]).
+7. `pnpm test`. The integration tests skip because no `AI_GATEWAY_API_KEY` is stored; `src/e2e.test.ts` covers the client to proxy to gateway path against a local fake gateway instead ([[testing]]).
 8. `pnpm build`
 9. `pnpm is-tree-shakable`
 
