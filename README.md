@@ -139,7 +139,7 @@ The proxy gets a credential on every request with `getGatewayAuthToken()`, in th
 | Option | Default | Description |
 | --- | --- | --- |
 | `baseUrl` | `https://ai-gateway.vercel.sh/v1/ai` | Gateway URL that the extracted path and the incoming query string are appended to. |
-| `headers` | none | Extra headers for every upstream request. `authorization`, the `ai-gateway-*` headers and the `ai-language-model-*` headers are always set by the proxy and override entries with the same name. Apart from those, headers on the incoming request are not forwarded. |
+| `headers` | none | Extra headers for every upstream request. The proxy's own `authorization`, `ai-gateway-auth-method` and `ai-gateway-protocol-version` override entries with the same name in any casing, as do `content-type`, `ai-language-model-id` and `ai-language-model-streaming` on requests with a body. Apart from those last two, headers on the incoming request are not forwarded. |
 | `segmentsParam` | `"segments"` | Name of the catch-all route param read from `context.params` when `extractPath` is not set, joined with `/`. Use `"path"` for `app/api/ai/[...path]/route.ts`. |
 | `extractPath` | none | `(request) => string \| Promise<string>`. Returns the upstream path relative to `baseUrl`, such as `language-model`. Takes precedence over `segmentsParam`. |
 | `beforeRequest` | none | `({ request }) => LanguageModelV3CallOptions`. Receives the parsed JSON body and returns the body to send upstream. |
