@@ -28,11 +28,13 @@
 		"dev": "bunchee --watch",
 		"test": "vitest run",
 		"test:watch": "vitest",
+		"test:integration": "vitest run src/integration.test.ts",
 		"is-tree-shakable": "is-tree-shakable",
 		"typecheck": "tsc --noEmit",
 		"lint": "biome check .",
 		"fix": "biome check --write .",
 		"knip": "knip",
+		"check": "pnpm lint && pnpm exec lefthook validate && pnpm knip && pnpm typecheck && pnpm test && pnpm build && pnpm is-tree-shakable",
 		"changeset": "changeset",
 		"release": "pnpm build && changeset publish"
 	},

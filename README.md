@@ -63,11 +63,11 @@ The toolchain is pinned in `mise.toml`. With [mise](https://mise.jdx.dev) instal
 
 ```bash
 mise install
-pnpm install
-pnpm lint && pnpm typecheck && pnpm test && pnpm build
+pnpm install --frozen-lockfile
+pnpm check
 ```
 
-The integration tests call the real AI Gateway and run only when `AI_GATEWAY_API_KEY` is set. Add a changeset with `pnpm changeset` for any change that should be released.
+The integration tests call the real AI Gateway and run only when `AI_GATEWAY_API_KEY` is set (`pnpm test:integration`). Add a changeset with `pnpm changeset` for any change that should be released.
 
 ## License
 

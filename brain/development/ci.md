@@ -4,6 +4,8 @@
 
 ## Steps
 
+Steps 3 to 9 are the `check` script in `package.json`, kept as separate steps so a failure names its step. Change both together.
+
 1. `jdx/mise-action` installs Node and pnpm from `mise.toml`, checked against `mise.lock`.
 2. `pnpm install --frozen-lockfile`
 3. `pnpm lint`
