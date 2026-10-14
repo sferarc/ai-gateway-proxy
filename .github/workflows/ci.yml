@@ -28,6 +28,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # These steps mirror the `check` script in package.json; keep both in sync.
       - name: Lint
         run: pnpm lint
 

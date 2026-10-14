@@ -32,7 +32,7 @@ The `brain/` directory is an Obsidian vault: persistent notes on how the library
 
 ## Ground rules
 
-- Run `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm exec lefthook validate`, `pnpm knip`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm is-tree-shakable` before opening a pull request. CI runs exactly these, and `Check` is required to merge.
+- Run `pnpm install --frozen-lockfile` then `pnpm check` before opening a pull request. `check` runs the same steps as CI in the same order, and `Check` is required to merge.
 - Never add an `AI_GATEWAY_API_KEY` to CI or spend money on the gateway: the integration tests skip without it on purpose.
 - Add a changeset (`pnpm changeset`) for a change that should ship.
 - No em or en dashes in prose. Commit subjects are imperative with a conventional prefix.
