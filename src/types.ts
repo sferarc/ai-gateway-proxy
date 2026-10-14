@@ -34,9 +34,17 @@ export type GatewayError = {
  * Options for creating a gateway proxy.
  */
 export type CreateGatewayProxyOptions = {
-	/** Base URL for the AI Gateway. Defaults to Vercel's gateway. */
+	/**
+	 * Base URL for the AI Gateway. A trailing slash is accepted.
+	 * Request paths are resolved under it and cannot leave it; one that would returns 400 Invalid path.
+	 * @default "https://ai-gateway.vercel.sh/v1/ai"
+	 */
 	baseUrl?: string;
-	/** Additional headers to send with requests. */
+	/**
+	 * Additional headers to send with requests.
+	 * The proxy sets `authorization`, `ai-gateway-auth-method` and `ai-gateway-protocol-version` after these, so they win.
+	 * On requests with a body it does the same for `ai-language-model-id` and `ai-language-model-streaming`.
+	 */
 	headers?: Record<string, string>;
 	/**
 	 * The name of the catch-all parameter in the route.
@@ -51,6 +59,9 @@ export type CreateGatewayProxyOptions = {
 	 * Use this for frameworks without catch-all route support (e.g., Hono, Express).
 	 *
 	 * When provided, `segmentsParam` is ignored.
+	 *
+	 * Return a path relative to `baseUrl`, without a leading `/`.
+	 * A path that starts with `/`, contains `://` or has a `.` or `..` segment returns 400 Invalid path.
 	 *
 	 * @example
 	 * // Hono with a base path
@@ -75,6 +86,8 @@ export type CreateGatewayProxyOptions = {
 	 * Called after a successful response is received from the gateway.
 	 * Allows modification of the response body.
 	 *
+	 * For non-streaming responses, the returned object replaces the JSON body sent to the client.
+	 *
 	 * For streaming responses, this is called when the stream completes with
 	 * the aggregated response. The content has already been streamed, but you
 	 * can modify the finish event metadata (usage, finishReason, providerMetadata).
@@ -91,6 +104,9 @@ export type CreateGatewayProxyOptions = {
 	 * Called when the gateway returns an error response.
 	 * Allows custom error handling or modification.
 	 *
+	 * A returned error body is sent as JSON with the upstream status.
+	 * A returned `Response` is sent as is.
+	 *
 	 * Not called for GET or HEAD requests, which are forwarded as is.
 	 */
 	onError?: (context: {
@@ -103,6 +119,7 @@ export type CreateGatewayProxyOptions = {
 /**
  * Route handler function signature for the gateway proxy.
  * Compatible with Next.js App Router and other frameworks.
+ * Takes a Fetch API `Request`, not a Node or Express request object.
  */
 export type CreateGatewayProxyFn = (
 	request: Request,
