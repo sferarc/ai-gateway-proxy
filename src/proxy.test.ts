@@ -988,6 +988,24 @@ describe("createGatewayProxy", () => {
 			expect(onError).not.toHaveBeenCalled();
 		});
 
+		it("forwards a DELETE without a body instead of rejecting it as invalid JSON", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ ok: true }));
+			const beforeRequest = vi.fn();
+
+			const proxy = createGatewayProxy({ beforeRequest });
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "DELETE" });
+
+			const response = await proxy.DELETE(request, createMockContext(["config"]));
+
+			expect(response.status).toBe(200);
+			expect(await response.json()).toEqual({ ok: true });
+			const [url, init] = mockFetch.mock.calls[0];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/config");
+			expect(init.method).toBe("DELETE");
+			expect(init.body).toBeUndefined();
+			expect(beforeRequest).not.toHaveBeenCalled();
+		});
+
 		it("returns 500 when a GET fetch throws", async () => {
 			mockFetch.mockRejectedValueOnce(new Error("Network error"));
 
