@@ -41,6 +41,17 @@ The `createStreamTransformer` suite tests the transformer on its own, with an in
 - Cancelling the client body cancels the upstream body with the same reason.
 - An upstream that ends without a `finish` event closes the client stream cleanly and the hook never runs.
 
+## Specification version 4 parts
+
+The proxy forwards `ai-language-model-specification-version` from the client ([[proxy]] step 7), and `@ai-sdk/gateway` 4.x sends `4`, so the gateway can answer with `LanguageModelV4StreamPart` events while `StreamContentAggregator` is typed against `LanguageModelV3StreamPart`. Every event is still forwarded to the client unchanged; the gap is only in what `afterResponse` receives. Comparing the two unions in `@ai-sdk/provider` 4.0.27 (`dist/index.d.ts`):
+
+- `finish`, `usage` and `finishReason` have the same shape, so metering in the hook is unaffected.
+- V4 adds `custom` and `reasoning-file` parts. The aggregator has no case for them, so they are missing from the aggregated `content`.
+- V4 `text-end` may carry `citations`. The aggregator builds text blocks as `{ type, text }`, so citations are dropped, as `providerMetadata` already is.
+- V4 `file` parts carry `data` as a tagged object (`SharedV4FileData...`) instead of V3's `string | Uint8Array`. The aggregator pushes the part as is, so the hook receives the V4 shape under a V3 type. The non-streaming `afterResponse` body has the same type mismatch.
+
+Moving the hook types to V4 changes the public `GatewayResponse` type, so it is left for a deliberate change rather than made here.
+
 ## Open question: streams that end without `finish`
 
 When the upstream stream ends, errors or is cancelled before `finish`, `afterResponse` is not called, so a consumer metering usage in the hook records nothing for that request. The end and error cases are now logged (see Logging above), but the hook contract is unchanged. Calling the hook with partial content and unknown usage, or adding a separate signal, would change the public contract; that is the owner's decision and is not made. The current behavior is pinned so any change is deliberate.
