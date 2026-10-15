@@ -328,7 +328,7 @@ export const createGatewayProxy = ({
 				return proxyErrorResponse(400, "invalid_request_error", "Invalid path");
 			}
 
-			if (request.method === "GET" || request.method === "HEAD") {
+			if (request.method === "GET" || request.method === "HEAD" || request.body === null) {
 				return await forwardBodylessRequest(request, upstream, auth, headers);
 			}
 
