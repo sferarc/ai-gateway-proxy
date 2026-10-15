@@ -172,7 +172,7 @@ describe("createGatewayProxy", () => {
 			expect(sent.get("ai-gateway-auth-method")).toBe("oidc");
 			expect(sent.get("ai-gateway-protocol-version")).toBe("0.0.1");
 			expect(sent.get("ai-language-model-id")).toBe("gpt-4");
-			expect(sent.get("ai-language-model-streaming")).toBe("false");
+			expect(sent.has("ai-language-model-streaming")).toBe(false);
 			expect(sent.get("content-type")).toBe("application/json");
 			expect(sent.get("x-custom")).toBe("value");
 		});
@@ -752,6 +752,121 @@ describe("createGatewayProxy", () => {
 			const body = await (await proxy(request, createMockContext(["chat"]))).json();
 
 			expect(body.error.message).toBe("AI Gateway returned 503");
+		});
+	});
+
+	describe("request header forwarding", () => {
+		beforeEach(() => {
+			process.env.AI_GATEWAY_API_KEY = "test-api-key";
+		});
+
+		async function sentHeaders(
+			requestHeaders: Record<string, string>,
+			options: Parameters<typeof createGatewayProxy>[0] = {},
+		): Promise<Headers> {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const proxy = createGatewayProxy(options);
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				body: { prompt: [] },
+				headers: requestHeaders,
+			});
+			await proxy(request, createMockContext(["language-model"]));
+			return new Headers(mockFetch.mock.calls[0][1].headers);
+		}
+
+		it.each([
+			["ai-language-model-id", "openai/gpt-5"],
+			["ai-language-model-streaming", "true"],
+			["ai-language-model-specification-version", "4"],
+			["ai-model-id", "openai/text-embedding-3-small"],
+			["ai-embedding-model-specification-version", "4"],
+			["ai-image-model-specification-version", "4"],
+			["ai-o11y-deployment-id", "dpl_123"],
+			["ai-o11y-environment", "preview"],
+			["ai-o11y-project-id", "prj_123"],
+			["ai-o11y-region", "fra1"],
+			["ai-o11y-request-id", "req_123"],
+			["idempotency-key", "batch-42"],
+			["accept", "text/event-stream"],
+		])("forwards %s from the incoming request", async (name, value) => {
+			const sent = await sentHeaders({ [name]: value });
+
+			expect(sent.get(name)).toBe(value);
+		});
+
+		it("omits the language model id and streaming headers when the request has none", async () => {
+			const sent = await sentHeaders({});
+
+			expect(sent.has("ai-language-model-id")).toBe(false);
+			expect(sent.has("ai-language-model-streaming")).toBe(false);
+		});
+
+		it("never forwards client credentials, cookies, host or unlisted headers", async () => {
+			const sent = await sentHeaders({
+				authorization: "Bearer client-key",
+				"ai-gateway-auth-method": "oidc",
+				"ai-gateway-protocol-version": "9.9.9",
+				"x-vercel-ai-gateway-team": "other-team",
+				cookie: "session=secret",
+				host: "evil.example",
+				"x-forwarded-for": "10.0.0.1",
+			});
+
+			expect(sent.get("authorization")).toBe("Bearer test-api-key");
+			expect(sent.get("ai-gateway-auth-method")).toBe("api-key");
+			expect(sent.get("ai-gateway-protocol-version")).toBe("0.0.1");
+			expect(sent.has("x-vercel-ai-gateway-team")).toBe(false);
+			expect(sent.has("cookie")).toBe(false);
+			expect(sent.has("host")).toBe(false);
+			expect(sent.has("x-forwarded-for")).toBe(false);
+		});
+
+		it("keeps model call headers from the request and lets the request override metadata headers", async () => {
+			const sent = await sentHeaders(
+				{ "ai-o11y-request-id": "from-request" },
+				{
+					headers: {
+						"AI-Model-Id": "option-model",
+						"ai-language-model-streaming": "true",
+						"ai-o11y-request-id": "from-option",
+						"ai-o11y-project-id": "prj_option",
+					},
+				},
+			);
+
+			expect(sent.has("ai-model-id")).toBe(false);
+			expect(sent.has("ai-language-model-streaming")).toBe(false);
+			expect(sent.get("ai-o11y-request-id")).toBe("from-request");
+			expect(sent.get("ai-o11y-project-id")).toBe("prj_option");
+		});
+
+		it("routes an embedding model call from @ai-sdk/gateway with its ai-model-id", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse({ embeddings: [[0.1, 0.2]], usage: { tokens: 2 } }),
+			);
+			const proxy = createGatewayProxy();
+			const gateway = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: async (input, init) => {
+					const request = new Request(input, init);
+					const path = new URL(request.url).pathname.replace(/^\/api\/ai\/?/, "");
+					return proxy(request, createMockContext(path.split("/")));
+				},
+			});
+
+			const result = await gateway
+				.embeddingModel("openai/text-embedding-3-small")
+				.doEmbed({ values: ["hello"] });
+
+			expect(result.embeddings).toEqual([[0.1, 0.2]]);
+			const [url, init] = mockFetch.mock.calls[0];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/embedding-model");
+			const sent = new Headers(init.headers);
+			expect(sent.get("ai-model-id")).toBe("openai/text-embedding-3-small");
+			expect(sent.get("ai-embedding-model-specification-version")).toBe("4");
+			expect(sent.has("ai-language-model-id")).toBe(false);
+			expect(sent.get("authorization")).toBe("Bearer test-api-key");
 		});
 	});
 

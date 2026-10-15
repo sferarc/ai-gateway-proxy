@@ -13,6 +13,10 @@ const PROTOCOL_VERSION = "0.0.1";
 const MAX_ERROR_EXCERPT_LENGTH = 200;
 // Vercel's request id (the header @ai-sdk/gateway reads it from); operators match it to gateway-side logs.
 const FORWARDED_RESPONSE_HEADERS = ["x-vercel-id"] as const;
+// Headers @ai-sdk/gateway sets to describe the model call; they must match the body the client built.
+const MODEL_CALL_HEADER =
+	/^(?:ai-language-model-.+|ai-model-id|ai-[a-z]+-model-specification-version)$/;
+const REQUEST_METADATA_HEADER = /^(?:ai-o11y-.+|idempotency-key|accept)$/;
 
 /**
  * Extracts the path from the request using either a custom extractor or route params.
@@ -83,7 +87,7 @@ function buildUpstreamUrl(baseUrl: string, path: string, requestUrl: string): st
  * case-insensitively, so a custom `Authorization` cannot sit beside the gateway's `authorization`.
  */
 function withGatewayHeaders(
-	customHeaders: Record<string, string> | undefined,
+	customHeaders: HeadersInit | undefined,
 	gatewayHeaders: Record<string, string>,
 ): Record<string, string> {
 	const headers = new Headers(customHeaders);
@@ -94,21 +98,31 @@ function withGatewayHeaders(
 }
 
 /**
- * Builds the headers for the upstream request.
+ * Builds the headers for the upstream request: the caller's `headers`, then the model call and
+ * request metadata headers from the incoming request, then the proxy's own.
  */
 function buildRequestHeaders(
 	auth: GatewayAuthToken,
-	isStreaming: boolean,
-	modelId: string | null,
+	request: Request,
 	customHeaders?: Record<string, string>,
 ): Record<string, string> {
-	return withGatewayHeaders(customHeaders, {
+	const headers = new Headers(customHeaders);
+	for (const name of [...headers.keys()]) {
+		if (MODEL_CALL_HEADER.test(name)) {
+			headers.delete(name);
+		}
+	}
+	for (const [name, value] of request.headers) {
+		if (MODEL_CALL_HEADER.test(name) || REQUEST_METADATA_HEADER.test(name)) {
+			headers.set(name, value);
+		}
+	}
+
+	return withGatewayHeaders(headers, {
 		"content-type": "application/json",
 		authorization: `Bearer ${auth.token}`,
 		"ai-gateway-auth-method": auth.authMethod,
 		"ai-gateway-protocol-version": PROTOCOL_VERSION,
-		"ai-language-model-id": modelId ?? "",
-		"ai-language-model-streaming": isStreaming ? "true" : "false",
 	});
 }
 
@@ -352,12 +366,7 @@ export const createGatewayProxy = ({
 				body: JSON.stringify(requestBody),
 				duplex: "half",
 				signal: request.signal,
-				headers: buildRequestHeaders(
-					auth,
-					isStreaming,
-					request.headers.get("ai-language-model-id"),
-					headers,
-				),
+				headers: buildRequestHeaders(auth, request, headers),
 			} as RequestInit);
 
 			// Handle error responses

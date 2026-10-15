@@ -43,7 +43,9 @@ export type CreateGatewayProxyOptions = {
 	/**
 	 * Additional headers to send with requests.
 	 * The proxy sets `authorization`, `ai-gateway-auth-method` and `ai-gateway-protocol-version` after these, so they win.
-	 * On requests with a body it does the same for `ai-language-model-id` and `ai-language-model-streaming`.
+	 * On requests with a body it also sets `content-type`, drops entries naming the model call
+	 * (`ai-language-model-*`, `ai-model-id`, `ai-*-model-specification-version`) in favour of the
+	 * incoming request's, and lets the incoming `ai-o11y-*`, `idempotency-key` and `accept` override these.
 	 */
 	headers?: Record<string, string>;
 	/**
