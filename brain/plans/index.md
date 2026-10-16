@@ -4,7 +4,7 @@ There is no roadmap file and, as of 2026-10-15, no milestone (`gh api repos/sfer
 
 ## Open issues
 
-As of 2026-10-15 (`gh issue list --state open`), both wait on the owner:
+As of 2026-10-16 (`gh issue list --state open`), both wait on the owner:
 
 - #8: "needs-human: weekly action refresh re-renders the full stack policy into this public repository".
 - #15: "#9 should be closed: superseded by #14, which landed its change on current main", labelled `needs-human`.

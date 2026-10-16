@@ -14,17 +14,27 @@ The workflow authenticates to npm with trusted publishing: `id-token: write`, `p
 
 ## Current state
 
-As of 2026-10-15:
+As of 2026-10-15 (npm and tags) and 2026-10-16 (changesets):
 
 - npm has `0.0.1`, `0.0.2` and `0.1.0`, all published on 2025-12-28 from the monorepo (`npm view ai-gateway-proxy versions time`).
 - `package.json` is `0.1.0`.
 - The repository carries the monorepo's tags `ai-gateway-proxy@0.0.2` and `ai-gateway-proxy@0.1.0` (`git tag`).
-- Five changesets are pending on `main`, all `patch` (`ls .changeset`; pull request from `git log --diff-filter=A`):
+- Fifteen changesets are pending on `main`, all `patch` (`ls .changeset`; pull request from `git log --stat`):
   - `await-proxy-errors.md` (#5)
   - `reject-dot-segment-paths.md` (#10)
   - `stream-cancel-hook-failure.md` (#11)
   - `proxy-bodyless-get.md` (#16)
   - `hook-throws-500.md` (#17)
+  - `option-doc-comments.md` (#20)
+  - `custom-header-case.md` (#22)
+  - `stream-failure-logging.md` (#25)
+  - `json-proxy-errors.md` (#26)
+  - `auth-oidc-cause.md` (#28)
+  - `upstream-error-context.md` (#30)
+  - `proxy-bodyless-delete.md` (#32)
+  - `forward-model-headers.md` (#33)
+  - `forward-rate-limit-headers.md` (#34)
+  - `stream-content-order.md` (#35)
 
 They accumulate until the owner enables release; the first version pull request will then combine them ([[decisions/2026-10-08-release-off-until-enabled]]).
 
