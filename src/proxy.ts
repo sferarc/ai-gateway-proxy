@@ -179,26 +179,41 @@ async function forwardBodylessRequest(
 	}
 }
 
+function isGatewayError(value: unknown): value is GatewayError {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+	const { error } = value as { error?: unknown };
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		typeof (error as { message?: unknown }).message === "string"
+	);
+}
+
 /**
- * Parses the error response from the gateway. A non-JSON body, such as an HTML page from an
- * edge or load balancer, becomes a `gateway_error` naming the status and a short excerpt.
+ * Parses the error response from the gateway. A body that is not a JSON `{ error: { message } }`,
+ * such as an HTML page from an edge or load balancer, becomes a `gateway_error` naming the status
+ * and a short excerpt, so `onError` always receives the `GatewayError` shape.
  */
 async function parseErrorBody(res: Response): Promise<GatewayError> {
 	const text = await res.text().catch(() => "");
 	try {
-		return JSON.parse(text);
-	} catch {
-		const excerpt = text.replace(/\s+/g, " ").trim().slice(0, MAX_ERROR_EXCERPT_LENGTH);
-		const message = excerpt
-			? `AI Gateway returned ${res.status}: ${excerpt}`
-			: `AI Gateway returned ${res.status} ${res.statusText}`.trimEnd();
-		return {
-			error: {
-				message,
-				type: "gateway_error",
-			},
-		};
-	}
+		const parsed: unknown = JSON.parse(text);
+		if (isGatewayError(parsed)) {
+			return parsed;
+		}
+	} catch {}
+	const excerpt = text.replace(/\s+/g, " ").trim().slice(0, MAX_ERROR_EXCERPT_LENGTH);
+	const message = excerpt
+		? `AI Gateway returned ${res.status}: ${excerpt}`
+		: `AI Gateway returned ${res.status} ${res.statusText}`.trimEnd();
+	return {
+		error: {
+			message,
+			type: "gateway_error",
+		},
+	};
 }
 
 /**

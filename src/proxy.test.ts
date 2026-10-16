@@ -753,6 +753,39 @@ describe("createGatewayProxy", () => {
 
 			expect(body.error.message).toBe("AI Gateway returned 503");
 		});
+
+		it.each([
+			['{"message":"Bad gateway"}', 'AI Gateway returned 502: {"message":"Bad gateway"}'],
+			['"Bad gateway"', 'AI Gateway returned 502: "Bad gateway"'],
+			["null", "AI Gateway returned 502: null"],
+			['{"error":"Bad gateway"}', 'AI Gateway returned 502: {"error":"Bad gateway"}'],
+		])("wraps a JSON error body without an error message: %s", async (text, message) => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(text, {
+					status: 502,
+					statusText: "",
+					headers: { "content-type": "application/json" },
+				}),
+			);
+
+			let receivedError: GatewayError | undefined;
+			const proxy = createGatewayProxy({
+				onError: ({ error }) => {
+					receivedError = error;
+					return { error: { ...error.error, message: `wrapped: ${error.error.message}` } };
+				},
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+			const body = await response.json();
+
+			expect(response.status).toBe(502);
+			expect(receivedError).toEqual({ error: { message, type: "gateway_error" } });
+			expect(body.error.message).toBe(`wrapped: ${message}`);
+		});
 	});
 
 	describe("request header forwarding", () => {
