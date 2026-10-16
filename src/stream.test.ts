@@ -59,26 +59,18 @@ describe("StreamContentAggregator", () => {
 			expect(response.content[1]).toEqual({ type: "text", text: "Second" });
 		});
 
-		it("ignores deltas for unknown text ids", () => {
+		it("keeps deltas for a text id that had no text-start", () => {
 			const aggregator = new StreamContentAggregator();
 
-			aggregator.process({ type: "text-delta", id: "unknown", delta: "ignored" });
-			aggregator.process({
-				type: "finish",
-				finishReason: { unified: "stop", raw: undefined },
-				usage: {
-					inputTokens: {
-						total: 0,
-						noCache: undefined,
-						cacheRead: undefined,
-						cacheWrite: undefined,
-					},
-					outputTokens: { total: 0, text: undefined, reasoning: undefined },
-				},
-			});
+			aggregator.process({ type: "text-delta", id: "unknown", delta: "kept " });
+			aggregator.process({ type: "text-delta", id: "unknown", delta: "anyway" });
+			aggregator.process({ type: "reasoning-delta", id: "r-unknown", delta: "also kept" });
+			aggregator.process(finishPart);
 
-			const response = aggregator.getResponse();
-			expect(response.content).toHaveLength(0);
+			expect(aggregator.getResponse().content).toEqual([
+				{ type: "text", text: "kept anyway" },
+				{ type: "reasoning", text: "also kept" },
+			]);
 		});
 	});
 
@@ -368,8 +360,48 @@ describe("StreamContentAggregator", () => {
 			expect(response.content[0]).toEqual({ type: "reasoning", text: "Thinking" });
 			expect(response.content[1]).toEqual({ type: "text", text: "Answer" });
 		});
+
+		it("keeps blocks in the order they started when a tool call arrives before text-end", () => {
+			const aggregator = new StreamContentAggregator();
+			const toolCall = {
+				type: "tool-call" as const,
+				toolCallId: "c1",
+				toolName: "lookup",
+				input: "{}",
+			};
+
+			aggregator.process({ type: "reasoning-start", id: "r1" });
+			aggregator.process({ type: "text-start", id: "t1" });
+			aggregator.process({ type: "reasoning-delta", id: "r1", delta: "Think" });
+			aggregator.process({ type: "text-delta", id: "t1", delta: "Let me " });
+			aggregator.process(toolCall);
+			aggregator.process({ type: "text-delta", id: "t1", delta: "check" });
+			aggregator.process({ type: "text-end", id: "t1" });
+			aggregator.process({ type: "reasoning-delta", id: "r1", delta: "ing" });
+			aggregator.process({ type: "reasoning-end", id: "r1" });
+			aggregator.process({ type: "text-start", id: "t2" });
+			aggregator.process({ type: "text-delta", id: "t2", delta: "Done" });
+			aggregator.process({ type: "text-end", id: "t2" });
+			aggregator.process(finishPart);
+
+			expect(aggregator.getResponse().content).toEqual([
+				{ type: "reasoning", text: "Thinking" },
+				{ type: "text", text: "Let me check" },
+				toolCall,
+				{ type: "text", text: "Done" },
+			]);
+		});
 	});
 });
+
+const finishPart = {
+	type: "finish" as const,
+	finishReason: { unified: "stop" as const, raw: undefined },
+	usage: {
+		inputTokens: { total: 0, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+		outputTokens: { total: 0, text: undefined, reasoning: undefined },
+	},
+};
 
 const encoder = new TextEncoder();
 const requestBody = { prompt: [] } as unknown as LanguageModelV3CallOptions;
@@ -590,6 +622,33 @@ describe("createStreamTransformer", () => {
 
 		expect(consoleWarn).not.toHaveBeenCalled();
 		expect(consoleError).not.toHaveBeenCalled();
+	});
+
+	it("passes the hook content in the order each block started", async () => {
+		const hook = vi.fn(passThroughHook);
+		await readAll(
+			createStreamTransformer(
+				sourceOf(
+					[
+						{ type: "text-start", id: "t1" },
+						{ type: "text-delta", id: "t1", delta: "Checking" },
+						{ type: "tool-call", toolCallId: "c1", toolName: "lookup", input: "{}" },
+						{ type: "text-end", id: "t1" },
+						{ type: "text-delta", id: "t2", delta: "no start" },
+						finishEvent,
+					].map(sse),
+				),
+				requestBody,
+				hook,
+			),
+		);
+
+		expect(hook).toHaveBeenCalledOnce();
+		expect(hook.mock.calls[0]?.[0].response.content).toEqual([
+			{ type: "text", text: "Checking" },
+			{ type: "tool-call", toolCallId: "c1", toolName: "lookup", input: "{}" },
+			{ type: "text", text: "no start" },
+		]);
 	});
 
 	it("parses an event split across chunks mid-JSON", async () => {

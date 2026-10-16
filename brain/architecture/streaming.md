@@ -31,11 +31,15 @@ The `createStreamTransformer` suite tests the transformer on its own, with an in
 - "cancels the source when the output stream is cancelled": the source's `cancel` receives the reason given to the reader.
 - "parses an event split across chunks mid-JSON": SSE parsing buffers a partial event until the rest arrives.
 
-`StreamContentAggregator` builds text and reasoning blocks from their start, delta and end parts, collects tool calls, tool results, tool approval requests, files and sources, takes warnings from `stream-start`, and finalises any unterminated block on `finish`. Covered by `src/stream.test.ts`. `src/proxy-stream.test.ts` drives `createGatewayProxy` with a mocked SSE upstream and an `afterResponse` spy, and runs in CI without a key; `src/integration.test.ts` calls the real gateway and needs one ([[development/testing]]).
+`StreamContentAggregator` builds text and reasoning blocks from their start, delta and end parts, collects tool calls, tool results, tool approval requests, files and sources, and takes warnings from `stream-start`. Covered by `src/stream.test.ts`.
+
+- **Arrival order.** A text or reasoning block takes its slot in `content` when it starts, and its deltas fill that slot in place, so `content` follows the order in which each part first appeared, as the non-streaming response does. Before this, blocks were appended on their `-end` part, so a tool call that arrived while a text block was still open landed ahead of that text. Pinned by "keeps blocks in the order they started when a tool call arrives before text-end" and, through the transformer, "passes the hook content in the order each block started".
+- **Missing start parts.** A delta for an id with no open block opens one at that point instead of being dropped, so a provider that skips `text-start` or `reasoning-start` still has its text reach the hook ("keeps deltas for a text id that had no text-start"). The earlier test "ignores deltas for unknown text ids" pinned the dropping behavior and was replaced.
+- **Unterminated blocks.** A block with no `-end` part stays where it started; `finish` only closes the open ids. `src/proxy-stream.test.ts` drives `createGatewayProxy` with a mocked SSE upstream and an `afterResponse` spy, and runs in CI without a key; `src/integration.test.ts` calls the real gateway and needs one ([[development/testing]]).
 
 ## Behavior pinned by `src/proxy-stream.test.ts`
 
-- The hook runs exactly once, on `finish`, with the upstream `usage`, `finishReason` and `providerMetadata` unchanged and the content in stream order, an unterminated text block appended last.
+- The hook runs exactly once, on `finish`, with the upstream `usage`, `finishReason` and `providerMetadata` unchanged and the content in stream order, an unterminated text block kept at the position it started.
 - The client gets the hook's `finishReason`, `usage` and `providerMetadata` in the `finish` event. Every other event, `[DONE]` included, is forwarded byte for byte. Status and `content-type` come from the upstream.
 - An upstream body error mid-stream errors the client stream, and the hook does not run.
 - Cancelling the client body cancels the upstream body with the same reason.
