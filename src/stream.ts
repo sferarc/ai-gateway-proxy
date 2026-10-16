@@ -21,10 +21,8 @@ export class StreamContentAggregator {
 	private content: LanguageModelV3Content[] = [];
 	private warnings: SharedV3Warning[] = [];
 
-	// Text content being built (keyed by id)
+	// Open text and reasoning blocks by id. Each block already holds its slot in `content`.
 	private textContent = new Map<string, { type: "text"; text: string }>();
-
-	// Reasoning content being built (keyed by id)
 	private reasoningContent = new Map<string, { type: "reasoning"; text: string }>();
 
 	private finishReason: LanguageModelV3FinishReason = {
@@ -61,49 +59,27 @@ export class StreamContentAggregator {
 				break;
 
 			case "text-start":
-				this.textContent.set(part.id, { type: "text", text: "" });
+				this.openText(part.id);
 				break;
 
 			case "text-delta":
-				{
-					const text = this.textContent.get(part.id);
-					if (text) {
-						text.text += part.delta;
-					}
-				}
+				(this.textContent.get(part.id) ?? this.openText(part.id)).text += part.delta;
 				break;
 
 			case "text-end":
-				{
-					const text = this.textContent.get(part.id);
-					if (text) {
-						this.content.push(text);
-						this.textContent.delete(part.id);
-					}
-				}
+				this.textContent.delete(part.id);
 				break;
 
 			case "reasoning-start":
-				this.reasoningContent.set(part.id, { type: "reasoning", text: "" });
+				this.openReasoning(part.id);
 				break;
 
 			case "reasoning-delta":
-				{
-					const reasoning = this.reasoningContent.get(part.id);
-					if (reasoning) {
-						reasoning.text += part.delta;
-					}
-				}
+				(this.reasoningContent.get(part.id) ?? this.openReasoning(part.id)).text += part.delta;
 				break;
 
 			case "reasoning-end":
-				{
-					const reasoning = this.reasoningContent.get(part.id);
-					if (reasoning) {
-						this.content.push(reasoning);
-						this.reasoningContent.delete(part.id);
-					}
-				}
+				this.reasoningContent.delete(part.id);
 				break;
 
 			case "tool-input-start":
@@ -133,22 +109,27 @@ export class StreamContentAggregator {
 				break;
 
 			case "finish":
-				// Finalize any remaining content
-				for (const [, text] of this.textContent) {
-					this.content.push(text);
-				}
 				this.textContent.clear();
-
-				for (const [, reasoning] of this.reasoningContent) {
-					this.content.push(reasoning);
-				}
 				this.reasoningContent.clear();
-
 				this.finishReason = part.finishReason;
 				this.usage = part.usage;
 				this.providerMetadata = part.providerMetadata;
 				break;
 		}
+	}
+
+	private openText(id: string) {
+		const block = { type: "text" as const, text: "" };
+		this.textContent.set(id, block);
+		this.content.push(block);
+		return block;
+	}
+
+	private openReasoning(id: string) {
+		const block = { type: "reasoning" as const, text: "" };
+		this.reasoningContent.set(id, block);
+		this.content.push(block);
+		return block;
 	}
 
 	/**
