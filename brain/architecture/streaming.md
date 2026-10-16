@@ -2,7 +2,7 @@
 
 A request is treated as streaming when it carries `ai-language-model-streaming: true` (`src/proxy.ts`).
 
-- **No `afterResponse` hook:** the upstream body is returned as is, keeping its `content-type` (default `text/event-stream`).
+- **No `afterResponse` hook:** the upstream body is returned as is, keeping its `content-type` (default `text/event-stream`) and the allowlisted upstream response headers ([[proxy]] step 9).
 - **With `afterResponse`:** `createStreamTransformer` (`src/stream.ts`) parses the SSE body with `EventSourceParserStream` from `@ai-sdk/provider-utils`. Every event is forwarded immediately and also fed to a `StreamContentAggregator`. On the `finish` event it calls `afterResponse` with the aggregated `GatewayResponse` and emits a rewritten `finish` event carrying the hook's `finishReason`, `usage` and `providerMetadata`. Content has already been streamed by then, so the hook can only change that metadata (doc comment on `afterResponse` in `src/types.ts`). If the hook throws, the error is logged with `console.error` and the upstream `finish` event is forwarded instead, so the stream still completes (#11).
 
 `DONE` and `[DONE]` markers and non-JSON events pass through unchanged.
@@ -35,7 +35,9 @@ The `createStreamTransformer` suite tests the transformer on its own, with an in
 
 - **Arrival order.** A text or reasoning block takes its slot in `content` when it starts, and its deltas fill that slot in place, so `content` follows the order in which each part first appeared, as the non-streaming response does. Before this, blocks were appended on their `-end` part, so a tool call that arrived while a text block was still open landed ahead of that text. Pinned by "keeps blocks in the order they started when a tool call arrives before text-end" and, through the transformer, "passes the hook content in the order each block started".
 - **Missing start parts.** A delta for an id with no open block opens one at that point instead of being dropped, so a provider that skips `text-start` or `reasoning-start` still has its text reach the hook ("keeps deltas for a text id that had no text-start"). The earlier test "ignores deltas for unknown text ids" pinned the dropping behavior and was replaced.
-- **Unterminated blocks.** A block with no `-end` part stays where it started; `finish` only closes the open ids. `src/proxy-stream.test.ts` drives `createGatewayProxy` with a mocked SSE upstream and an `afterResponse` spy, and runs in CI without a key; `src/integration.test.ts` calls the real gateway and needs one ([[development/testing]]).
+- **Unterminated blocks.** A block with no `-end` part stays where it started; `finish` only closes the open ids ("finalizes incomplete text content on finish" and its reasoning twin).
+
+Beyond the transformer, `src/proxy-stream.test.ts` drives `createGatewayProxy` with a mocked SSE upstream and an `afterResponse` spy, and `src/e2e.test.ts` streams through a real `@ai-sdk/gateway` client to a local fake gateway; both run in CI without a key. `src/integration.test.ts` calls the real gateway and needs one ([[development/testing]]).
 
 ## Behavior pinned by `src/proxy-stream.test.ts`
 

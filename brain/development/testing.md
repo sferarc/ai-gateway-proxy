@@ -1,11 +1,12 @@
 # Testing
 
-`pnpm test` (also a step of `pnpm check`) runs vitest over the `*.test.ts` files in `src/` (`vitest.config.ts`, node environment, globals). On 2026-10-15 without a key, on vitest 5.0.4: 5 files, 100 tests, 87 passed and 13 skipped (the skipped ones are `src/integration.test.ts`).
+`pnpm test` (also a step of `pnpm check`) runs vitest over the `*.test.ts` files in `src/` (`vitest.config.ts`, node environment; the suites import `describe`, `it` and `expect` from `vitest` rather than relying on globals). On 2026-10-16 without a key, on vitest 5.0.4: 6 files, 136 tests, 123 passed and 13 skipped (the skipped file is `src/integration.test.ts`).
 
 | File | What it covers |
 | --- | --- |
 | `src/proxy.test.ts` | The request path with `fetch` and `@vercel/oidc` mocked: auth selection, URL and header building, the three hooks, error handling, method exports |
-| `src/stream.test.ts` | Two suites. `StreamContentAggregator`: each stream part type. `createStreamTransformer` in isolation: pass-through, `[DONE]` and non-JSON data, `finish` replaced by the hook result, original `finish` forwarded when the hook throws, cancellation reaching the source, an event split across chunks |
+| `src/auth.test.ts` | The `console.error` line `getGatewayAuthToken` writes when OIDC is unavailable, that it carries only the error message, and that nothing is logged when a key or OIDC token is found ([[architecture/auth]]) |
+| `src/stream.test.ts` | Two suites. `StreamContentAggregator`: each stream part type, content in the order each block started, deltas without a start part. `createStreamTransformer` in isolation: pass-through, `[DONE]` and non-JSON data, `finish` replaced by the hook result, original `finish` forwarded when the hook throws, cancellation reaching the source, the failure and missing-`finish` logs, an event split across chunks |
 | `src/proxy-stream.test.ts` | `createGatewayProxy` streaming with an `afterResponse` spy over a mocked SSE upstream: the usage and content the hook sees, the rewritten `finish` the client gets, no `finish`, upstream error, client cancel |
 | `src/e2e.test.ts` | A real `@ai-sdk/gateway` client calling `generateText` and `streamText` through the proxy over HTTP to a local fake gateway: text round-trip, the path and gateway headers upstream, `beforeRequest` reaching upstream, `afterResponse` content in both modes, client aborts closing the upstream request |
 | `src/integration.test.ts` | Real calls through the proxy to the AI Gateway |
