@@ -870,24 +870,47 @@ describe("createGatewayProxy", () => {
 		});
 	});
 
-	describe("upstream correlation headers", () => {
+	describe("upstream response headers", () => {
 		beforeEach(() => {
 			process.env.AI_GATEWAY_API_KEY = "test-key";
 		});
 
 		const upstreamHeaders = {
 			"x-vercel-id": "fra1::iad1::abc-123",
+			"x-request-id": "req_123",
+			"x-ratelimit-remaining-requests": "0",
 			"x-internal-secret": "do-not-forward",
 			"set-cookie": "session=1",
+			"content-length": "9999",
+			"content-encoding": "gzip",
 		};
 
 		function expectOnlyAllowlisted(response: Response) {
 			expect(response.headers.get("x-vercel-id")).toBe("fra1::iad1::abc-123");
+			expect(response.headers.get("x-request-id")).toBe("req_123");
+			expect(response.headers.get("x-ratelimit-remaining-requests")).toBe("0");
 			expect(response.headers.get("x-internal-secret")).toBeNull();
 			expect(response.headers.get("set-cookie")).toBeNull();
+			expect(response.headers.get("content-length")).toBeNull();
+			expect(response.headers.get("content-encoding")).toBeNull();
 		}
 
-		it("forwards x-vercel-id on a JSON response", async () => {
+		function rateLimited(): Response {
+			return new Response(
+				JSON.stringify({ error: { message: "Rate limited", type: "rate_limit_exceeded" } }),
+				{
+					status: 429,
+					headers: {
+						"content-type": "application/json",
+						"retry-after": "2",
+						"retry-after-ms": "1500",
+						...upstreamHeaders,
+					},
+				},
+			);
+		}
+
+		it("forwards allowlisted headers on a JSON response", async () => {
 			mockFetch.mockResolvedValueOnce(
 				new Response(JSON.stringify(createMockGatewayResponse()), {
 					status: 200,
@@ -907,7 +930,7 @@ describe("createGatewayProxy", () => {
 		it.each([
 			["without afterResponse", undefined],
 			["with afterResponse", ({ response }: { response: GatewayResponse }) => response],
-		])("forwards x-vercel-id on a streamed response %s", async (_, afterResponse) => {
+		])("forwards allowlisted headers on a streamed response %s", async (_, afterResponse) => {
 			mockFetch.mockResolvedValueOnce(
 				new Response('data: {"type":"finish"}\n\n', {
 					status: 200,
@@ -927,45 +950,82 @@ describe("createGatewayProxy", () => {
 			await response.text();
 		});
 
-		it("forwards x-vercel-id on an error response", async () => {
-			mockFetch.mockResolvedValueOnce(
-				new Response(JSON.stringify({ error: { message: "Rate limited", type: "rate_limit" } }), {
-					status: 429,
-					headers: { "content-type": "application/json", ...upstreamHeaders },
-				}),
-			);
+		it("forwards retry-after on a 429", async () => {
+			mockFetch.mockResolvedValueOnce(rateLimited());
 
 			const proxy = createGatewayProxy();
 			const request = createMockRequest("http://localhost/api/chat", { body: { prompt: [] } });
 			const response = await proxy(request, createMockContext(["chat"]));
 
 			expect(response.status).toBe(429);
+			expect(response.headers.get("retry-after")).toBe("2");
+			expect(response.headers.get("retry-after-ms")).toBe("1500");
 			expectOnlyAllowlisted(response);
 		});
 
-		it("forwards x-vercel-id when onError returns a replacement body", async () => {
-			mockFetch.mockResolvedValueOnce(
-				new Response("upstream down", { status: 502, headers: upstreamHeaders }),
-			);
+		it("forwards retry-after on a 429 when onError returns a replacement body", async () => {
+			mockFetch.mockResolvedValueOnce(rateLimited());
 
 			const proxy = createGatewayProxy({
-				onError: () => ({ error: { message: "Try again later", type: "gateway_error" } }),
+				onError: () => ({ error: { message: "Slow down", type: "rate_limit_exceeded" } }),
 			});
 			const request = createMockRequest("http://localhost/api/chat", { body: { prompt: [] } });
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			expect(response.status).toBe(502);
+			expect(response.status).toBe(429);
+			expect(response.headers.get("retry-after")).toBe("2");
+			expect(response.headers.get("retry-after-ms")).toBe("1500");
 			expectOnlyAllowlisted(response);
+			expect(await response.json()).toEqual({
+				error: { message: "Slow down", type: "rate_limit_exceeded" },
+			});
 		});
 
-		it("omits x-vercel-id when the gateway does not send it", async () => {
+		it("passes a Response returned by onError through untouched", async () => {
+			mockFetch.mockResolvedValueOnce(rateLimited());
+
+			const proxy = createGatewayProxy({
+				onError: () => new Response("custom", { status: 503, headers: { "x-custom": "1" } }),
+			});
+			const request = createMockRequest("http://localhost/api/chat", { body: { prompt: [] } });
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(503);
+			expect(response.headers.get("x-custom")).toBe("1");
+			expect(response.headers.has("retry-after")).toBe(false);
+			expect(response.headers.has("x-vercel-id")).toBe(false);
+		});
+
+		it("lets a client built on @ai-sdk/gateway read retry-after through the proxy", async () => {
+			mockFetch.mockResolvedValueOnce(rateLimited());
+
+			const proxy = createGatewayProxy();
+			const provider = createGatewayProvider({
+				baseURL: "http://localhost/api",
+				apiKey: "client-key",
+				fetch: (input, init) =>
+					proxy(new Request(input, init), createMockContext(["language-model"])),
+			});
+
+			const error = await provider("openai/gpt-5")
+				.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] })
+				.then(
+					() => undefined,
+					(e: unknown) => e as { cause?: { responseHeaders?: Record<string, string> } },
+				);
+
+			expect(error?.cause?.responseHeaders?.["retry-after"]).toBe("2");
+			expect(error?.cause?.responseHeaders?.["retry-after-ms"]).toBe("1500");
+		});
+
+		it("omits upstream headers the gateway does not send", async () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 
 			const proxy = createGatewayProxy();
 			const request = createMockRequest("http://localhost/api/chat", { body: { prompt: [] } });
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			expect(response.headers.has("x-vercel-id")).toBe(false);
+			expect([...response.headers.keys()]).toEqual(["content-type"]);
 		});
 	});
 
