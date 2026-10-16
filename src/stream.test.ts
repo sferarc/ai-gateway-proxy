@@ -481,6 +481,18 @@ describe("createStreamTransformer", () => {
 		expect(output).toBe("data: not json\n\ndata: [DONE]\n\n");
 	});
 
+	it("keeps every line of an event whose data spans several data lines", async () => {
+		const json = 'data: {"type":"text-delta",\ndata: "id":"t1","delta":"Hi"}\n\n';
+		const text = "data: line one\ndata: line two\n\n";
+		const hook = vi.fn(passThroughHook);
+		const output = await readAll(
+			createStreamTransformer(sourceOf([json, text, sse(finishEvent)]), requestBody, hook),
+		);
+
+		expect(output.startsWith(json + text)).toBe(true);
+		expect(hook.mock.calls[0]?.[0].response.content).toEqual([{ type: "text", text: "Hi" }]);
+	});
+
 	it("replaces the finish event with the hook result", async () => {
 		const hook = vi.fn(
 			({ response }: { request: LanguageModelV3CallOptions; response: GatewayResponse }) => ({
