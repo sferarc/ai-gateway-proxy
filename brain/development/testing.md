@@ -1,6 +1,6 @@
 # Testing
 
-`pnpm test` (also a step of `pnpm check`) runs vitest over the `*.test.ts` files in `src/` (`vitest.config.ts`, node environment, globals). On 2026-10-15 without a key, on vitest 5.0.4: 5 files, 100 tests, 87 passed and 13 skipped (the skipped ones are `src/integration.test.ts`).
+`pnpm test` (also a step of `pnpm check`) runs vitest over the `*.test.ts` files in `src/` (`vitest.config.ts`, node environment, globals). On 2026-10-16 without a key, on vitest 5.0.4: 6 files, 137 tests, 124 passed and 13 skipped (the skipped ones are `src/integration.test.ts`).
 
 | File | What it covers |
 | --- | --- |

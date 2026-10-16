@@ -172,7 +172,7 @@ async function forwardBodylessRequest(
 		return new Response(res.body, {
 			status: res.status,
 			statusText: res.statusText,
-			headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+			headers: responseHeaders(res, res.headers.get("content-type") ?? "application/json"),
 		});
 	} catch (error) {
 		return proxyFailureResponse(request, error);
