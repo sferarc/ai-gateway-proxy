@@ -7,6 +7,8 @@ A request is treated as streaming when it carries `ai-language-model-streaming: 
 
 `DONE` and `[DONE]` markers and non-JSON events pass through unchanged.
 
+Events are re-encoded with `sseEvent` (`src/stream.ts`), which writes one `data:` field per line. The parser joins a multi-line event's `data:` lines with `\n`; writing that back as a single `data: ${data}` field left bare lines that the client's SSE parser ignores, so it received only the first line. Only the data field is re-emitted: `event:`, `id:` and `retry:` fields are not forwarded on this path. Pinned by "keeps every line of an event whose data spans several data lines".
+
 ## Logging
 
 `createStreamTransformer` logs to the console so a truncated or unmetered stream leaves a server-side trace. It never logs event payloads, request bodies or tokens.
