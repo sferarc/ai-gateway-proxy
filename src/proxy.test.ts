@@ -981,6 +981,20 @@ describe("createGatewayProxy", () => {
 			});
 		});
 
+		it("forwards retry-after and request ids on a bodyless GET", async () => {
+			mockFetch.mockResolvedValueOnce(rateLimited());
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+			const response = await proxy.GET(request, createMockContext(["config"]));
+
+			expect(response.status).toBe(429);
+			expect(response.headers.get("content-type")).toBe("application/json");
+			expect(response.headers.get("retry-after")).toBe("2");
+			expect(response.headers.get("retry-after-ms")).toBe("1500");
+			expectOnlyAllowlisted(response);
+		});
+
 		it("passes a Response returned by onError through untouched", async () => {
 			mockFetch.mockResolvedValueOnce(rateLimited());
 
