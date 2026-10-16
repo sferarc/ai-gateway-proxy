@@ -157,7 +157,7 @@ The path, whether from `extractPath` or the route param, must stay relative: one
 
 ### `onError`
 
-Receives `{ request, error, status }`, where `error` is the gateway's JSON error body, or `{ error: { message: statusText, type: "gateway_error" } }` when the body is not JSON. Return a replacement body to send it as JSON with the upstream status, or return a `Response` to send that as is. Without `onError`, the error body is sent with the upstream status.
+Receives `{ request, error, status }`, where `error` is the gateway's JSON error body. When the body is not JSON of the form `{ error: { message } }`, such as an HTML page from a load balancer, `error` is `{ error: { message: "AI Gateway returned <status>: <excerpt>", type: "gateway_error" } }`, with the first 200 characters of the body as the excerpt. Return a replacement body to send it as JSON with the upstream status, or return a `Response` to send that as is. Without `onError`, the error body is sent with the upstream status.
 
 ## Responses the proxy generates
 
