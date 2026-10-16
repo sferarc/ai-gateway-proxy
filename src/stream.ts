@@ -147,6 +147,17 @@ export class StreamContentAggregator {
 }
 
 /**
+ * Encodes event data as an SSE event. The parser joins multi-line data with "\n",
+ * so each line needs its own `data:` field to reach the client intact.
+ */
+function sseEvent(data: string): string {
+	return `${data
+		.split("\n")
+		.map((line) => `data: ${line}`)
+		.join("\n")}\n\n`;
+}
+
+/**
  * Creates a transform stream that:
  * 1. Passes through all SSE events immediately
  * 2. Aggregates content using StreamContentAggregator
@@ -185,7 +196,7 @@ export function createStreamTransformer(
 
 					// Handle DONE marker (end of stream)
 					if (data === "DONE" || data === "[DONE]") {
-						controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+						controller.enqueue(encoder.encode(sseEvent(data)));
 						continue;
 					}
 
@@ -198,7 +209,7 @@ export function createStreamTransformer(
 							warnedNonJson = true;
 							console.warn("upstream stream event is not valid JSON, passing it through unparsed");
 						}
-						controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+						controller.enqueue(encoder.encode(sseEvent(data)));
 						continue;
 					}
 
@@ -216,7 +227,7 @@ export function createStreamTransformer(
 							});
 						} catch (error) {
 							console.error("afterResponse hook failed, forwarding original finish event:", error);
-							controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+							controller.enqueue(encoder.encode(sseEvent(data)));
 							continue;
 						}
 
@@ -228,12 +239,12 @@ export function createStreamTransformer(
 							providerMetadata: modifiedResponse.providerMetadata,
 						};
 
-						controller.enqueue(encoder.encode(`data: ${JSON.stringify(modifiedFinish)}\n\n`));
+						controller.enqueue(encoder.encode(sseEvent(JSON.stringify(modifiedFinish))));
 						continue;
 					}
 
 					// Pass through event unchanged
-					controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+					controller.enqueue(encoder.encode(sseEvent(data)));
 				}
 
 				if (!finishSeen && !cancelled) {
