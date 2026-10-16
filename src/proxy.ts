@@ -11,8 +11,9 @@ import type {
 const DEFAULT_BASE_URL = "https://ai-gateway.vercel.sh/v1/ai";
 const PROTOCOL_VERSION = "0.0.1";
 const MAX_ERROR_EXCERPT_LENGTH = 200;
-// Vercel's request id (the header @ai-sdk/gateway reads it from); operators match it to gateway-side logs.
-const FORWARDED_RESPONSE_HEADERS = ["x-vercel-id"] as const;
+// Request ids for matching gateway-side logs, and the rate limit headers the AI SDK backs off on.
+const FORWARDED_RESPONSE_HEADER =
+	/^(?:x-vercel-id|x-request-id|retry-after|retry-after-ms|x-ratelimit-.+)$/;
 // Headers @ai-sdk/gateway sets to describe the model call; they must match the body the client built.
 const MODEL_CALL_HEADER =
 	/^(?:ai-language-model-.+|ai-model-id|ai-[a-z]+-model-specification-version)$/;
@@ -201,13 +202,12 @@ async function parseErrorBody(res: Response): Promise<GatewayError> {
 }
 
 /**
- * Builds response headers with the given content type plus the upstream correlation headers.
+ * Builds response headers with the given content type plus the allowlisted upstream headers.
  */
 function responseHeaders(res: Response, contentType: string): Headers {
 	const headers = new Headers({ "content-type": contentType });
-	for (const name of FORWARDED_RESPONSE_HEADERS) {
-		const value = res.headers.get(name);
-		if (value !== null) {
+	for (const [name, value] of res.headers) {
+		if (FORWARDED_RESPONSE_HEADER.test(name)) {
 			headers.set(name, value);
 		}
 	}
