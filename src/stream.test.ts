@@ -639,8 +639,21 @@ describe("createStreamTransformer", () => {
 
 		expect(output).toContain("data: secret one\n\ndata: secret two\n\n");
 		expect(consoleWarn).toHaveBeenCalledOnce();
-		expect(consoleWarn.mock.calls[0]?.[0]).toMatch(/not valid JSON/);
+		expect(consoleWarn.mock.calls[0]?.[0]).toMatch(/not a JSON object/);
 		expect(loggedText()).not.toContain("secret");
+	});
+
+	it("passes JSON data that is not an object through like non-JSON data", async () => {
+		const hook = vi.fn(passThroughHook);
+		const events = [sse("null"), sse("42"), sse('"text"'), sse(finishEvent), sse("[DONE]")];
+
+		const output = await readAll(createStreamTransformer(sourceOf(events), requestBody, hook));
+
+		expect(output).toBe(events.join(""));
+		expect(hook).toHaveBeenCalledOnce();
+		expect(consoleWarn).toHaveBeenCalledOnce();
+		expect(consoleWarn.mock.calls[0]?.[0]).toMatch(/not a JSON object/);
+		expect(consoleError).not.toHaveBeenCalled();
 	});
 
 	it("does not warn when the stream finishes normally", async () => {
