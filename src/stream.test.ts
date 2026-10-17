@@ -656,6 +656,23 @@ describe("createStreamTransformer", () => {
 		expect(consoleError).not.toHaveBeenCalled();
 	});
 
+	it("passes a stream-start without a warnings array through and still calls the hook", async () => {
+		const hook = vi.fn(passThroughHook);
+		const events = [
+			sse({ type: "stream-start" }),
+			sse({ type: "stream-start", warnings: null }),
+			sse(finishEvent),
+			sse("[DONE]"),
+		];
+
+		const output = await readAll(createStreamTransformer(sourceOf(events), requestBody, hook));
+
+		expect(output).toBe(events.join(""));
+		expect(hook).toHaveBeenCalledOnce();
+		expect(hook.mock.calls[0]?.[0].response.warnings).toEqual([]);
+		expect(consoleError).not.toHaveBeenCalled();
+	});
+
 	it("does not warn when the stream finishes normally", async () => {
 		await readAll(
 			createStreamTransformer(
