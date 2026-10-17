@@ -194,17 +194,20 @@ export function createStreamTransformer(
 			return data;
 		}
 
-		// Parse the JSON event data
-		let parsed: LanguageModelV3StreamPart;
+		// Parse the JSON event data. Data that is not a JSON object, such as `null`, is not a stream
+		// part either, so it passes through like non-JSON data rather than reaching the aggregator.
+		let json: unknown;
 		try {
-			parsed = JSON.parse(data);
-		} catch {
+			json = JSON.parse(data);
+		} catch {}
+		if (typeof json !== "object" || json === null) {
 			if (!warnedNonJson) {
 				warnedNonJson = true;
-				console.warn("upstream stream event is not valid JSON, passing it through unparsed");
+				console.warn("upstream stream event is not a JSON object, passing it through unparsed");
 			}
 			return data;
 		}
+		const parsed = json as LanguageModelV3StreamPart;
 
 		// Track content for aggregation
 		aggregator.process(parsed);
