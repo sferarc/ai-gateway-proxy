@@ -55,7 +55,10 @@ export class StreamContentAggregator {
 	process(part: LanguageModelV3StreamPart): void {
 		switch (part.type) {
 			case "stream-start":
-				this.warnings.push(...part.warnings);
+				// The part comes off the wire, so a missing or malformed warnings field adds none.
+				if (Array.isArray(part.warnings)) {
+					this.warnings.push(...part.warnings);
+				}
 				break;
 
 			case "text-start":
