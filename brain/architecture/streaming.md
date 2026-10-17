@@ -20,6 +20,10 @@ Events are re-encoded with `sseEvent` (`src/stream.ts`), which writes one `data:
 
 A client cancel is not logged: `cancel` sets a flag that suppresses both the error and the missing-`finish` warning, and still cancels the upstream with the same reason. Covered by `src/stream.test.ts`, which spies on `console.warn` and `console.error` and checks that payload text never reaches them.
 
+## Backpressure
+
+The returned stream reads the upstream in `pull`, one event per call, so the upstream is read only as fast as the client reads. It used to loop over the whole upstream in `start`, which enqueued every event whatever the client's pace: a slow client made the proxy hold the entire response in memory, and an endless upstream ran the process out of heap. Pinned by "reads the upstream only as fast as the client reads" in `src/stream.test.ts`. The pass-through path with no `afterResponse` returns the upstream body as is and always kept backpressure.
+
 Cancelling the returned stream cancels the parsed upstream reader with the same reason (`cancel(reason) { return reader.cancel(reason) }` in `createStreamTransformer`, #11), so a client that goes away stops the upstream read instead of leaving it running.
 
 ## Behavior pinned by `src/stream.test.ts`

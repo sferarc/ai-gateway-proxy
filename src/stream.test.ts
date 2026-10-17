@@ -566,6 +566,26 @@ describe("createStreamTransformer", () => {
 		expect(consoleWarn).not.toHaveBeenCalled();
 	});
 
+	it("reads the upstream only as fast as the client reads", async () => {
+		let pulls = 0;
+		const source = new ReadableStream<Uint8Array>({
+			pull(controller) {
+				pulls++;
+				controller.enqueue(encoder.encode(sse({ type: "text-delta", id: "t1", delta: "x" })));
+				if (pulls === 200) {
+					controller.close();
+				}
+			},
+		});
+		const reader = createStreamTransformer(source, requestBody, passThroughHook).getReader();
+
+		await reader.read();
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(pulls).toBeLessThan(10);
+		await reader.cancel();
+	});
+
 	it("logs once and errors the client stream when the upstream body fails mid-stream", async () => {
 		const failure = new Error("connection reset");
 		let sent = false;
