@@ -7,6 +7,8 @@ A request is treated as streaming when it carries `ai-language-model-streaming: 
 
 `DONE` and `[DONE]` markers and events whose data is not a JSON object pass through unchanged without reaching the aggregator. That covers valid JSON that is not an object, such as `null`, `42` or `"text"`: it used to reach `StreamContentAggregator.process`, whose `part.type` read threw on `null` and errored the client stream, where the same upstream with no hook reached the client intact. Pinned by "passes JSON data that is not an object through like non-JSON data".
 
+A `stream-start` part whose `warnings` is missing or not an array adds no warnings. The aggregator used to spread `part.warnings` unchecked, so such a part threw `part.warnings is not iterable` and errored the client stream, where the same upstream with no hook reached the client intact. Pinned by "passes a stream-start without a warnings array through and still calls the hook".
+
 Events are re-encoded with `sseEvent` (`src/stream.ts`), which writes one `data:` field per line. The parser joins a multi-line event's `data:` lines with `\n`; writing that back as a single `data: ${data}` field left bare lines that the client's SSE parser ignores, so it received only the first line. Only the data field is re-emitted: `event:`, `id:` and `retry:` fields are not forwarded on this path. Pinned by "keeps every line of an event whose data spans several data lines".
 
 ## Logging
