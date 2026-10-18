@@ -154,7 +154,7 @@ The path, whether from `extractPath` or the route param, must stay relative: one
 
 - **Non-streamed responses:** receives the gateway's JSON body as `response`, and the value it returns is sent to the client instead.
 - **Streamed responses:** every event is forwarded to the client as it arrives. When the `finish` event comes, the hook receives the aggregated response, and the `finishReason`, `usage` and `providerMetadata` it returns replace those in the `finish` event; content changes have no effect because the content has already been sent. If the hook throws, the error is logged and the original `finish` event is forwarded. If the stream ends without a `finish` event, the hook does not run.
-- **Event streams on other calls:** a successful `text/event-stream` response to a request without `ai-language-model-streaming: true`, such as the video model's `doGenerate`, is forwarded as is and the hook does not run, since its events are not language model stream parts.
+- **Event streams and JSON Lines on other calls:** a successful `text/event-stream` or JSON Lines (`application/x-ndjson`, `application/jsonl`) response to a request without `ai-language-model-streaming: true`, such as the video model's `doGenerate` or the batch API's `doGetBatchResults`, is forwarded as is and the hook does not run, since it is not a language model response.
 
 ### `onError`
 
