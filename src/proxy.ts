@@ -149,7 +149,8 @@ function proxyFailureResponse(request: Request, error: unknown): Response {
 }
 
 /**
- * Forwards a GET or HEAD request, such as the gateway's `/config` model list, without a body.
+ * Forwards a GET or HEAD request, such as the gateway's `/config` model list, or a request whose
+ * body is missing or empty, without a body.
  * The hooks are typed for language model calls, so none of them run here.
  */
 async function forwardBodylessRequest(
@@ -361,10 +362,16 @@ export const createGatewayProxy = ({
 				return await forwardBodylessRequest(request, upstream, auth, headers);
 			}
 
+			// Node adapters give every method but GET and HEAD a body stream, so an empty one is bodyless too
+			const text = await request.text();
+			if (text === "") {
+				return await forwardBodylessRequest(request, upstream, auth, headers);
+			}
+
 			// Parse request body
 			let requestBody: LanguageModelV3CallOptions;
 			try {
-				requestBody = await request.clone().json();
+				requestBody = JSON.parse(text);
 			} catch {
 				return proxyErrorResponse(400, "invalid_request_error", "Invalid JSON body");
 			}

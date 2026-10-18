@@ -1228,6 +1228,30 @@ describe("createGatewayProxy", () => {
 			expect(beforeRequest).not.toHaveBeenCalled();
 		});
 
+		it("forwards a DELETE whose body is an empty stream, as Node adapters build it", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ ok: true }));
+			const beforeRequest = vi.fn();
+
+			const proxy = createGatewayProxy({ beforeRequest });
+			// The README's Express adapter passes `Readable.toWeb(req)` for every method but GET and HEAD.
+			const request = new Request("http://localhost/api/ai/config", {
+				method: "DELETE",
+				body: new ReadableStream({ start: (controller) => controller.close() }),
+				duplex: "half",
+			} as RequestInit);
+			expect(request.body).not.toBeNull();
+
+			const response = await proxy.DELETE(request, createMockContext(["config"]));
+
+			expect(response.status).toBe(200);
+			expect(await response.json()).toEqual({ ok: true });
+			const [url, init] = mockFetch.mock.calls[0];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/config");
+			expect(init.method).toBe("DELETE");
+			expect(init.body).toBeUndefined();
+			expect(beforeRequest).not.toHaveBeenCalled();
+		});
+
 		it("returns 500 when a GET fetch throws", async () => {
 			mockFetch.mockRejectedValueOnce(new Error("Network error"));
 
