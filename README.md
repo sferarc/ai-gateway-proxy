@@ -146,7 +146,7 @@ The proxy gets a credential on every request with `getGatewayAuthToken()`, in th
 | `afterResponse` | none | `({ request, response }) => GatewayResponse`. Runs on a successful response; see below. |
 | `onError` | none | `({ request, error, status }) => GatewayError \| Response`. Runs when the gateway returns a non-OK status; see below. |
 
-Each hook may also return a promise. The hooks are typed for language model calls and run only for requests with a body. A `GET` or `HEAD` request, such as the provider's `GET /config` model list, and any other request without a body, such as a bodyless `DELETE`, is forwarded without a body and without running any hook, and the upstream status and body come back unchanged.
+Each hook may also return a promise. The hooks are typed for language model calls and run only for requests with a body. A `GET` or `HEAD` request, such as the provider's `GET /config` model list, and any other request whose body is missing or empty, such as a bodyless `DELETE`, is forwarded without a body and without running any hook, and the upstream status and body come back unchanged.
 
 The path, whether from `extractPath` or the route param, must stay relative: one that starts with `/`, contains `://`, or has a segment that decodes to `.` or `..` or contains `/`, `\` or a NUL byte is rejected with `400 Invalid path` before anything is sent upstream.
 
@@ -167,7 +167,7 @@ Apart from forwarding the gateway's own responses, the handler can answer with:
 | --- | --- | --- |
 | 500 | `AI Gateway authentication not configured` | `getGatewayAuthToken()` returned `null`. |
 | 400 | `Invalid path` | The path is not a safe relative path under `baseUrl`. |
-| 400 | `Invalid JSON body` | A request other than `GET` or `HEAD` has a body that is not JSON. |
+| 400 | `Invalid JSON body` | A request other than `GET` or `HEAD` has a non-empty body that is not JSON. |
 | 499 | empty | The client aborted the request (`request.signal`) before the handler returned. The signal is passed to the upstream `fetch`, so the abort also cancels the upstream request. |
 | 500 | `Error proxying request to AI Gateway` | Anything else that throws: `extractPath`, `beforeRequest`, the upstream `fetch`, a successful non-streamed response that is not JSON, `afterResponse` on a non-streamed request, or `onError`. |
 | 500 | `No response body` | A successful streamed response arrived without a body. |
