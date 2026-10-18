@@ -1116,6 +1116,75 @@ describe("createGatewayProxy", () => {
 
 			await expectGatewayError(response, 500, "proxy_error", "No response body");
 		});
+
+		it("passes an event stream through on a request not marked as streaming", async () => {
+			const streamBody = 'data: {"type":"result","videos":[]}\n\n';
+			mockFetch.mockResolvedValueOnce(
+				new Response(streamBody, {
+					status: 200,
+					headers: { "content-type": "text/event-stream; charset=utf-8" },
+				}),
+			);
+			const afterResponse = vi.fn();
+
+			const proxy = createGatewayProxy({ afterResponse });
+			const request = createMockRequest("http://localhost/api/ai/video-model", {
+				body: { prompt: "a cat" },
+				headers: { accept: "text/event-stream" },
+			});
+
+			const response = await proxy(request, createMockContext(["video-model"]));
+
+			expect(response.status).toBe(200);
+			expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+			expect(await response.text()).toBe(streamBody);
+			expect(afterResponse).not.toHaveBeenCalled();
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+
+		it("returns the videos of a video model call from @ai-sdk/gateway", async () => {
+			const video = { type: "base64", data: "AAAA", mediaType: "video/mp4" };
+			mockFetch.mockResolvedValueOnce(
+				new Response(`data: ${JSON.stringify({ type: "result", videos: [video] })}\n\n`, {
+					status: 200,
+					headers: { "content-type": "text/event-stream" },
+				}),
+			);
+			const proxy = createGatewayProxy();
+			const gateway = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: async (input, init) => {
+					const request = new Request(input, init);
+					const path = new URL(request.url).pathname.replace(/^\/api\/ai\/?/, "");
+					return proxy(request, createMockContext(path.split("/")));
+				},
+			});
+
+			const model = gateway.videoModel("google/veo-3.0-generate-001");
+			if (!model.doGenerate) {
+				throw new Error("the gateway video model has no doGenerate");
+			}
+			const result = await model.doGenerate({
+				prompt: "a cat",
+				n: 1,
+				aspectRatio: undefined,
+				resolution: undefined,
+				duration: undefined,
+				fps: undefined,
+				seed: undefined,
+				generateAudio: undefined,
+				image: undefined,
+				frameImages: undefined,
+				inputReferences: undefined,
+				providerOptions: {},
+			});
+
+			expect(result.videos).toEqual([video]);
+			const [url, init] = mockFetch.mock.calls[0];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/video-model");
+			expect(new Headers(init.headers).get("accept")).toBe("text/event-stream");
+		});
 	});
 
 	describe("bodyless requests", () => {
