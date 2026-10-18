@@ -79,7 +79,7 @@ export type CreateGatewayProxyOptions = {
 	 * Called before the request is sent to the gateway.
 	 * Allows modification of the request body.
 	 *
-	 * Not called for GET or HEAD requests, which are forwarded as is.
+	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 */
 	beforeRequest?: (context: {
 		request: LanguageModelV3CallOptions;
@@ -96,7 +96,7 @@ export type CreateGatewayProxyOptions = {
 	 * If the hook throws while handling a stream, the error is logged and the
 	 * original finish event is forwarded unchanged.
 	 *
-	 * Not called for GET or HEAD requests, which are forwarded as is.
+	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 */
 	afterResponse?: (context: {
 		request: LanguageModelV3CallOptions;
@@ -109,7 +109,7 @@ export type CreateGatewayProxyOptions = {
 	 * A returned error body is sent as JSON with the upstream status.
 	 * A returned `Response` is sent as is.
 	 *
-	 * Not called for GET or HEAD requests, which are forwarded as is.
+	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 */
 	onError?: (context: {
 		request: LanguageModelV3CallOptions;
