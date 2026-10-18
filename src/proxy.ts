@@ -402,6 +402,12 @@ export const createGatewayProxy = ({
 				return handleStreamingResponse(res, requestBody, afterResponse);
 			}
 
+			// Other model calls can answer with an event stream too, such as the video model's
+			// doGenerate. Its events are not language model stream parts, so afterResponse is skipped.
+			if (res.headers.get("content-type")?.toLowerCase().startsWith("text/event-stream")) {
+				return handleStreamingResponse(res, requestBody, undefined);
+			}
+
 			return await handleJsonResponse(res, requestBody, afterResponse);
 		} catch (error) {
 			return proxyFailureResponse(request, error);
