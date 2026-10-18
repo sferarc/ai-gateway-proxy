@@ -146,7 +146,7 @@ The proxy gets a credential on every request with `getGatewayAuthToken()`, in th
 | `afterResponse` | none | `({ request, response }) => GatewayResponse`. Runs on a successful response; see below. |
 | `onError` | none | `({ request, error, status }) => GatewayError \| Response`. Runs when the gateway returns a non-OK status; see below. |
 
-Each hook may also return a promise. The hooks are typed for language model calls and run for every method except `GET` and `HEAD`. Those requests, such as the provider's `GET /config` model list, are forwarded without a body and without running any hook, and the upstream status and body come back unchanged.
+Each hook may also return a promise. The hooks are typed for language model calls and run only for requests with a body. A `GET` or `HEAD` request, such as the provider's `GET /config` model list, and any other request without a body, such as a bodyless `DELETE`, is forwarded without a body and without running any hook, and the upstream status and body come back unchanged.
 
 The path, whether from `extractPath` or the route param, must stay relative: one that starts with `/`, contains `://`, or has a segment that decodes to `.` or `..` or contains `/`, `\` or a NUL byte is rejected with `400 Invalid path` before anything is sent upstream.
 
