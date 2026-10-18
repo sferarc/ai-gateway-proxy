@@ -18,6 +18,9 @@ const FORWARDED_RESPONSE_HEADER =
 const MODEL_CALL_HEADER =
 	/^(?:ai-language-model-.+|ai-model-id|ai-[a-z]+-model-specification-version)$/;
 const REQUEST_METADATA_HEADER = /^(?:ai-o11y-.+|idempotency-key|accept)$/;
+// Successful bodies that are a sequence of values rather than one JSON value: event streams and JSON Lines.
+const STREAM_CONTENT_TYPE =
+	/^\s*(?:text\/event-stream|application\/(?:x-ndjson|jsonl|jsonlines|x-jsonlines))\s*(?:;|$)/i;
 
 /**
  * Extracts the path from the request using either a custom extractor or route params.
@@ -402,9 +405,10 @@ export const createGatewayProxy = ({
 				return handleStreamingResponse(res, requestBody, afterResponse);
 			}
 
-			// Other model calls can answer with an event stream too, such as the video model's
-			// doGenerate. Its events are not language model stream parts, so afterResponse is skipped.
-			if (res.headers.get("content-type")?.toLowerCase().startsWith("text/event-stream")) {
+			// Other calls can answer with a body that is not one JSON value, such as the video model's
+			// event stream or the batch results' JSON Lines. It is not a language model response, so it
+			// passes through without afterResponse.
+			if (STREAM_CONTENT_TYPE.test(res.headers.get("content-type") ?? "")) {
 				return handleStreamingResponse(res, requestBody, undefined);
 			}
 
