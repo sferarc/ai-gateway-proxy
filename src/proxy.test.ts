@@ -1185,6 +1185,61 @@ describe("createGatewayProxy", () => {
 			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/video-model");
 			expect(new Headers(init.headers).get("accept")).toBe("text/event-stream");
 		});
+
+		it("passes a JSON Lines body through instead of parsing it as one JSON value", async () => {
+			const linesBody =
+				'{"type":"text","id":"a","status":"failed"}\n{"type":"text","id":"b","status":"failed"}\n';
+			mockFetch.mockResolvedValueOnce(
+				new Response(linesBody, {
+					status: 200,
+					headers: { "content-type": "application/x-ndjson" },
+				}),
+			);
+			const afterResponse = vi.fn();
+
+			const proxy = createGatewayProxy({ afterResponse });
+			const request = createMockRequest("http://localhost/api/ai/batch/results", {
+				body: { batchId: "batch_1" },
+			});
+
+			const response = await proxy(request, createMockContext(["batch", "results"]));
+
+			expect(response.status).toBe(200);
+			expect(response.headers.get("content-type")).toBe("application/x-ndjson");
+			expect(await response.text()).toBe(linesBody);
+			expect(afterResponse).not.toHaveBeenCalled();
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+
+		it("returns the results of a batch from @ai-sdk/gateway", async () => {
+			const items = [
+				{ type: "text", id: "a", status: "failed", error: { message: "bad" } },
+				{ type: "text", id: "b", status: "cancelled" },
+			];
+			mockFetch.mockResolvedValueOnce(
+				new Response(items.map((item) => `${JSON.stringify(item)}\n`).join(""), {
+					status: 200,
+					headers: { "content-type": "application/x-ndjson" },
+				}),
+			);
+			const proxy = createGatewayProxy();
+			const gateway = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: async (input, init) => {
+					const request = new Request(input, init);
+					const path = new URL(request.url).pathname.replace(/^\/api\/ai\/?/, "");
+					return proxy(request, createMockContext(path.split("/")));
+				},
+			});
+
+			const stream = await gateway.experimental_batch().doGetBatchResults({ batchId: "batch_1" });
+			const results = await Array.fromAsync(stream);
+
+			expect(results).toEqual(items);
+			const [url] = mockFetch.mock.calls[0];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/batch/results");
+		});
 	});
 
 	describe("bodyless requests", () => {

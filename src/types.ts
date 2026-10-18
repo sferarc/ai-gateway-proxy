@@ -96,8 +96,9 @@ export type CreateGatewayProxyOptions = {
 	 * If the hook throws while handling a stream, the error is logged and the
 	 * original finish event is forwarded unchanged.
 	 *
-	 * Not called for an event stream answering a request not marked
-	 * `ai-language-model-streaming: true`, such as a video model call, which is forwarded as is.
+	 * Not called for an event stream or JSON Lines body answering a request not marked
+	 * `ai-language-model-streaming: true`, such as a video model call or batch results, which is
+	 * forwarded as is.
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 */
