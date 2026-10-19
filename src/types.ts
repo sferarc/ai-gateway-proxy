@@ -80,6 +80,9 @@ export type CreateGatewayProxyOptions = {
 	 * Allows modification of the request body.
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
+	 *
+	 * Not called for a request with an `ai-model-id` header, which `@ai-sdk/gateway` sends on every
+	 * model call but a language model's, such as an embedding or image call.
 	 */
 	beforeRequest?: (context: {
 		request: LanguageModelV3CallOptions;
@@ -101,6 +104,9 @@ export type CreateGatewayProxyOptions = {
 	 * forwarded as is.
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
+	 *
+	 * Not called for a request with an `ai-model-id` header, which `@ai-sdk/gateway` sends on every
+	 * model call but a language model's, such as an embedding or image call.
 	 */
 	afterResponse?: (context: {
 		request: LanguageModelV3CallOptions;
@@ -114,6 +120,9 @@ export type CreateGatewayProxyOptions = {
 	 * A returned `Response` is sent as is.
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
+	 *
+	 * Not called for a request with an `ai-model-id` header, which `@ai-sdk/gateway` sends on every
+	 * model call but a language model's, such as an embedding or image call.
 	 */
 	onError?: (context: {
 		request: LanguageModelV3CallOptions;

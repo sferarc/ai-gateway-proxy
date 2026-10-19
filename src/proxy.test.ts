@@ -901,6 +901,62 @@ describe("createGatewayProxy", () => {
 			expect(sent.has("ai-language-model-id")).toBe(false);
 			expect(sent.get("authorization")).toBe("Bearer test-api-key");
 		});
+
+		it("runs no hook on an embedding model call from @ai-sdk/gateway", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse({ embeddings: [[0.1, 0.2]], usage: { tokens: 2 } }),
+			);
+			const beforeRequest = vi.fn(({ request }) => ({ ...request, temperature: 0 }));
+			// A usage logger written for language model responses, which embedding responses are not.
+			const afterResponse = vi.fn(({ response }: { response: GatewayResponse }) => {
+				void response.usage.inputTokens.total;
+				return response;
+			});
+			const proxy = createGatewayProxy({ beforeRequest, afterResponse });
+			const gateway = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: async (input, init) => {
+					const request = new Request(input, init);
+					const path = new URL(request.url).pathname.replace(/^\/api\/ai\/?/, "");
+					return proxy(request, createMockContext(path.split("/")));
+				},
+			});
+
+			const result = await gateway
+				.embeddingModel("openai/text-embedding-3-small")
+				.doEmbed({ values: ["hello"] });
+
+			expect(result.embeddings).toEqual([[0.1, 0.2]]);
+			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ values: ["hello"] });
+			expect(beforeRequest).not.toHaveBeenCalled();
+			expect(afterResponse).not.toHaveBeenCalled();
+		});
+
+		it("runs no onError on a failed call marked with ai-model-id", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse(
+					{ error: { message: "Bad input", type: "invalid_request_error" } },
+					{ status: 400 },
+				),
+			);
+			const onError = vi.fn();
+			const proxy = createGatewayProxy({ onError });
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/ai/image-model", {
+					body: { prompt: "a cat" },
+					headers: { "ai-model-id": "openai/gpt-image-1" },
+				}),
+				createMockContext(["image-model"]),
+			);
+
+			expect(response.status).toBe(400);
+			expect(await response.json()).toEqual({
+				error: { message: "Bad input", type: "invalid_request_error" },
+			});
+			expect(onError).not.toHaveBeenCalled();
+		});
 	});
 
 	describe("upstream response headers", () => {

@@ -379,8 +379,12 @@ export const createGatewayProxy = ({
 				return proxyErrorResponse(400, "invalid_request_error", "Invalid JSON body");
 			}
 
+			// @ai-sdk/gateway sends ai-model-id on every model call but a language model's, such as an
+			// embedding or image call. The hooks are typed for language model calls, so none run there.
+			const runsHooks = !request.headers.has("ai-model-id");
+
 			// Apply beforeRequest hook
-			if (beforeRequest) {
+			if (beforeRequest && runsHooks) {
 				requestBody = await beforeRequest({ request: requestBody });
 			}
 
@@ -397,12 +401,17 @@ export const createGatewayProxy = ({
 			// Handle error responses
 			if (!res.ok) {
 				const errorBody = await parseErrorBody(res);
-				return await createErrorResponse(res, errorBody, requestBody, onError);
+				return await createErrorResponse(
+					res,
+					errorBody,
+					requestBody,
+					runsHooks ? onError : undefined,
+				);
 			}
 
 			// Handle successful responses
 			if (isStreaming) {
-				return handleStreamingResponse(res, requestBody, afterResponse);
+				return handleStreamingResponse(res, requestBody, runsHooks ? afterResponse : undefined);
 			}
 
 			// Other calls can answer with a body that is not one JSON value, such as the video model's
@@ -412,7 +421,7 @@ export const createGatewayProxy = ({
 				return handleStreamingResponse(res, requestBody, undefined);
 			}
 
-			return await handleJsonResponse(res, requestBody, afterResponse);
+			return await handleJsonResponse(res, requestBody, runsHooks ? afterResponse : undefined);
 		} catch (error) {
 			return proxyFailureResponse(request, error);
 		}
