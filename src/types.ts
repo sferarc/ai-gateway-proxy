@@ -81,8 +81,9 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
-	 * Not called for a request with an `ai-model-id` header, which `@ai-sdk/gateway` sends on every
-	 * model call but a language model's, such as an embedding or image call.
+	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
+	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
+	 * embedding or image call.
 	 */
 	beforeRequest?: (context: {
 		request: LanguageModelV3CallOptions;
@@ -105,8 +106,9 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
-	 * Not called for a request with an `ai-model-id` header, which `@ai-sdk/gateway` sends on every
-	 * model call but a language model's, such as an embedding or image call.
+	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
+	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
+	 * embedding or image call.
 	 */
 	afterResponse?: (context: {
 		request: LanguageModelV3CallOptions;
@@ -121,8 +123,9 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
-	 * Not called for a request with an `ai-model-id` header, which `@ai-sdk/gateway` sends on every
-	 * model call but a language model's, such as an embedding or image call.
+	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
+	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
+	 * embedding or image call.
 	 */
 	onError?: (context: {
 		request: LanguageModelV3CallOptions;

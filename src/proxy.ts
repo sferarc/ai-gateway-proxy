@@ -381,7 +381,10 @@ export const createGatewayProxy = ({
 
 			// @ai-sdk/gateway sends ai-model-id on every model call but a language model's, such as an
 			// embedding or image call. The hooks are typed for language model calls, so none run there.
-			const runsHooks = !request.headers.has("ai-model-id");
+			// A request that also names a language model runs them, so a client cannot skip the hooks
+			// on a language model call by adding ai-model-id.
+			const runsHooks =
+				!request.headers.has("ai-model-id") || request.headers.has("ai-language-model-id");
 
 			// Apply beforeRequest hook
 			if (beforeRequest && runsHooks) {
