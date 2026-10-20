@@ -1,6 +1,6 @@
 # Plans
 
-There is no roadmap file and, as of 2026-10-15, no milestone (`gh api repos/sferarc/ai-gateway-proxy/milestones`). What comes next is unknown.
+There is no milestone as of 2026-10-15 (`gh api repos/sferarc/ai-gateway-proxy/milestones`). [[roadmap]] lists the open gaps recorded in the architecture notes.
 
 ## Open issues
 
