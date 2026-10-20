@@ -1,6 +1,6 @@
 # Roadmap
 
-There is no milestone on the repository. This note collects the open gaps recorded in [[architecture/proxy]] and [[architecture/streaming]] (several came out of #47 and #52) so the next shift can pick from one list. Each item names its source and what blocks it. Items marked owner need a decision on the public contract before any code.
+There is no milestone on the repository. This note collects the open gaps recorded in [[architecture/proxy]] and [[architecture/streaming]] (the proxy gaps came out of #47, the V4 parts section out of #33 and the open question out of #18) so the next shift can pick from one list. Each item names its source and what blocks it. Items under Needs the owner need a decision on the public contract before any code.
 
 ## Needs the owner
 
@@ -9,7 +9,7 @@ There is no milestone on the repository. This note collects the open gaps record
 
 ## Can be done without the owner
 
-3. **Hooks on batch status and cancel.** These requests carry no model header, so `beforeRequest`, `afterResponse` and `onError` still run on them with types that do not fit. Source: step 6 of [[architecture/proxy]], marked there as a known gap. A fix needs a way to tell these requests apart by path.
+3. **Hook result without stream metadata.** An `afterResponse` that returns `undefined` or `null` errors the client stream instead of forwarding the upstream `finish` event. Source: "Known gap" in [[architecture/streaming]]. The fix is to read the result inside the `try` or validate it, and add a test.
 4. **Language model calls that send `ai-model-id` alone.** Whether the gateway serves a `/language-model` call without `ai-language-model-id` is unknown, and if it does, that call skips the hooks. Settle it against the gateway docs or a recorded request before changing the check. Source: step 6 of [[architecture/proxy]].
 
 ## Order
