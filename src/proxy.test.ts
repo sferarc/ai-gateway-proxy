@@ -997,6 +997,106 @@ describe("createGatewayProxy", () => {
 			});
 			expect(onError).toHaveBeenCalledOnce();
 		});
+
+		it("runs no hook on a batch status or cancel call from @ai-sdk/gateway", async () => {
+			mockFetch.mockImplementation(async () =>
+				createMockHttpResponse({ status: "pending", requestCounts: { total: 2, pending: 2 } }),
+			);
+			const beforeRequest = vi.fn(({ request }) => ({ ...request, temperature: 0 }));
+			// A usage logger written for language model responses, which batch status bodies are not.
+			const afterResponse = vi.fn(({ response }: { response: GatewayResponse }) => {
+				void response.usage.inputTokens.total;
+				return response;
+			});
+			const proxy = createGatewayProxy({ beforeRequest, afterResponse });
+			const gateway = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: async (input, init) => {
+					const request = new Request(input, init);
+					const path = new URL(request.url).pathname.replace(/^\/api\/ai\/?/, "");
+					return proxy(request, createMockContext(path.split("/")));
+				},
+			});
+
+			const batch = gateway.experimental_batch();
+			const status = await batch.doGetBatchStatus({ batchId: "batch_1" });
+			expect(batch.doCancelBatch).toBeDefined();
+			await batch.doCancelBatch?.({ batchId: "batch_1" });
+
+			expect(status.status).toBe("pending");
+			expect(mockFetch.mock.calls.map(([url]) => url)).toEqual([
+				"https://ai-gateway.vercel.sh/v1/ai/batch/status",
+				"https://ai-gateway.vercel.sh/v1/ai/batch/cancel",
+			]);
+			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ batchId: "batch_1" });
+			expect(beforeRequest).not.toHaveBeenCalled();
+			expect(afterResponse).not.toHaveBeenCalled();
+		});
+
+		it("runs no onError on a failed batch status call", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse(
+					{ error: { message: "Batch not found", type: "not_found_error" } },
+					{ status: 404 },
+				),
+			);
+			const onError = vi.fn();
+			const proxy = createGatewayProxy({ onError });
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/ai/batch/status", {
+					body: { batchId: "batch_1" },
+				}),
+				createMockContext(["batch", "status"]),
+			);
+
+			expect(response.status).toBe(404);
+			expect(await response.json()).toEqual({
+				error: { message: "Batch not found", type: "not_found_error" },
+			});
+			expect(onError).not.toHaveBeenCalled();
+		});
+
+		it.each(["language-model?x/batch/status", "language-model#/batch/cancel"])(
+			"runs every hook on a language model call whose path %s only looks like a batch read",
+			async (path) => {
+				mockFetch
+					.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()))
+					.mockResolvedValueOnce(
+						createMockHttpResponse(
+							{ error: { message: "Bad input", type: "invalid_request_error" } },
+							{ status: 400 },
+						),
+					);
+				const beforeRequest = vi.fn(({ request }) => ({ ...request, maxOutputTokens: 10 }));
+				const afterResponse = vi.fn(({ response }) => response);
+				const onError = vi.fn(() => ({
+					error: { message: "Replaced", type: "invalid_request_error" },
+				}));
+				const proxy = createGatewayProxy({ beforeRequest, afterResponse, onError });
+				const send = () =>
+					proxy(
+						createMockRequest("http://localhost/api/ai/language-model", {
+							body: { prompt: [] },
+							headers: { "ai-language-model-id": "openai/gpt-4o" },
+						}),
+						createMockContext([path]),
+					);
+
+				expect((await send()).status).toBe(200);
+				expect(new URL(mockFetch.mock.calls[0][0]).pathname).toBe("/v1/ai/language-model");
+				expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+					prompt: [],
+					maxOutputTokens: 10,
+				});
+				expect(beforeRequest).toHaveBeenCalledOnce();
+				expect(afterResponse).toHaveBeenCalledOnce();
+
+				expect((await send()).status).toBe(400);
+				expect(onError).toHaveBeenCalledOnce();
+			},
+		);
 	});
 
 	describe("upstream response headers", () => {
