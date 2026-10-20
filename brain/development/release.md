@@ -17,7 +17,7 @@ The workflow authenticates to npm with trusted publishing: `id-token: write`, `p
 Checked 2026-10-20 against `main` at fd2d0bb:
 
 - `release.yml` is gated on `vars.RELEASE_ENABLED == 'true'`, runs `changesets/action` (pinned SHA, v2.1.2) with `publish-script: pnpm release`, and grants `id-token: write`, `contents: write` and `pull-requests: write` to the job only. Top-level permissions are `contents: read`.
-- `github-token` is `secrets.GIT_TOKEN`. `gh secret list --org sferarc` shows `GIT_TOKEN` as an organisation secret visible to all repositories (created 2026-03-18). The repository has no secret of its own. Its scopes are unknown; it must be able to push branches and open pull requests here.
+- `github-token` is `secrets.GIT_TOKEN`. `gh secret list --org sferarc` shows `GIT_TOKEN` as an organization secret visible to all repositories (created 2026-03-18). The repository has no secret of its own. Its scopes are unknown; it must be able to push branches and open pull requests here.
 - Publishing relies on npm trusted publishing: no `NPM_TOKEN`, `publishConfig.provenance: true`, npm from the Node in `mise.toml`. Whether npmjs.com lists a trusted publisher for this repository is unknown and cannot be read without the owner's npm login.
 - `.changeset/config.json` is sound: base `main`, `access: public`, no auto-commit, no linked or fixed groups, nothing ignored.
 - `RELEASE_ENABLED` is not set (`gh variable list` shows only the `HQ_*` variables).
@@ -28,8 +28,8 @@ As of 2026-10-20:
 
 - npm has `0.0.1`, `0.0.2` and `0.1.0`, all published on 2025-12-28 from the monorepo (`npm view ai-gateway-proxy versions time`). `package.json` is `0.1.0`.
 - The repository carries the monorepo's tags `ai-gateway-proxy@0.0.2` and `ai-gateway-proxy@0.1.0`.
-- Every pending changeset is `patch` and names `ai-gateway-proxy`. Each shipped `src` fix since 0.1.0 has one (matched by `git log --diff-filter=A -- .changeset` against `git log -- src`). The dependency bump in #49 and the README rewrite in #24 are covered by `update-runtime-dependencies.md`. Test-only and tooling commits (#18, #27, #29, #31) ship nothing and have none.
-- The first version pull request would be `0.1.1`. Several changes alter behaviour a caller can see (hooks now skip bodyless and non-language calls, JSON error bodies), so the owner may prefer a `minor` bump: change one changeset to `minor` before merging the version pull request.
+- Every pending changeset names `ai-gateway-proxy`. Each shipped `src` fix since 0.1.0 has one (matched by `git log --diff-filter=A -- .changeset` against `git log -- src`), and `update-runtime-dependencies.md` covers the dependency changes and the README rewrite. Test-only and tooling commits ship nothing and have none.
+- The runtime dependencies moved majors since 0.1.0: `@ai-sdk/provider` 3 to 4, `@ai-sdk/provider-utils` 4 to 5, `@vercel/oidc` 3 to 4 (`npm view ai-gateway-proxy@0.1.0 dependencies` against the catalog in `pnpm-workspace.yaml`). The public types import from `@ai-sdk/provider`, so `update-runtime-dependencies.md` is `minor` and the first version pull request is `0.2.0`.
 
 ## Owner steps to publish
 
@@ -37,8 +37,6 @@ As of 2026-10-20:
 2. Confirm `GIT_TOKEN` can push branches and open pull requests in `sferarc/ai-gateway-proxy` (it is already shared with the repository).
 3. Set the repository variable `RELEASE_ENABLED` to `true`. The next push to `main` opens the version pull request; merging it publishes.
 
-Agents set `RELEASE_ENABLED` only after step 1 is confirmed.
-
 ## Rules for contributors and agents
 
-Never publish, tag or bump the version. Do not set `RELEASE_ENABLED` until the owner has confirmed the trusted publisher. Adding a changeset to a pull request is fine.
+Never publish, tag, bump the version or set `RELEASE_ENABLED`. Adding a changeset to a pull request is fine.
