@@ -55,7 +55,10 @@ export class StreamContentAggregator {
 	process(part: LanguageModelV3StreamPart): void {
 		switch (part.type) {
 			case "stream-start":
-				this.warnings.push(...part.warnings);
+				// The part comes off the wire, so a missing or malformed warnings field adds none.
+				if (Array.isArray(part.warnings)) {
+					this.warnings.push(...part.warnings);
+				}
 				break;
 
 			case "text-start":
@@ -147,6 +150,17 @@ export class StreamContentAggregator {
 }
 
 /**
+ * Encodes event data as an SSE event. The parser joins multi-line data with "\n",
+ * so each line needs its own `data:` field to reach the client intact.
+ */
+function sseEvent(data: string): string {
+	return `${data
+		.split("\n")
+		.map((line) => `data: ${line}`)
+		.join("\n")}\n\n`;
+}
+
+/**
  * Creates a transform stream that:
  * 1. Passes through all SSE events immediately
  * 2. Aggregates content using StreamContentAggregator
@@ -174,80 +188,83 @@ export function createStreamTransformer(
 	let finishSeen = false;
 	let warnedNonJson = false;
 
+	/**
+	 * Returns the data to forward for one upstream event, calling afterResponse on finish.
+	 */
+	async function transformEvent(data: string): Promise<string> {
+		// Handle DONE marker (end of stream)
+		if (data === "DONE" || data === "[DONE]") {
+			return data;
+		}
+
+		// Parse the JSON event data. Data that is not a JSON object, such as `null`, is not a stream
+		// part either, so it passes through like non-JSON data rather than reaching the aggregator.
+		let json: unknown;
+		try {
+			json = JSON.parse(data);
+		} catch {}
+		if (typeof json !== "object" || json === null) {
+			if (!warnedNonJson) {
+				warnedNonJson = true;
+				console.warn("upstream stream event is not a JSON object, passing it through unparsed");
+			}
+			return data;
+		}
+		const parsed = json as LanguageModelV3StreamPart;
+
+		// Track content for aggregation
+		aggregator.process(parsed);
+
+		// Pass through every event but finish unchanged
+		if (parsed.type !== "finish") {
+			return data;
+		}
+
+		finishSeen = true;
+		let modifiedResponse: GatewayResponse;
+		try {
+			modifiedResponse = await afterResponse({
+				request: requestBody,
+				response: aggregator.getResponse(),
+			});
+		} catch (error) {
+			console.error("afterResponse hook failed, forwarding original finish event:", error);
+			return data;
+		}
+
+		// Emit modified finish event
+		const modifiedFinish: LanguageModelV3StreamPart = {
+			type: "finish",
+			finishReason: modifiedResponse.finishReason,
+			usage: modifiedResponse.usage,
+			providerMetadata: modifiedResponse.providerMetadata,
+		};
+		return JSON.stringify(modifiedFinish);
+	}
+
+	// Reading in pull rather than start keeps backpressure: one upstream event per client read,
+	// so a slow client does not make the proxy buffer the whole response.
 	return new ReadableStream({
-		async start(controller) {
+		async pull(controller) {
 			try {
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) break;
-
-					const { data } = value;
-
-					// Handle DONE marker (end of stream)
-					if (data === "DONE" || data === "[DONE]") {
-						controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-						continue;
+				const { done, value } = await reader.read();
+				if (done) {
+					if (!finishSeen && !cancelled) {
+						console.warn(
+							"upstream stream ended without a finish event, afterResponse was not called",
+						);
 					}
-
-					// Parse the JSON event data
-					let parsed: LanguageModelV3StreamPart;
-					try {
-						parsed = JSON.parse(data);
-					} catch {
-						if (!warnedNonJson) {
-							warnedNonJson = true;
-							console.warn("upstream stream event is not valid JSON, passing it through unparsed");
-						}
-						controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-						continue;
-					}
-
-					// Track content for aggregation
-					aggregator.process(parsed);
-
-					// Handle finish event specially - call afterResponse hook
-					if (parsed.type === "finish") {
-						finishSeen = true;
-						let modifiedResponse: GatewayResponse;
-						try {
-							modifiedResponse = await afterResponse({
-								request: requestBody,
-								response: aggregator.getResponse(),
-							});
-						} catch (error) {
-							console.error("afterResponse hook failed, forwarding original finish event:", error);
-							controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-							continue;
-						}
-
-						// Emit modified finish event
-						const modifiedFinish: LanguageModelV3StreamPart = {
-							type: "finish",
-							finishReason: modifiedResponse.finishReason,
-							usage: modifiedResponse.usage,
-							providerMetadata: modifiedResponse.providerMetadata,
-						};
-
-						controller.enqueue(encoder.encode(`data: ${JSON.stringify(modifiedFinish)}\n\n`));
-						continue;
-					}
-
-					// Pass through event unchanged
-					controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+					controller.close();
+					reader.releaseLock();
+					return;
 				}
 
-				if (!finishSeen && !cancelled) {
-					console.warn(
-						"upstream stream ended without a finish event, afterResponse was not called",
-					);
-				}
-				controller.close();
+				controller.enqueue(encoder.encode(sseEvent(await transformEvent(value.data))));
 			} catch (error) {
 				if (!cancelled) {
 					console.error("upstream stream failed, erroring the client stream:", error);
 				}
 				controller.error(error);
-			} finally {
 				reader.releaseLock();
 			}
 		},

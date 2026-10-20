@@ -5,7 +5,11 @@ A request is treated as streaming when it carries `ai-language-model-streaming: 
 - **No `afterResponse` hook:** the upstream body is returned as is, keeping its `content-type` (default `text/event-stream`) and the allowlisted upstream response headers ([[proxy]] step 9).
 - **With `afterResponse`:** `createStreamTransformer` (`src/stream.ts`) parses the SSE body with `EventSourceParserStream` from `@ai-sdk/provider-utils`. Every event is forwarded immediately and also fed to a `StreamContentAggregator`. On the `finish` event it calls `afterResponse` with the aggregated `GatewayResponse` and emits a rewritten `finish` event carrying the hook's `finishReason`, `usage` and `providerMetadata`. Content has already been streamed by then, so the hook can only change that metadata (doc comment on `afterResponse` in `src/types.ts`). If the hook throws, the error is logged with `console.error` and the upstream `finish` event is forwarded instead, so the stream still completes (#11).
 
-`DONE` and `[DONE]` markers and non-JSON events pass through unchanged.
+`DONE` and `[DONE]` markers and events whose data is not a JSON object pass through unchanged without reaching the aggregator. That covers valid JSON that is not an object, such as `null`, `42` or `"text"`: it used to reach `StreamContentAggregator.process`, whose `part.type` read threw on `null` and errored the client stream, where the same upstream with no hook reached the client intact. Pinned by "passes JSON data that is not an object through like non-JSON data".
+
+A `stream-start` part whose `warnings` is missing or not an array adds no warnings. The aggregator used to spread `part.warnings` unchecked, so such a part threw `part.warnings is not iterable` and errored the client stream, where the same upstream with no hook reached the client intact. Pinned by "passes a stream-start without a warnings array through and still calls the hook".
+
+Events are re-encoded with `sseEvent` (`src/stream.ts`), which writes one `data:` field per line. The parser joins a multi-line event's `data:` lines with `\n`; writing that back as a single `data: ${data}` field left bare lines that the client's SSE parser ignores, so it received only the first line. Only the data field is re-emitted: `event:`, `id:` and `retry:` fields are not forwarded on this path. Pinned by "keeps every line of an event whose data spans several data lines".
 
 ## Logging
 
@@ -13,10 +17,14 @@ A request is treated as streaming when it carries `ai-language-model-streaming: 
 
 - `console.error("upstream stream failed, erroring the client stream:", error)` when reading the upstream body fails mid-stream (connection reset, decoder error). The client stream is then errored with the same error.
 - `console.warn` once when the upstream ends without a `finish` event, saying `afterResponse` was not called.
-- `console.warn` once per stream on the first non-JSON, non-`DONE` event. The event itself is still forwarded unchanged.
+- `console.warn` once per stream on the first non-`DONE` event whose data is not a JSON object ("is not a JSON object, passing it through unparsed"). The event itself is still forwarded unchanged.
 - `console.error("afterResponse hook failed, forwarding original finish event:", error)` when the hook throws.
 
 A client cancel is not logged: `cancel` sets a flag that suppresses both the error and the missing-`finish` warning, and still cancels the upstream with the same reason. Covered by `src/stream.test.ts`, which spies on `console.warn` and `console.error` and checks that payload text never reaches them.
+
+## Backpressure
+
+The returned stream reads the upstream in `pull`, one event per call, so the upstream is read only as fast as the client reads. It used to loop over the whole upstream in `start`, which enqueued every event whatever the client's pace: a slow client made the proxy hold the entire response in memory, and an endless upstream ran the process out of heap. Pinned by "reads the upstream only as fast as the client reads" in `src/stream.test.ts`. The pass-through path with no `afterResponse` returns the upstream body as is and always kept backpressure.
 
 Cancelling the returned stream cancels the parsed upstream reader with the same reason (`cancel(reason) { return reader.cancel(reason) }` in `createStreamTransformer`, #11), so a client that goes away stops the upstream read instead of leaving it running.
 

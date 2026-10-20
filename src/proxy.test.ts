@@ -753,6 +753,39 @@ describe("createGatewayProxy", () => {
 
 			expect(body.error.message).toBe("AI Gateway returned 503");
 		});
+
+		it.each([
+			['{"message":"Bad gateway"}', 'AI Gateway returned 502: {"message":"Bad gateway"}'],
+			['"Bad gateway"', 'AI Gateway returned 502: "Bad gateway"'],
+			["null", "AI Gateway returned 502: null"],
+			['{"error":"Bad gateway"}', 'AI Gateway returned 502: {"error":"Bad gateway"}'],
+		])("wraps a JSON error body without an error message: %s", async (text, message) => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(text, {
+					status: 502,
+					statusText: "",
+					headers: { "content-type": "application/json" },
+				}),
+			);
+
+			let receivedError: GatewayError | undefined;
+			const proxy = createGatewayProxy({
+				onError: ({ error }) => {
+					receivedError = error;
+					return { error: { ...error.error, message: `wrapped: ${error.error.message}` } };
+				},
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+			const body = await response.json();
+
+			expect(response.status).toBe(502);
+			expect(receivedError).toEqual({ error: { message, type: "gateway_error" } });
+			expect(body.error.message).toBe(`wrapped: ${message}`);
+		});
 	});
 
 	describe("request header forwarding", () => {
@@ -868,6 +901,102 @@ describe("createGatewayProxy", () => {
 			expect(sent.has("ai-language-model-id")).toBe(false);
 			expect(sent.get("authorization")).toBe("Bearer test-api-key");
 		});
+
+		it("runs no hook on an embedding model call from @ai-sdk/gateway", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse({ embeddings: [[0.1, 0.2]], usage: { tokens: 2 } }),
+			);
+			const beforeRequest = vi.fn(({ request }) => ({ ...request, temperature: 0 }));
+			// A usage logger written for language model responses, which embedding responses are not.
+			const afterResponse = vi.fn(({ response }: { response: GatewayResponse }) => {
+				void response.usage.inputTokens.total;
+				return response;
+			});
+			const proxy = createGatewayProxy({ beforeRequest, afterResponse });
+			const gateway = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: async (input, init) => {
+					const request = new Request(input, init);
+					const path = new URL(request.url).pathname.replace(/^\/api\/ai\/?/, "");
+					return proxy(request, createMockContext(path.split("/")));
+				},
+			});
+
+			const result = await gateway
+				.embeddingModel("openai/text-embedding-3-small")
+				.doEmbed({ values: ["hello"] });
+
+			expect(result.embeddings).toEqual([[0.1, 0.2]]);
+			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ values: ["hello"] });
+			expect(beforeRequest).not.toHaveBeenCalled();
+			expect(afterResponse).not.toHaveBeenCalled();
+		});
+
+		it("runs no onError on a failed call marked with ai-model-id", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse(
+					{ error: { message: "Bad input", type: "invalid_request_error" } },
+					{ status: 400 },
+				),
+			);
+			const onError = vi.fn();
+			const proxy = createGatewayProxy({ onError });
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/ai/image-model", {
+					body: { prompt: "a cat" },
+					headers: { "ai-model-id": "openai/gpt-image-1" },
+				}),
+				createMockContext(["image-model"]),
+			);
+
+			expect(response.status).toBe(400);
+			expect(await response.json()).toEqual({
+				error: { message: "Bad input", type: "invalid_request_error" },
+			});
+			expect(onError).not.toHaveBeenCalled();
+		});
+
+		it("runs every hook on a language model call that also sends ai-model-id", async () => {
+			mockFetch
+				.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()))
+				.mockResolvedValueOnce(
+					createMockHttpResponse(
+						{ error: { message: "Bad input", type: "invalid_request_error" } },
+						{ status: 400 },
+					),
+				);
+			const beforeRequest = vi.fn(({ request }) => ({ ...request, maxOutputTokens: 10 }));
+			const afterResponse = vi.fn(({ response }) => response);
+			const onError = vi.fn(() => ({
+				error: { message: "Replaced", type: "invalid_request_error" },
+			}));
+			const proxy = createGatewayProxy({ beforeRequest, afterResponse, onError });
+			const send = () =>
+				proxy(
+					createMockRequest("http://localhost/api/ai/language-model", {
+						body: { prompt: [] },
+						headers: { "ai-language-model-id": "openai/gpt-4o", "ai-model-id": "anything" },
+					}),
+					createMockContext(["language-model"]),
+				);
+
+			expect((await send()).status).toBe(200);
+			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+				prompt: [],
+				maxOutputTokens: 10,
+			});
+			expect(beforeRequest).toHaveBeenCalledOnce();
+			expect(afterResponse).toHaveBeenCalledOnce();
+
+			const failed = await send();
+			expect(failed.status).toBe(400);
+			expect(await failed.json()).toEqual({
+				error: { message: "Replaced", type: "invalid_request_error" },
+			});
+			expect(onError).toHaveBeenCalledOnce();
+		});
 	});
 
 	describe("upstream response headers", () => {
@@ -981,6 +1110,20 @@ describe("createGatewayProxy", () => {
 			});
 		});
 
+		it("forwards retry-after and request ids on a bodyless GET", async () => {
+			mockFetch.mockResolvedValueOnce(rateLimited());
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+			const response = await proxy.GET(request, createMockContext(["config"]));
+
+			expect(response.status).toBe(429);
+			expect(response.headers.get("content-type")).toBe("application/json");
+			expect(response.headers.get("retry-after")).toBe("2");
+			expect(response.headers.get("retry-after-ms")).toBe("1500");
+			expectOnlyAllowlisted(response);
+		});
+
 		it("passes a Response returned by onError through untouched", async () => {
 			mockFetch.mockResolvedValueOnce(rateLimited());
 
@@ -1068,6 +1211,130 @@ describe("createGatewayProxy", () => {
 			const response = await proxy(request, createMockContext(["chat"]));
 
 			await expectGatewayError(response, 500, "proxy_error", "No response body");
+		});
+
+		it("passes an event stream through on a request not marked as streaming", async () => {
+			const streamBody = 'data: {"type":"result","videos":[]}\n\n';
+			mockFetch.mockResolvedValueOnce(
+				new Response(streamBody, {
+					status: 200,
+					headers: { "content-type": "text/event-stream; charset=utf-8" },
+				}),
+			);
+			const afterResponse = vi.fn();
+
+			const proxy = createGatewayProxy({ afterResponse });
+			const request = createMockRequest("http://localhost/api/ai/video-model", {
+				body: { prompt: "a cat" },
+				headers: { accept: "text/event-stream" },
+			});
+
+			const response = await proxy(request, createMockContext(["video-model"]));
+
+			expect(response.status).toBe(200);
+			expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+			expect(await response.text()).toBe(streamBody);
+			expect(afterResponse).not.toHaveBeenCalled();
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+
+		it("returns the videos of a video model call from @ai-sdk/gateway", async () => {
+			const video = { type: "base64", data: "AAAA", mediaType: "video/mp4" };
+			mockFetch.mockResolvedValueOnce(
+				new Response(`data: ${JSON.stringify({ type: "result", videos: [video] })}\n\n`, {
+					status: 200,
+					headers: { "content-type": "text/event-stream" },
+				}),
+			);
+			const proxy = createGatewayProxy();
+			const gateway = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: async (input, init) => {
+					const request = new Request(input, init);
+					const path = new URL(request.url).pathname.replace(/^\/api\/ai\/?/, "");
+					return proxy(request, createMockContext(path.split("/")));
+				},
+			});
+
+			const model = gateway.videoModel("google/veo-3.0-generate-001");
+			if (!model.doGenerate) {
+				throw new Error("the gateway video model has no doGenerate");
+			}
+			const result = await model.doGenerate({
+				prompt: "a cat",
+				n: 1,
+				aspectRatio: undefined,
+				resolution: undefined,
+				duration: undefined,
+				fps: undefined,
+				seed: undefined,
+				generateAudio: undefined,
+				image: undefined,
+				frameImages: undefined,
+				inputReferences: undefined,
+				providerOptions: {},
+			});
+
+			expect(result.videos).toEqual([video]);
+			const [url, init] = mockFetch.mock.calls[0];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/video-model");
+			expect(new Headers(init.headers).get("accept")).toBe("text/event-stream");
+		});
+
+		it("passes a JSON Lines body through instead of parsing it as one JSON value", async () => {
+			const linesBody =
+				'{"type":"text","id":"a","status":"failed"}\n{"type":"text","id":"b","status":"failed"}\n';
+			mockFetch.mockResolvedValueOnce(
+				new Response(linesBody, {
+					status: 200,
+					headers: { "content-type": "application/x-ndjson" },
+				}),
+			);
+			const afterResponse = vi.fn();
+
+			const proxy = createGatewayProxy({ afterResponse });
+			const request = createMockRequest("http://localhost/api/ai/batch/results", {
+				body: { batchId: "batch_1" },
+			});
+
+			const response = await proxy(request, createMockContext(["batch", "results"]));
+
+			expect(response.status).toBe(200);
+			expect(response.headers.get("content-type")).toBe("application/x-ndjson");
+			expect(await response.text()).toBe(linesBody);
+			expect(afterResponse).not.toHaveBeenCalled();
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+
+		it("returns the results of a batch from @ai-sdk/gateway", async () => {
+			const items = [
+				{ type: "text", id: "a", status: "failed", error: { message: "bad" } },
+				{ type: "text", id: "b", status: "cancelled" },
+			];
+			mockFetch.mockResolvedValueOnce(
+				new Response(items.map((item) => `${JSON.stringify(item)}\n`).join(""), {
+					status: 200,
+					headers: { "content-type": "application/x-ndjson" },
+				}),
+			);
+			const proxy = createGatewayProxy();
+			const gateway = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: async (input, init) => {
+					const request = new Request(input, init);
+					const path = new URL(request.url).pathname.replace(/^\/api\/ai\/?/, "");
+					return proxy(request, createMockContext(path.split("/")));
+				},
+			});
+
+			const stream = await gateway.experimental_batch().doGetBatchResults({ batchId: "batch_1" });
+			const results = await Array.fromAsync(stream);
+
+			expect(results).toEqual(items);
+			const [url] = mockFetch.mock.calls[0];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/batch/results");
 		});
 	});
 
@@ -1169,6 +1436,30 @@ describe("createGatewayProxy", () => {
 
 			const proxy = createGatewayProxy({ beforeRequest });
 			const request = createMockRequest("http://localhost/api/ai/config", { method: "DELETE" });
+
+			const response = await proxy.DELETE(request, createMockContext(["config"]));
+
+			expect(response.status).toBe(200);
+			expect(await response.json()).toEqual({ ok: true });
+			const [url, init] = mockFetch.mock.calls[0];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/config");
+			expect(init.method).toBe("DELETE");
+			expect(init.body).toBeUndefined();
+			expect(beforeRequest).not.toHaveBeenCalled();
+		});
+
+		it("forwards a DELETE whose body is an empty stream, as Node adapters build it", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ ok: true }));
+			const beforeRequest = vi.fn();
+
+			const proxy = createGatewayProxy({ beforeRequest });
+			// The README's Express adapter passes `Readable.toWeb(req)` for every method but GET and HEAD.
+			const request = new Request("http://localhost/api/ai/config", {
+				method: "DELETE",
+				body: new ReadableStream({ start: (controller) => controller.close() }),
+				duplex: "half",
+			} as RequestInit);
+			expect(request.body).not.toBeNull();
 
 			const response = await proxy.DELETE(request, createMockContext(["config"]));
 

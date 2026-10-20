@@ -481,6 +481,18 @@ describe("createStreamTransformer", () => {
 		expect(output).toBe("data: not json\n\ndata: [DONE]\n\n");
 	});
 
+	it("keeps every line of an event whose data spans several data lines", async () => {
+		const json = 'data: {"type":"text-delta",\ndata: "id":"t1","delta":"Hi"}\n\n';
+		const text = "data: line one\ndata: line two\n\n";
+		const hook = vi.fn(passThroughHook);
+		const output = await readAll(
+			createStreamTransformer(sourceOf([json, text, sse(finishEvent)]), requestBody, hook),
+		);
+
+		expect(output.startsWith(json + text)).toBe(true);
+		expect(hook.mock.calls[0]?.[0].response.content).toEqual([{ type: "text", text: "Hi" }]);
+	});
+
 	it("replaces the finish event with the hook result", async () => {
 		const hook = vi.fn(
 			({ response }: { request: LanguageModelV3CallOptions; response: GatewayResponse }) => ({
@@ -554,6 +566,26 @@ describe("createStreamTransformer", () => {
 		expect(consoleWarn).not.toHaveBeenCalled();
 	});
 
+	it("reads the upstream only as fast as the client reads", async () => {
+		let pulls = 0;
+		const source = new ReadableStream<Uint8Array>({
+			pull(controller) {
+				pulls++;
+				controller.enqueue(encoder.encode(sse({ type: "text-delta", id: "t1", delta: "x" })));
+				if (pulls === 200) {
+					controller.close();
+				}
+			},
+		});
+		const reader = createStreamTransformer(source, requestBody, passThroughHook).getReader();
+
+		await reader.read();
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(pulls).toBeLessThan(10);
+		await reader.cancel();
+	});
+
 	it("logs once and errors the client stream when the upstream body fails mid-stream", async () => {
 		const failure = new Error("connection reset");
 		let sent = false;
@@ -607,8 +639,38 @@ describe("createStreamTransformer", () => {
 
 		expect(output).toContain("data: secret one\n\ndata: secret two\n\n");
 		expect(consoleWarn).toHaveBeenCalledOnce();
-		expect(consoleWarn.mock.calls[0]?.[0]).toMatch(/not valid JSON/);
+		expect(consoleWarn.mock.calls[0]?.[0]).toMatch(/not a JSON object/);
 		expect(loggedText()).not.toContain("secret");
+	});
+
+	it("passes JSON data that is not an object through like non-JSON data", async () => {
+		const hook = vi.fn(passThroughHook);
+		const events = [sse("null"), sse("42"), sse('"text"'), sse(finishEvent), sse("[DONE]")];
+
+		const output = await readAll(createStreamTransformer(sourceOf(events), requestBody, hook));
+
+		expect(output).toBe(events.join(""));
+		expect(hook).toHaveBeenCalledOnce();
+		expect(consoleWarn).toHaveBeenCalledOnce();
+		expect(consoleWarn.mock.calls[0]?.[0]).toMatch(/not a JSON object/);
+		expect(consoleError).not.toHaveBeenCalled();
+	});
+
+	it("passes a stream-start without a warnings array through and still calls the hook", async () => {
+		const hook = vi.fn(passThroughHook);
+		const events = [
+			sse({ type: "stream-start" }),
+			sse({ type: "stream-start", warnings: null }),
+			sse(finishEvent),
+			sse("[DONE]"),
+		];
+
+		const output = await readAll(createStreamTransformer(sourceOf(events), requestBody, hook));
+
+		expect(output).toBe(events.join(""));
+		expect(hook).toHaveBeenCalledOnce();
+		expect(hook.mock.calls[0]?.[0].response.warnings).toEqual([]);
+		expect(consoleError).not.toHaveBeenCalled();
 	});
 
 	it("does not warn when the stream finishes normally", async () => {

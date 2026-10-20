@@ -79,7 +79,11 @@ export type CreateGatewayProxyOptions = {
 	 * Called before the request is sent to the gateway.
 	 * Allows modification of the request body.
 	 *
-	 * Not called for GET or HEAD requests, which are forwarded as is.
+	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
+	 *
+	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
+	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
+	 * embedding or image call.
 	 */
 	beforeRequest?: (context: {
 		request: LanguageModelV3CallOptions;
@@ -96,7 +100,15 @@ export type CreateGatewayProxyOptions = {
 	 * If the hook throws while handling a stream, the error is logged and the
 	 * original finish event is forwarded unchanged.
 	 *
-	 * Not called for GET or HEAD requests, which are forwarded as is.
+	 * Not called for an event stream or JSON Lines body answering a request not marked
+	 * `ai-language-model-streaming: true`, such as a video model call or batch results, which is
+	 * forwarded as is.
+	 *
+	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
+	 *
+	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
+	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
+	 * embedding or image call.
 	 */
 	afterResponse?: (context: {
 		request: LanguageModelV3CallOptions;
@@ -109,7 +121,11 @@ export type CreateGatewayProxyOptions = {
 	 * A returned error body is sent as JSON with the upstream status.
 	 * A returned `Response` is sent as is.
 	 *
-	 * Not called for GET or HEAD requests, which are forwarded as is.
+	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
+	 *
+	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
+	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
+	 * embedding or image call.
 	 */
 	onError?: (context: {
 		request: LanguageModelV3CallOptions;

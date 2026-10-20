@@ -146,7 +146,7 @@ The proxy gets a credential on every request with `getGatewayAuthToken()`, in th
 | `afterResponse` | none | `({ request, response }) => GatewayResponse`. Runs on a successful response; see below. |
 | `onError` | none | `({ request, error, status }) => GatewayError \| Response`. Runs when the gateway returns a non-OK status; see below. |
 
-Each hook may also return a promise. The hooks are typed for language model calls and run for every method except `GET` and `HEAD`. Those requests, such as the provider's `GET /config` model list, are forwarded without a body and without running any hook, and the upstream status and body come back unchanged.
+Each hook may also return a promise. The hooks are typed for language model calls and run only for requests with a body. A `GET` or `HEAD` request, such as the provider's `GET /config` model list, and any other request whose body is missing or empty, such as a bodyless `DELETE`, is forwarded without a body and without running any hook, and the upstream status and body come back unchanged. A request carrying `ai-model-id`, which `@ai-sdk/gateway` sends on every model call but a language model's (embedding, image, video, speech, transcription, reranking, decision and batch start), is forwarded with its body and runs no hook either, since its body and response are not language model ones. A request that also carries `ai-language-model-id` is a language model call and runs every hook, so a client cannot turn the hooks off by adding `ai-model-id`. A request with a body and neither header, such as a batch status or cancel call, runs the hooks.
 
 The path, whether from `extractPath` or the route param, must stay relative: one that starts with `/`, contains `://`, or has a segment that decodes to `.` or `..` or contains `/`, `\` or a NUL byte is rejected with `400 Invalid path` before anything is sent upstream.
 
@@ -154,10 +154,11 @@ The path, whether from `extractPath` or the route param, must stay relative: one
 
 - **Non-streamed responses:** receives the gateway's JSON body as `response`, and the value it returns is sent to the client instead.
 - **Streamed responses:** every event is forwarded to the client as it arrives. When the `finish` event comes, the hook receives the aggregated response, and the `finishReason`, `usage` and `providerMetadata` it returns replace those in the `finish` event; content changes have no effect because the content has already been sent. If the hook throws, the error is logged and the original `finish` event is forwarded. If the stream ends without a `finish` event, the hook does not run.
+- **Event streams and JSON Lines on other calls:** a successful `text/event-stream` or JSON Lines (`application/x-ndjson`, `application/jsonl`) response to a request without `ai-language-model-streaming: true`, such as the video model's `doGenerate` or the batch API's `doGetBatchResults`, is forwarded as is and the hook does not run, since it is not a language model response.
 
 ### `onError`
 
-Receives `{ request, error, status }`, where `error` is the gateway's JSON error body, or `{ error: { message: statusText, type: "gateway_error" } }` when the body is not JSON. Return a replacement body to send it as JSON with the upstream status, or return a `Response` to send that as is. Without `onError`, the error body is sent with the upstream status.
+Receives `{ request, error, status }`, where `error` is the gateway's JSON error body. When the body is not JSON of the form `{ error: { message } }`, such as an HTML page from a load balancer, `error` is `{ error: { message: "AI Gateway returned <status>: <excerpt>", type: "gateway_error" } }`, with the first 200 characters of the body as the excerpt. Return a replacement body to send it as JSON with the upstream status, or return a `Response` to send that as is. Without `onError`, the error body is sent with the upstream status.
 
 ## Responses the proxy generates
 
@@ -167,7 +168,7 @@ Apart from forwarding the gateway's own responses, the handler can answer with:
 | --- | --- | --- |
 | 500 | `AI Gateway authentication not configured` | `getGatewayAuthToken()` returned `null`. |
 | 400 | `Invalid path` | The path is not a safe relative path under `baseUrl`. |
-| 400 | `Invalid JSON body` | A request other than `GET` or `HEAD` has a body that is not JSON. |
+| 400 | `Invalid JSON body` | A request other than `GET` or `HEAD` has a non-empty body that is not JSON. |
 | 499 | empty | The client aborted the request (`request.signal`) before the handler returned. The signal is passed to the upstream `fetch`, so the abort also cancels the upstream request. |
 | 500 | `Error proxying request to AI Gateway` | Anything else that throws: `extractPath`, `beforeRequest`, the upstream `fetch`, a successful non-streamed response that is not JSON, `afterResponse` on a non-streamed request, or `onError`. |
 | 500 | `No response body` | A successful streamed response arrived without a body. |

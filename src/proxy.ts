@@ -18,6 +18,9 @@ const FORWARDED_RESPONSE_HEADER =
 const MODEL_CALL_HEADER =
 	/^(?:ai-language-model-.+|ai-model-id|ai-[a-z]+-model-specification-version)$/;
 const REQUEST_METADATA_HEADER = /^(?:ai-o11y-.+|idempotency-key|accept)$/;
+// Successful bodies that are a sequence of values rather than one JSON value: event streams and JSON Lines.
+const STREAM_CONTENT_TYPE =
+	/^\s*(?:text\/event-stream|application\/(?:x-ndjson|jsonl|jsonlines|x-jsonlines))\s*(?:;|$)/i;
 
 /**
  * Extracts the path from the request using either a custom extractor or route params.
@@ -149,7 +152,8 @@ function proxyFailureResponse(request: Request, error: unknown): Response {
 }
 
 /**
- * Forwards a GET or HEAD request, such as the gateway's `/config` model list, without a body.
+ * Forwards a GET or HEAD request, such as the gateway's `/config` model list, or a request whose
+ * body is missing or empty, without a body.
  * The hooks are typed for language model calls, so none of them run here.
  */
 async function forwardBodylessRequest(
@@ -172,33 +176,48 @@ async function forwardBodylessRequest(
 		return new Response(res.body, {
 			status: res.status,
 			statusText: res.statusText,
-			headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+			headers: responseHeaders(res, res.headers.get("content-type") ?? "application/json"),
 		});
 	} catch (error) {
 		return proxyFailureResponse(request, error);
 	}
 }
 
+function isGatewayError(value: unknown): value is GatewayError {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+	const { error } = value as { error?: unknown };
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		typeof (error as { message?: unknown }).message === "string"
+	);
+}
+
 /**
- * Parses the error response from the gateway. A non-JSON body, such as an HTML page from an
- * edge or load balancer, becomes a `gateway_error` naming the status and a short excerpt.
+ * Parses the error response from the gateway. A body that is not a JSON `{ error: { message } }`,
+ * such as an HTML page from an edge or load balancer, becomes a `gateway_error` naming the status
+ * and a short excerpt, so `onError` always receives the `GatewayError` shape.
  */
 async function parseErrorBody(res: Response): Promise<GatewayError> {
 	const text = await res.text().catch(() => "");
 	try {
-		return JSON.parse(text);
-	} catch {
-		const excerpt = text.replace(/\s+/g, " ").trim().slice(0, MAX_ERROR_EXCERPT_LENGTH);
-		const message = excerpt
-			? `AI Gateway returned ${res.status}: ${excerpt}`
-			: `AI Gateway returned ${res.status} ${res.statusText}`.trimEnd();
-		return {
-			error: {
-				message,
-				type: "gateway_error",
-			},
-		};
-	}
+		const parsed: unknown = JSON.parse(text);
+		if (isGatewayError(parsed)) {
+			return parsed;
+		}
+	} catch {}
+	const excerpt = text.replace(/\s+/g, " ").trim().slice(0, MAX_ERROR_EXCERPT_LENGTH);
+	const message = excerpt
+		? `AI Gateway returned ${res.status}: ${excerpt}`
+		: `AI Gateway returned ${res.status} ${res.statusText}`.trimEnd();
+	return {
+		error: {
+			message,
+			type: "gateway_error",
+		},
+	};
 }
 
 /**
@@ -346,16 +365,29 @@ export const createGatewayProxy = ({
 				return await forwardBodylessRequest(request, upstream, auth, headers);
 			}
 
+			// Node adapters give every method but GET and HEAD a body stream, so an empty one is bodyless too
+			const text = await request.text();
+			if (text === "") {
+				return await forwardBodylessRequest(request, upstream, auth, headers);
+			}
+
 			// Parse request body
 			let requestBody: LanguageModelV3CallOptions;
 			try {
-				requestBody = await request.clone().json();
+				requestBody = JSON.parse(text);
 			} catch {
 				return proxyErrorResponse(400, "invalid_request_error", "Invalid JSON body");
 			}
 
+			// @ai-sdk/gateway sends ai-model-id on every model call but a language model's, such as an
+			// embedding or image call. The hooks are typed for language model calls, so none run there.
+			// A request that also names a language model runs them, so a client cannot skip the hooks
+			// on a language model call by adding ai-model-id.
+			const runsHooks =
+				!request.headers.has("ai-model-id") || request.headers.has("ai-language-model-id");
+
 			// Apply beforeRequest hook
-			if (beforeRequest) {
+			if (beforeRequest && runsHooks) {
 				requestBody = await beforeRequest({ request: requestBody });
 			}
 
@@ -372,15 +404,27 @@ export const createGatewayProxy = ({
 			// Handle error responses
 			if (!res.ok) {
 				const errorBody = await parseErrorBody(res);
-				return await createErrorResponse(res, errorBody, requestBody, onError);
+				return await createErrorResponse(
+					res,
+					errorBody,
+					requestBody,
+					runsHooks ? onError : undefined,
+				);
 			}
 
 			// Handle successful responses
 			if (isStreaming) {
-				return handleStreamingResponse(res, requestBody, afterResponse);
+				return handleStreamingResponse(res, requestBody, runsHooks ? afterResponse : undefined);
 			}
 
-			return await handleJsonResponse(res, requestBody, afterResponse);
+			// Other calls can answer with a body that is not one JSON value, such as the video model's
+			// event stream or the batch results' JSON Lines. It is not a language model response, so it
+			// passes through without afterResponse.
+			if (STREAM_CONTENT_TYPE.test(res.headers.get("content-type") ?? "")) {
+				return handleStreamingResponse(res, requestBody, undefined);
+			}
+
+			return await handleJsonResponse(res, requestBody, runsHooks ? afterResponse : undefined);
 		} catch (error) {
 			return proxyFailureResponse(request, error);
 		}
