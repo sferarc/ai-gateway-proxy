@@ -68,6 +68,6 @@ Moving the hook types to V4 changes the public `GatewayResponse` type, so it is 
 
 When the upstream stream ends, errors or is cancelled before `finish`, `afterResponse` is not called, so a consumer metering usage in the hook records nothing for that request. The end and error cases are now logged (see Logging above), but the hook contract is unchanged. Calling the hook with partial content and unknown usage, or adding a separate signal, would change the public contract; that is the owner's decision and is not made. The current behavior is pinned so any change is deliberate.
 
-## Known gap: hook result without stream metadata
+## Hook result without stream metadata
 
-`createStreamTransformer` reads `modifiedResponse.finishReason`, `usage` and `providerMetadata` outside the `try` that catches a throwing hook (`src/stream.ts`). An `afterResponse` that returns `undefined` or `null`, which a JavaScript caller can do, throws there and errors the client stream instead of forwarding the upstream `finish` event. No test covers it.
+`createStreamTransformer` reads `modifiedResponse.finishReason`, `usage` and `providerMetadata` inside the `try` that catches a throwing hook (`src/stream.ts`). An `afterResponse` that returns `undefined` or `null`, which a JavaScript caller can do, is therefore handled like a throwing hook: `console.error` once and the upstream `finish` event is forwarded. Before, the reads sat outside the `try` and errored the client stream. Pinned by "forwards the original finish event when the hook returns undefined" and "... null". A result that is an object missing some of those fields is not validated: the missing fields are left out of the rewritten `finish` event.
