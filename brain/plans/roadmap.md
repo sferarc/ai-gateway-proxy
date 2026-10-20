@@ -9,11 +9,12 @@ There is no milestone on the repository. This note collects the open gaps record
 
 ## Can be done without the owner
 
-3. **Hook result without stream metadata.** An `afterResponse` that returns `undefined` or `null` errors the client stream instead of forwarding the upstream `finish` event. Source: "Known gap" in [[architecture/streaming]]. The fix is to read the result inside the `try` or validate it, and add a test.
-4. **Language model calls that send `ai-model-id` alone.** Whether the gateway serves a `/language-model` call without `ai-language-model-id` is unknown, and if it does, that call skips the hooks. Settle it against the gateway docs or a recorded request before changing the check. Source: step 6 of [[architecture/proxy]].
+3. **Language model calls that send `ai-model-id` alone.** Whether the gateway serves a `/language-model` call without `ai-language-model-id` is unknown, and if it does, that call skips the hooks. Settle it against the gateway docs or a recorded request before changing the check. Source: step 6 of [[architecture/proxy]].
 
 ## Order
 
-Items 3 and 4 first, since they fix behavior without changing the public API. Items 1 and 2 wait on the owner, and item 2 is best done together with a V4 type bump in a major or minor release the owner picks ([[development/release]]).
+Item 3 first, since it fixes behavior without changing the public API. Items 1 and 2 wait on the owner, and item 2 is best done together with a V4 type bump in a major or minor release the owner picks ([[development/release]]).
+
+The hook result without stream metadata gap landed with the fix in `src/stream.ts` ([[architecture/streaming]]).
 
 Update this note when an item lands or a new gap is recorded in the architecture notes.

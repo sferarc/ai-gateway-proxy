@@ -221,25 +221,24 @@ export function createStreamTransformer(
 		}
 
 		finishSeen = true;
-		let modifiedResponse: GatewayResponse;
+		// Reading the result inside the try means a hook that returns undefined or null falls back to
+		// the upstream finish event like one that throws.
 		try {
-			modifiedResponse = await afterResponse({
+			const modifiedResponse = await afterResponse({
 				request: requestBody,
 				response: aggregator.getResponse(),
 			});
+			const modifiedFinish: LanguageModelV3StreamPart = {
+				type: "finish",
+				finishReason: modifiedResponse.finishReason,
+				usage: modifiedResponse.usage,
+				providerMetadata: modifiedResponse.providerMetadata,
+			};
+			return JSON.stringify(modifiedFinish);
 		} catch (error) {
 			console.error("afterResponse hook failed, forwarding original finish event:", error);
 			return data;
 		}
-
-		// Emit modified finish event
-		const modifiedFinish: LanguageModelV3StreamPart = {
-			type: "finish",
-			finishReason: modifiedResponse.finishReason,
-			usage: modifiedResponse.usage,
-			providerMetadata: modifiedResponse.providerMetadata,
-		};
-		return JSON.stringify(modifiedFinish);
 	}
 
 	// Reading in pull rather than start keeps backpressure: one upstream event per client read,
