@@ -605,7 +605,7 @@ jobs:
             return findings;
           }
 
-          /** The allowlist's entries, and a line for each one that does not say why or until when. */
+          /** The allowlist's entries, and a line for each one that is malformed or does not say why or until when. */
           export function parseAllowlist(text: string | undefined): {
             entries: AllowEntry[];
             invalid: string[];
@@ -617,34 +617,58 @@ jobs:
             } catch (error) {
               return { entries: [], invalid: [`${ALLOWLIST_PATH} is not JSON: ${String(error)}`] };
             }
-            const list = (parsed as { allow?: unknown }).allow;
+            const list =
+              typeof parsed === "object" && parsed !== null
+                ? (parsed as { allow?: unknown }).allow
+                : undefined;
             if (!Array.isArray(list)) {
               return { entries: [], invalid: [`${ALLOWLIST_PATH} has no "allow" array`] };
             }
             const entries: AllowEntry[] = [];
             const invalid: string[] = [];
-            list.forEach((item, index) => {
-              const entry = item as Partial<AllowEntry>;
-              const missing = (["rule", "reason", "exit"] as const).filter(
-                (key) => typeof entry[key] !== "string" || entry[key].trim() === "",
-              );
+            list.forEach((item: unknown, index) => {
+              if (typeof item !== "object" || item === null || Array.isArray(item)) {
+                invalid.push(`${ALLOWLIST_PATH} entry ${index} is not an object`);
+                return;
+              }
+              const entry = item as Partial<Record<keyof AllowEntry, unknown>>;
+              const missing = (["rule", "reason", "exit"] as const).filter((key) => !isFilled(entry[key]));
               if (missing.length > 0) {
                 invalid.push(`${ALLOWLIST_PATH} entry ${index} has no ${missing.join(", ")}`);
                 return;
               }
-              entries.push(entry as AllowEntry);
+              const path = typeof entry.path === "string" ? normalisePath(entry.path) : entry.path;
+              const malformed = [
+                ...(entry.package === undefined || isFilled(entry.package) ? [] : ["package"]),
+                ...(path === undefined || isFilled(path) ? [] : ["path"]),
+              ];
+              if (malformed.length > 0) {
+                invalid.push(
+                  `${ALLOWLIST_PATH} entry ${index} has an invalid ${malformed.join(", ")}: expected a non-empty string`,
+                );
+                return;
+              }
+              const allowed = { ...(entry as AllowEntry) };
+              if (typeof path === "string") allowed.path = path;
+              entries.push(allowed);
             });
             return { entries, invalid };
+          }
+
+          function isFilled(value: unknown): value is string {
+            return typeof value === "string" && value.trim() !== "";
+          }
+
+          /** `./tests` and `tests/` name the same directory as `tests`. */
+          function normalisePath(path: string): string {
+            return path.replace(/^(?:\.\/)+/, "").replace(/\/+$/, "");
           }
 
           function excuses(entry: AllowEntry, finding: Finding): boolean {
             if (entry.rule !== finding.rule) return false;
             if (entry.package !== undefined && !matchesName(entry.package, finding.name)) return false;
             if (entry.path === undefined) return true;
-            return (
-              matchesFile(entry.path, finding.path) ||
-              finding.path.startsWith(entry.path.replace(/\/?$/, "/"))
-            );
+            return matchesFile(entry.path, finding.path) || finding.path.startsWith(`${entry.path}/`);
           }
 
           export function checkStack(
@@ -764,6 +788,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          # Commit messages and authors only: no file contents.
+          filter: blob:none
           persist-credentials: false
 
       - name: Install mise
