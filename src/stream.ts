@@ -221,8 +221,7 @@ export function createStreamTransformer(
 		}
 
 		finishSeen = true;
-		// Reading the result inside the try means a hook that returns undefined or null falls back to
-		// the upstream finish event like one that throws.
+		// Inside the try so an undefined or null result falls back like a throwing hook.
 		try {
 			const modifiedResponse = await afterResponse({
 				request: requestBody,

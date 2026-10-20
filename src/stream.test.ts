@@ -554,7 +554,6 @@ describe("createStreamTransformer", () => {
 				createStreamTransformer(
 					sourceOf([sse(finishEvent), sse("[DONE]")]),
 					requestBody,
-					// A JavaScript caller can return anything, whatever the type says.
 					// @ts-expect-error the hook type does not allow undefined or null
 					async () => result,
 				),
