@@ -18,6 +18,8 @@ const FORWARDED_RESPONSE_HEADER =
 const MODEL_CALL_HEADER =
 	/^(?:ai-language-model-.+|ai-model-id|ai-[a-z]+-model-specification-version)$/;
 const REQUEST_METADATA_HEADER = /^(?:ai-o11y-.+|idempotency-key|accept)$/;
+// @ai-sdk/gateway's batch calls that read or cancel a job rather than start a model call.
+const BATCH_READ_PATH = /(?:^|\/)batch\/(?:status|results|cancel)$/;
 // Successful bodies that are a sequence of values rather than one JSON value: event streams and JSON Lines.
 const STREAM_CONTENT_TYPE =
 	/^\s*(?:text\/event-stream|application\/(?:x-ndjson|jsonl|jsonlines|x-jsonlines))\s*(?:;|$)/i;
@@ -382,9 +384,12 @@ export const createGatewayProxy = ({
 			// @ai-sdk/gateway sends ai-model-id on every model call but a language model's, such as an
 			// embedding or image call. The hooks are typed for language model calls, so none run there.
 			// A request that also names a language model runs them, so a client cannot skip the hooks
-			// on a language model call by adding ai-model-id.
+			// on a language model call by adding ai-model-id. Batch status, results and cancel send no
+			// model header and post only a batch id, so they run none either. The match is on the
+			// resolved pathname, so a "?" or "#" in the path cannot make a model call look like one.
 			const runsHooks =
-				!request.headers.has("ai-model-id") || request.headers.has("ai-language-model-id");
+				!BATCH_READ_PATH.test(new URL(upstream).pathname) &&
+				(!request.headers.has("ai-model-id") || request.headers.has("ai-language-model-id"));
 
 			// Apply beforeRequest hook
 			if (beforeRequest && runsHooks) {
