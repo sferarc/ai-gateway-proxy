@@ -385,9 +385,10 @@ export const createGatewayProxy = ({
 			// embedding or image call. The hooks are typed for language model calls, so none run there.
 			// A request that also names a language model runs them, so a client cannot skip the hooks
 			// on a language model call by adding ai-model-id. Batch status, results and cancel send no
-			// model header and post only a batch id, so they run none either.
+			// model header and post only a batch id, so they run none either. The match is on the
+			// resolved pathname, so a "?" or "#" in the path cannot make a model call look like one.
 			const runsHooks =
-				!BATCH_READ_PATH.test(path) &&
+				!BATCH_READ_PATH.test(new URL(upstream).pathname) &&
 				(!request.headers.has("ai-model-id") || request.headers.has("ai-language-model-id"));
 
 			// Apply beforeRequest hook

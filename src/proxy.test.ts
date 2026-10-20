@@ -1057,6 +1057,46 @@ describe("createGatewayProxy", () => {
 			});
 			expect(onError).not.toHaveBeenCalled();
 		});
+
+		it.each(["language-model?x/batch/status", "language-model#/batch/cancel"])(
+			"runs every hook on a language model call whose path %s only looks like a batch read",
+			async (path) => {
+				mockFetch
+					.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()))
+					.mockResolvedValueOnce(
+						createMockHttpResponse(
+							{ error: { message: "Bad input", type: "invalid_request_error" } },
+							{ status: 400 },
+						),
+					);
+				const beforeRequest = vi.fn(({ request }) => ({ ...request, maxOutputTokens: 10 }));
+				const afterResponse = vi.fn(({ response }) => response);
+				const onError = vi.fn(() => ({
+					error: { message: "Replaced", type: "invalid_request_error" },
+				}));
+				const proxy = createGatewayProxy({ beforeRequest, afterResponse, onError });
+				const send = () =>
+					proxy(
+						createMockRequest("http://localhost/api/ai/language-model", {
+							body: { prompt: [] },
+							headers: { "ai-language-model-id": "openai/gpt-4o" },
+						}),
+						createMockContext([path]),
+					);
+
+				expect((await send()).status).toBe(200);
+				expect(new URL(mockFetch.mock.calls[0][0]).pathname).toBe("/v1/ai/language-model");
+				expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+					prompt: [],
+					maxOutputTokens: 10,
+				});
+				expect(beforeRequest).toHaveBeenCalledOnce();
+				expect(afterResponse).toHaveBeenCalledOnce();
+
+				expect((await send()).status).toBe(400);
+				expect(onError).toHaveBeenCalledOnce();
+			},
+		);
 	});
 
 	describe("upstream response headers", () => {
