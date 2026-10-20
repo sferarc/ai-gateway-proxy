@@ -547,6 +547,23 @@ describe("createStreamTransformer", () => {
 		expect(consoleWarn).not.toHaveBeenCalled();
 	});
 
+	it.each([undefined, null])(
+		"forwards the original finish event when the hook returns %s",
+		async (result) => {
+			const output = await readAll(
+				createStreamTransformer(
+					sourceOf([sse(finishEvent), sse("[DONE]")]),
+					requestBody,
+					// @ts-expect-error the hook type does not allow undefined or null
+					async () => result,
+				),
+			);
+
+			expect(output).toBe(`${sse(finishEvent)}data: [DONE]\n\n`);
+			expect(consoleError).toHaveBeenCalledOnce();
+		},
+	);
+
 	it("cancels the source when the output stream is cancelled", async () => {
 		const cancel = vi.fn();
 		const source = new ReadableStream<Uint8Array>({

@@ -9,8 +9,8 @@ There is no milestone on the repository. This note collects the open gaps record
 
 ## Can be done without the owner
 
-3. **Hook result without stream metadata.** An `afterResponse` that returns `undefined` or `null` errors the client stream instead of forwarding the upstream `finish` event. Source: "Known gap" in [[architecture/streaming]]. The fix is to read the result inside the `try` or validate it, and add a test.
-4. **Language model calls that send `ai-model-id` alone.** Whether the gateway serves a `/language-model` call without `ai-language-model-id` is unknown, and if it does, that call skips the hooks. Settle it against the gateway docs or a recorded request before changing the check. Source: step 6 of [[architecture/proxy]].
+3. **Language model calls that send `ai-model-id` alone.** Whether the gateway serves a `/language-model` call without `ai-language-model-id` is unknown, and if it does, that call skips the hooks. Settle it against the gateway docs or a recorded request before changing the check. Source: step 6 of [[architecture/proxy]].
+4. **Non-streaming hook result is not validated.** `handleJsonResponse` in `src/proxy.ts` sends whatever `afterResponse` returns, so `undefined` gives an empty 200 body and `null` the literal `null`. The streaming path falls back to the upstream event instead. Source: [[architecture/proxy]].
 
 ## Order
 
