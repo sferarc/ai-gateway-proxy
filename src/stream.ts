@@ -285,6 +285,7 @@ export function createStreamTransformer(
 		async cancel(reason) {
 			cancelled = true;
 			const upstream = reader.cancel(reason);
+			upstream.catch(() => {});
 			await reportIncomplete({ reason: "cancelled", cancelReason: reason });
 			return upstream;
 		},
