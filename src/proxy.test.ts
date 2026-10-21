@@ -998,6 +998,25 @@ describe("createGatewayProxy", () => {
 			expect(onError).toHaveBeenCalledOnce();
 		});
 
+		it("runs every hook on a language model path that sends ai-model-id alone", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const beforeRequest = vi.fn(({ request }) => ({ ...request, maxOutputTokens: 10 }));
+			const afterResponse = vi.fn(({ response }) => response);
+			const proxy = createGatewayProxy({ beforeRequest, afterResponse });
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/ai/language-model", {
+					body: { prompt: [] },
+					headers: { "ai-model-id": "openai/gpt-4o" },
+				}),
+				createMockContext(["language-model"]),
+			);
+
+			expect(response.status).toBe(200);
+			expect(beforeRequest).toHaveBeenCalledOnce();
+			expect(afterResponse).toHaveBeenCalledOnce();
+		});
+
 		it("runs no hook on a batch status or cancel call from @ai-sdk/gateway", async () => {
 			mockFetch.mockImplementation(async () =>
 				createMockHttpResponse({ status: "pending", requestCounts: { total: 2, pending: 2 } }),

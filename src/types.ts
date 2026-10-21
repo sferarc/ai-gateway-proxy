@@ -83,7 +83,7 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
 	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
-	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
+	 * embedding or image call, unless the path ends in `language-model`, nor for a path ending in `batch/status`, `batch/results` or
 	 * `batch/cancel`.
 	 */
 	beforeRequest?: (context: {
@@ -109,7 +109,7 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
 	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
-	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
+	 * embedding or image call, unless the path ends in `language-model`, nor for a path ending in `batch/status`, `batch/results` or
 	 * `batch/cancel`.
 	 */
 	afterResponse?: (context: {
@@ -127,7 +127,7 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
 	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
-	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
+	 * embedding or image call, unless the path ends in `language-model`, nor for a path ending in `batch/status`, `batch/results` or
 	 * `batch/cancel`.
 	 */
 	onError?: (context: {

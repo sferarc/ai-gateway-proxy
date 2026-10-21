@@ -9,11 +9,10 @@ There is no milestone on the repository. This note collects the open gaps record
 
 ## Can be done without the owner
 
-3. **Language model calls that send `ai-model-id` alone.** Settled as no code change on 2026-10-21: `@ai-sdk/gateway` 4.0.116 never sends `ai-model-id` to `/language-model` and its docs describe no such call, so the hook-skip check stays. Server-side behavior is not observable without a paid gateway call; recheck on a new `@ai-sdk/gateway` major. Source: step 6 of [[architecture/proxy]].
-4. **Non-streaming hook result is not validated.** `handleJsonResponse` in `src/proxy.ts` sends whatever `afterResponse` returns, so `undefined` gives an empty 200 body and `null` the literal `null`. The streaming path falls back to the upstream event instead. Source: [[architecture/proxy]].
+3. **Non-streaming hook result is not validated.** `handleJsonResponse` in `src/proxy.ts` sends whatever `afterResponse` returns, so `undefined` gives an empty 200 body and `null` the literal `null`. The streaming path falls back to the upstream event instead. Source: [[architecture/proxy]].
 
 ## Order
 
-Items 3 and 4 first, since they fix behavior without changing the public API. Items 1 and 2 wait on the owner, and item 2 is best done together with a V4 type bump in a major or minor release the owner picks ([[development/release]]).
+Item 3 first, since it fixes behavior without changing the public API. Items 1 and 2 wait on the owner, and item 2 is best done together with a V4 type bump in a major or minor release the owner picks ([[development/release]]).
 
 Update this note when an item lands or a new gap is recorded in the architecture notes.
