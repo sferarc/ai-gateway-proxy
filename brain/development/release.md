@@ -20,6 +20,7 @@ Checked 2026-10-20 against `main` at fd2d0bb:
 - `github-token` is `secrets.GIT_TOKEN`. `gh secret list --org sferarc` shows `GIT_TOKEN` as an organization secret visible to all repositories (created 2026-03-18). The repository has no secret of its own. Its scopes are unknown; it must be able to push branches and open pull requests here.
 - Publishing relies on npm trusted publishing: no `NPM_TOKEN`, `publishConfig.provenance: true`, npm from the Node in `mise.toml`. Whether npmjs.com lists a trusted publisher for this repository is unknown and cannot be read without the owner's npm login.
 - `.changeset/config.json` is sound: base `main`, `access: public`, no auto-commit, no linked or fixed groups, nothing ignored.
+- #48 (e31b432) landed after this check and bumped the `jdx/mise-action` pin in `release.yml` to v5.2.1; the owner has not yet confirmed it (#50). The other claims here still hold.
 - `RELEASE_ENABLED` is not set (`gh variable list` shows only the `HQ_*` variables).
 
 ## Current state
