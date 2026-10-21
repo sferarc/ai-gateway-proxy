@@ -5,7 +5,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
+import type { LanguageModelV4StreamPart } from "@ai-sdk/provider";
 import { generateText, streamText } from "ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startProxyServer } from "./test-server";
@@ -37,7 +37,7 @@ const generateResult = {
 	warnings: [],
 };
 
-const streamParts: LanguageModelV3StreamPart[] = [
+const streamParts: LanguageModelV4StreamPart[] = [
 	{ type: "stream-start", warnings: [] },
 	{ type: "text-start", id: "t1" },
 	{ type: "text-delta", id: "t1", delta: "Hello " },
@@ -46,7 +46,7 @@ const streamParts: LanguageModelV3StreamPart[] = [
 	{ type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
 ];
 
-function sse(part: LanguageModelV3StreamPart): string {
+function sse(part: LanguageModelV4StreamPart): string {
 	return `data: ${JSON.stringify(part)}\n\n`;
 }
 

@@ -1,10 +1,10 @@
 import type {
-	LanguageModelV3CallOptions,
-	LanguageModelV3Content,
-	LanguageModelV3FinishReason,
-	LanguageModelV3Usage,
-	SharedV3ProviderMetadata,
-	SharedV3Warning,
+	LanguageModelV4CallOptions,
+	LanguageModelV4Content,
+	LanguageModelV4FinishReason,
+	LanguageModelV4Usage,
+	SharedV4ProviderMetadata,
+	SharedV4Warning,
 } from "@ai-sdk/provider";
 
 /**
@@ -12,12 +12,12 @@ import type {
  * For streaming requests, this is aggregated from the stream events.
  */
 export type GatewayResponse = {
-	content: LanguageModelV3Content[];
-	finishReason: LanguageModelV3FinishReason;
+	content: LanguageModelV4Content[];
+	finishReason: LanguageModelV4FinishReason;
 	/** `undefined` when a stream ended without a `finish` event, so the usage is unknown. */
-	usage: LanguageModelV3Usage | undefined;
-	warnings: SharedV3Warning[];
-	providerMetadata?: SharedV3ProviderMetadata;
+	usage: LanguageModelV4Usage | undefined;
+	warnings: SharedV4Warning[];
+	providerMetadata?: SharedV4ProviderMetadata;
 };
 
 /**
@@ -93,11 +93,11 @@ export type CreateGatewayProxyOptions = {
 	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
 	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
 	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
-	 * `batch/cancel`.
+	 * `batch/cancel`. A path ending in `language-model` always runs it.
 	 */
 	beforeRequest?: (context: {
-		request: LanguageModelV3CallOptions;
-	}) => LanguageModelV3CallOptions | Promise<LanguageModelV3CallOptions>;
+		request: LanguageModelV4CallOptions;
+	}) => LanguageModelV4CallOptions | Promise<LanguageModelV4CallOptions>;
 	/**
 	 * Called after a successful response is received from the gateway.
 	 * Allows modification of the response body.
@@ -124,10 +124,10 @@ export type CreateGatewayProxyOptions = {
 	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
 	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
 	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
-	 * `batch/cancel`.
+	 * `batch/cancel`. A path ending in `language-model` always runs it.
 	 */
 	afterResponse?: (context: {
-		request: LanguageModelV3CallOptions;
+		request: LanguageModelV4CallOptions;
 		response: GatewayResponse;
 		/** Set only for a stream that did not deliver its `finish` event. */
 		incomplete?: IncompleteStream;
@@ -144,10 +144,10 @@ export type CreateGatewayProxyOptions = {
 	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
 	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
 	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
-	 * `batch/cancel`.
+	 * `batch/cancel`. A path ending in `language-model` always runs it.
 	 */
 	onError?: (context: {
-		request: LanguageModelV3CallOptions;
+		request: LanguageModelV4CallOptions;
 		error: GatewayError;
 		status: number;
 	}) => GatewayError | Response | Promise<GatewayError | Response>;

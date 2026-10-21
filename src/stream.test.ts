@@ -1,4 +1,8 @@
-import type { LanguageModelV3CallOptions, LanguageModelV3StreamPart } from "@ai-sdk/provider";
+import type {
+	LanguageModelV4CallOptions,
+	LanguageModelV4Citation,
+	LanguageModelV4StreamPart,
+} from "@ai-sdk/provider";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { createStreamTransformer, StreamContentAggregator } from "./stream";
 import type { GatewayResponse, IncompleteStream } from "./types";
@@ -71,6 +75,58 @@ describe("StreamContentAggregator", () => {
 				{ type: "text", text: "kept anyway" },
 				{ type: "reasoning", text: "also kept" },
 			]);
+		});
+	});
+
+	describe("citations", () => {
+		const citation = {
+			source: { type: "source", sourceType: "url", id: "s1", url: "https://example.com" },
+			startIndex: 0,
+			endIndex: 5,
+			citedText: "Hello",
+		} satisfies LanguageModelV4Citation;
+
+		it("attaches the citations of text-end to the text block", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({ type: "text-start", id: "t" });
+			aggregator.process({ type: "text-delta", id: "t", delta: "Hello" });
+			aggregator.process({ type: "text-end", id: "t", citations: [citation] });
+
+			expect(aggregator.getResponse().content).toEqual([
+				{ type: "text", text: "Hello", citations: [citation] },
+			]);
+		});
+
+		it("leaves out citations when text-end has none", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({ type: "text-start", id: "t" });
+			aggregator.process({ type: "text-end", id: "t" });
+
+			expect(aggregator.getResponse().content).toEqual([{ type: "text", text: "" }]);
+		});
+
+		it("attaches citations to the block with the matching id", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({ type: "text-start", id: "a" });
+			aggregator.process({ type: "text-start", id: "b" });
+			aggregator.process({ type: "text-end", id: "b", citations: [citation] });
+			aggregator.process({ type: "text-end", id: "a" });
+
+			expect(aggregator.getResponse().content).toEqual([
+				{ type: "text", text: "" },
+				{ type: "text", text: "", citations: [citation] },
+			]);
+		});
+
+		it("ignores citations on a text-end with no open block", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({ type: "text-end", id: "ghost", citations: [citation] });
+
+			expect(aggregator.getResponse().content).toEqual([]);
 		});
 	});
 
@@ -148,7 +204,7 @@ describe("StreamContentAggregator", () => {
 				toolCallId: "tool-1",
 				toolName: "search",
 				result: { results: ["item1", "item2"] },
-			} as LanguageModelV3StreamPart);
+			} as LanguageModelV4StreamPart);
 			aggregator.process({
 				type: "finish",
 				finishReason: { unified: "stop", raw: undefined },
@@ -179,7 +235,7 @@ describe("StreamContentAggregator", () => {
 			aggregator.process({
 				type: "file",
 				mediaType: "image/png",
-				data: new Uint8Array([1, 2, 3]),
+				data: { type: "data", data: new Uint8Array([1, 2, 3]) },
 			});
 			aggregator.process({
 				type: "finish",
@@ -197,7 +253,75 @@ describe("StreamContentAggregator", () => {
 
 			const response = aggregator.getResponse();
 			expect(response.content).toHaveLength(1);
-			expect(response.content[0]).toMatchObject({ type: "file" });
+			expect(response.content[0]).toEqual({
+				type: "file",
+				mediaType: "image/png",
+				data: { type: "data", data: new Uint8Array([1, 2, 3]) },
+			});
+		});
+
+		it("keeps a file whose data is a URL", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({
+				type: "file",
+				mediaType: "image/png",
+				data: { type: "url", url: new URL("https://example.com/a.png") },
+			});
+
+			expect(aggregator.getResponse().content).toEqual([
+				{
+					type: "file",
+					mediaType: "image/png",
+					data: { type: "url", url: new URL("https://example.com/a.png") },
+				},
+			]);
+		});
+
+		it("includes custom content", () => {
+			const aggregator = new StreamContentAggregator();
+			const part: LanguageModelV4StreamPart = {
+				type: "custom",
+				kind: "acme.compaction",
+				providerMetadata: { acme: { id: "c1" } },
+			};
+
+			aggregator.process(part);
+
+			expect(aggregator.getResponse().content).toEqual([part]);
+		});
+
+		it("includes reasoning-file content", () => {
+			const aggregator = new StreamContentAggregator();
+			const part: LanguageModelV4StreamPart = {
+				type: "reasoning-file",
+				mediaType: "image/png",
+				data: { type: "data", data: "AQID" },
+			};
+
+			aggregator.process(part);
+
+			expect(aggregator.getResponse().content).toEqual([part]);
+		});
+
+		it("keeps custom and reasoning-file parts in arrival order around text", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({ type: "text-start", id: "t" });
+			aggregator.process({ type: "custom", kind: "acme.note" });
+			aggregator.process({ type: "text-delta", id: "t", delta: "hi" });
+			aggregator.process({
+				type: "reasoning-file",
+				mediaType: "image/png",
+				data: { type: "data", data: "AQID" },
+			});
+			aggregator.process({ type: "text-end", id: "t" });
+
+			expect(aggregator.getResponse().content.map((part) => part.type)).toEqual([
+				"text",
+				"custom",
+				"reasoning-file",
+			]);
 		});
 
 		it("includes source content", () => {
@@ -207,7 +331,7 @@ describe("StreamContentAggregator", () => {
 				type: "source",
 				id: "source-1",
 				url: "https://example.com",
-			} as LanguageModelV3StreamPart);
+			} as LanguageModelV4StreamPart);
 			aggregator.process({
 				type: "finish",
 				finishReason: { unified: "stop", raw: undefined },
@@ -404,7 +528,7 @@ const finishPart = {
 };
 
 const encoder = new TextEncoder();
-const requestBody = { prompt: [] } as unknown as LanguageModelV3CallOptions;
+const requestBody = { prompt: [] } as unknown as LanguageModelV4CallOptions;
 
 const usage = {
 	inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
@@ -496,7 +620,7 @@ describe("createStreamTransformer", () => {
 
 	it("replaces the finish event with the hook result", async () => {
 		const hook = vi.fn(
-			({ response }: { request: LanguageModelV3CallOptions; response: GatewayResponse }) => ({
+			({ response }: { request: LanguageModelV4CallOptions; response: GatewayResponse }) => ({
 				...response,
 				finishReason: { unified: "length" as const, raw: "max_tokens" },
 				usage: { ...usage, outputTokens: { total: 99, text: undefined, reasoning: undefined } },
@@ -815,6 +939,34 @@ describe("createStreamTransformer", () => {
 			{ type: "tool-call", toolCallId: "c1", toolName: "lookup", input: "{}" },
 			{ type: "text", text: "no start" },
 		]);
+	});
+
+	it("passes version 4 parts to the hook and forwards them unchanged", async () => {
+		const citations = [
+			{ source: { type: "source", sourceType: "url", id: "s", url: "https://e.com" } },
+		];
+		const events = [
+			{ type: "text-start", id: "t1" },
+			{ type: "text-delta", id: "t1", delta: "Hi" },
+			{ type: "text-end", id: "t1", citations },
+			{ type: "custom", kind: "acme.note" },
+			{ type: "reasoning-file", mediaType: "image/png", data: { type: "data", data: "AQID" } },
+			{ type: "file", mediaType: "image/png", data: { type: "data", data: "AQID" } },
+			finishEvent,
+		];
+		const hook = vi.fn(passThroughHook);
+		const output = await readAll(
+			createStreamTransformer(sourceOf(events.map(sse)), requestBody, hook),
+		);
+
+		expect(hook.mock.calls[0]?.[0].response.content).toEqual([
+			{ type: "text", text: "Hi", citations },
+			events[3],
+			events[4],
+			events[5],
+		]);
+		expect(output).toContain(sse(events[2]));
+		expect(output).toContain(sse(events[3]));
 	});
 
 	it("parses an event split across chunks mid-JSON", async () => {
