@@ -1,5 +1,5 @@
 import { createGatewayProvider } from "@ai-sdk/gateway";
-import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
+import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { createGatewayProxy } from "./proxy";
 import type { GatewayError, GatewayResponse } from "./types";
@@ -535,7 +535,7 @@ describe("createGatewayProxy", () => {
 		it("receives original request in context", async () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 
-			let capturedRequest: LanguageModelV3CallOptions | null = null;
+			let capturedRequest: LanguageModelV4CallOptions | null = null;
 			const proxy = createGatewayProxy({
 				afterResponse: ({ request, response }) => {
 					capturedRequest = request;
@@ -561,7 +561,7 @@ describe("createGatewayProxy", () => {
 		it("receives beforeRequest modifications in afterResponse", async () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 
-			let capturedRequest: LanguageModelV3CallOptions | null = null;
+			let capturedRequest: LanguageModelV4CallOptions | null = null;
 			const proxy = createGatewayProxy({
 				beforeRequest: ({ request }) => ({
 					...request,
@@ -664,7 +664,7 @@ describe("createGatewayProxy", () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(errorResponse, { status: 500 }));
 
 			type ErrorContext = {
-				request: LanguageModelV3CallOptions;
+				request: LanguageModelV4CallOptions;
 				error: GatewayError;
 				status: number;
 			};

@@ -1,10 +1,10 @@
 import type {
-	LanguageModelV3CallOptions,
-	LanguageModelV3Content,
-	LanguageModelV3FinishReason,
-	LanguageModelV3Usage,
-	SharedV3ProviderMetadata,
-	SharedV3Warning,
+	LanguageModelV4CallOptions,
+	LanguageModelV4Content,
+	LanguageModelV4FinishReason,
+	LanguageModelV4Usage,
+	SharedV4ProviderMetadata,
+	SharedV4Warning,
 } from "@ai-sdk/provider";
 
 /**
@@ -12,11 +12,11 @@ import type {
  * For streaming requests, this is aggregated from the stream events.
  */
 export type GatewayResponse = {
-	content: LanguageModelV3Content[];
-	finishReason: LanguageModelV3FinishReason;
-	usage: LanguageModelV3Usage;
-	warnings: SharedV3Warning[];
-	providerMetadata?: SharedV3ProviderMetadata;
+	content: LanguageModelV4Content[];
+	finishReason: LanguageModelV4FinishReason;
+	usage: LanguageModelV4Usage;
+	warnings: SharedV4Warning[];
+	providerMetadata?: SharedV4ProviderMetadata;
 };
 
 /**
@@ -87,8 +87,8 @@ export type CreateGatewayProxyOptions = {
 	 * `batch/cancel`. A path ending in `language-model` always runs it.
 	 */
 	beforeRequest?: (context: {
-		request: LanguageModelV3CallOptions;
-	}) => LanguageModelV3CallOptions | Promise<LanguageModelV3CallOptions>;
+		request: LanguageModelV4CallOptions;
+	}) => LanguageModelV4CallOptions | Promise<LanguageModelV4CallOptions>;
 	/**
 	 * Called after a successful response is received from the gateway.
 	 * Allows modification of the response body.
@@ -113,7 +113,7 @@ export type CreateGatewayProxyOptions = {
 	 * `batch/cancel`. A path ending in `language-model` always runs it.
 	 */
 	afterResponse?: (context: {
-		request: LanguageModelV3CallOptions;
+		request: LanguageModelV4CallOptions;
 		response: GatewayResponse;
 	}) => GatewayResponse | Promise<GatewayResponse>;
 	/**
@@ -131,7 +131,7 @@ export type CreateGatewayProxyOptions = {
 	 * `batch/cancel`. A path ending in `language-model` always runs it.
 	 */
 	onError?: (context: {
-		request: LanguageModelV3CallOptions;
+		request: LanguageModelV4CallOptions;
 		error: GatewayError;
 		status: number;
 	}) => GatewayError | Response | Promise<GatewayError | Response>;

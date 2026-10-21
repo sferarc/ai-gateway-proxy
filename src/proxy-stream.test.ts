@@ -1,4 +1,4 @@
-import type { LanguageModelV3StreamPart, LanguageModelV3Usage } from "@ai-sdk/provider";
+import type { LanguageModelV4StreamPart, LanguageModelV4Usage } from "@ai-sdk/provider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGatewayProxy } from "./proxy";
 import type { CreateGatewayProxyOptions, GatewayResponse } from "./types";
@@ -13,19 +13,19 @@ global.fetch = mockFetch;
 const encoder = new TextEncoder();
 const requestBody = { prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] };
 
-const upstreamUsage: LanguageModelV3Usage = {
+const upstreamUsage: LanguageModelV4Usage = {
 	inputTokens: { total: 12, noCache: 10, cacheRead: 2, cacheWrite: 0 },
 	outputTokens: { total: 30, text: 20, reasoning: 10 },
 };
 
-const upstreamFinish: LanguageModelV3StreamPart = {
+const upstreamFinish: LanguageModelV4StreamPart = {
 	type: "finish",
 	finishReason: { unified: "stop", raw: "end_turn" },
 	usage: upstreamUsage,
 	providerMetadata: { gateway: { cost: "0.0042" } },
 };
 
-const contentParts: LanguageModelV3StreamPart[] = [
+const contentParts: LanguageModelV4StreamPart[] = [
 	{ type: "stream-start", warnings: [{ type: "other", message: "heads up" }] },
 	{ type: "reasoning-start", id: "r1" },
 	{ type: "reasoning-delta", id: "r1", delta: "Think" },
@@ -40,7 +40,7 @@ const contentParts: LanguageModelV3StreamPart[] = [
 	{ type: "text-delta", id: "t2", delta: "unterminated" },
 ];
 
-function sse(part: LanguageModelV3StreamPart | string): string {
+function sse(part: LanguageModelV4StreamPart | string): string {
 	return `data: ${typeof part === "string" ? part : JSON.stringify(part)}\n\n`;
 }
 
@@ -122,7 +122,7 @@ describe("createGatewayProxy streaming with afterResponse", () => {
 		mockFetch.mockResolvedValueOnce(
 			upstreamResponse(upstream.join(""), "text/event-stream; charset=utf-8"),
 		);
-		const meteredUsage: LanguageModelV3Usage = {
+		const meteredUsage: LanguageModelV4Usage = {
 			inputTokens: { total: 100, noCache: 90, cacheRead: 10, cacheWrite: 0 },
 			outputTokens: { total: 200, text: 150, reasoning: 50 },
 		};
@@ -168,8 +168,8 @@ describe("createGatewayProxy streaming with afterResponse", () => {
 	it("errors the client stream and skips the hook when the upstream body fails mid-stream", async () => {
 		const body = new ReadableStream<Uint8Array>({
 			start(controller) {
-				controller.enqueue(encoder.encode(sse(contentParts[5] as LanguageModelV3StreamPart)));
-				controller.enqueue(encoder.encode(sse(contentParts[6] as LanguageModelV3StreamPart)));
+				controller.enqueue(encoder.encode(sse(contentParts[5] as LanguageModelV4StreamPart)));
+				controller.enqueue(encoder.encode(sse(contentParts[6] as LanguageModelV4StreamPart)));
 			},
 			pull(controller) {
 				controller.error(new Error("upstream reset"));
@@ -189,7 +189,7 @@ describe("createGatewayProxy streaming with afterResponse", () => {
 		const cancel = vi.fn();
 		const body = new ReadableStream<Uint8Array>({
 			start(controller) {
-				controller.enqueue(encoder.encode(sse(contentParts[5] as LanguageModelV3StreamPart)));
+				controller.enqueue(encoder.encode(sse(contentParts[5] as LanguageModelV4StreamPart)));
 			},
 			cancel,
 		});
