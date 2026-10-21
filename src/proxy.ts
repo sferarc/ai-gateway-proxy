@@ -317,7 +317,7 @@ async function handleJsonResponse(
 			request: requestBody,
 			response: responseBody,
 		});
-		// A JavaScript caller can return nothing; send the upstream body rather than an empty or `null` one.
+		// A JavaScript caller can return nothing.
 		if (modified === undefined || modified === null) {
 			console.error("afterResponse hook returned no response, forwarding the upstream body");
 		} else {

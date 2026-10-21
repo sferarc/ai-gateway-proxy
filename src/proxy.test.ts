@@ -513,7 +513,6 @@ describe("createGatewayProxy", () => {
 		])("forwards the upstream body when the hook returns %s", async (_name, result) => {
 			const gatewayResponse = createMockGatewayResponse();
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(gatewayResponse));
-			const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 			const proxy = createGatewayProxy({
 				// @ts-expect-error the hook type does not allow undefined or null
@@ -528,7 +527,9 @@ describe("createGatewayProxy", () => {
 			expect(response.status).toBe(200);
 			expect(await response.json()).toEqual(JSON.parse(JSON.stringify(gatewayResponse)));
 			expect(consoleError).toHaveBeenCalledOnce();
-			consoleError.mockRestore();
+			expect(consoleError).toHaveBeenCalledWith(
+				"afterResponse hook returned no response, forwarding the upstream body",
+			);
 		});
 
 		it("receives original request in context", async () => {
