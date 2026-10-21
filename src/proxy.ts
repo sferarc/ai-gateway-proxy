@@ -18,8 +18,8 @@ const FORWARDED_RESPONSE_HEADER =
 const MODEL_CALL_HEADER =
 	/^(?:ai-language-model-.+|ai-model-id|ai-[a-z]+-model-specification-version)$/;
 const REQUEST_METADATA_HEADER = /^(?:ai-o11y-.+|idempotency-key|accept)$/;
-// @ai-sdk/gateway's batch calls that read or cancel a job rather than start a model call.
 const LANGUAGE_MODEL_PATH = /(?:^|\/)language-model$/;
+// @ai-sdk/gateway's batch calls that read or cancel a job rather than start a model call.
 const BATCH_READ_PATH = /(?:^|\/)batch\/(?:status|results|cancel)$/;
 // Successful bodies that are a sequence of values rather than one JSON value: event streams and JSON Lines.
 const STREAM_CONTENT_TYPE =
