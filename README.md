@@ -152,7 +152,7 @@ The path, whether from `extractPath` or the route param, must stay relative: one
 
 ### `afterResponse`
 
-- **Non-streamed responses:** receives the gateway's JSON body as `response`, and the value it returns is sent to the client instead. The value must be a JSON object; a primitive, `null`, an array or a function is a 500.
+- **Non-streamed responses:** receives the gateway's JSON body as `response`, and the value it returns is sent to the client instead. The value must be a JSON object; a primitive, an array or a function is a 500, and `undefined` or `null` forwards the upstream body.
 - **Streamed responses:** every event is forwarded to the client as it arrives. When the `finish` event comes, the hook receives the aggregated response, and the `finishReason`, `usage` and `providerMetadata` it returns replace those in the `finish` event; content changes have no effect because the content has already been sent. If the hook throws, the error is logged and the original `finish` event is forwarded. If the stream ends without a `finish` event, the hook does not run.
 - **Event streams and JSON Lines on other calls:** a successful `text/event-stream` or JSON Lines (`application/x-ndjson`, `application/jsonl`) response to a request without `ai-language-model-streaming: true`, such as the video model's `doGenerate` or the batch API's `doGetBatchResults`, is forwarded as is and the hook does not run, since it is not a language model response.
 
@@ -171,8 +171,8 @@ Apart from forwarding the gateway's own responses, the handler can answer with:
 | 400 | `Invalid JSON body` | A request other than `GET` or `HEAD` has a non-empty body that is not JSON. |
 | 499 | empty | The client aborted the request (`request.signal`) before the handler returned. The signal is passed to the upstream `fetch`, so the abort also cancels the upstream request. |
 | 500 | `Error proxying request to AI Gateway` | Anything else that throws: `extractPath`, `beforeRequest`, the upstream `fetch`, a successful non-streamed response that is not JSON, `afterResponse` on a non-streamed request, or `onError`. |
-| 502 | `Upstream redirected, the proxy does not follow redirects` | The gateway answered with a 3xx status. The proxy sets `redirect: "manual"`, runs no `onError` and forwards no `Location`. |
 | 500 | `No response body` | A successful streamed response arrived without a body. |
+| 502 | `Upstream redirected, the proxy does not follow redirects` | The gateway answered with a 3xx status. The proxy sets `redirect: "manual"`, runs no `onError` and forwards no `Location`. |
 
 ## Other exports
 
