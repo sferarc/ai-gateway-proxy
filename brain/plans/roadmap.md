@@ -12,7 +12,7 @@ There is no milestone on the repository. This note collects the open gaps record
 
 ## Order
 
-Item 2 first, since it fixes behavior without changing the public API. Item 1 waits on the owner and is best done together with a V4 type bump in a release the owner picks ([[development/release]]).
+Item 2 first, since it fixes behavior without changing the public API. Item 1 waits on the owner and is best done together with a V4 type bump in a release the owner picks ([[development/release]]). The unfinished-stream change already breaks `GatewayResponse.usage`, so the two should share one breaking release.
 
 Update this note when an item lands or a new gap is recorded in the architecture notes.
 

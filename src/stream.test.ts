@@ -652,6 +652,7 @@ describe("createStreamTransformer", () => {
 		expect(context?.response.finishReason.unified).toBe("other");
 		expect(consoleError).not.toHaveBeenCalled();
 		expect(consoleWarn).not.toHaveBeenCalled();
+		expect(loggedText()).not.toContain("partial");
 	});
 
 	it("does not set incomplete when the stream finishes", async () => {
@@ -675,6 +676,39 @@ describe("createStreamTransformer", () => {
 		expect(output).toBe(events.join(""));
 		expect(hook).toHaveBeenCalledOnce();
 		expect(consoleError).toHaveBeenCalledOnce();
+		expect(consoleError.mock.calls[0]?.[0]).toMatch(
+			/^afterResponse hook failed on an unfinished stream/,
+		);
+		expect(loggedText()).not.toContain('"x"');
+	});
+
+	it("keeps the upstream usage when the hook returns none on finish", async () => {
+		const output = await readAll(
+			createStreamTransformer(sourceOf([sse(finishEvent)]), requestBody, ({ response }) => ({
+				...response,
+				usage: undefined,
+			})),
+		);
+
+		expect(output).toContain(JSON.stringify(usage));
+	});
+
+	it("cancels the upstream without waiting for a slow hook", async () => {
+		const cancel = vi.fn();
+		const source = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(encoder.encode(sse({ type: "text-delta", id: "t1", delta: "x" })));
+			},
+			cancel,
+		});
+		const hook = vi.fn(() => new Promise<GatewayResponse>(() => {}));
+		const reader = createStreamTransformer(source, requestBody, hook).getReader();
+
+		await reader.read();
+		void reader.cancel("gone");
+		await new Promise((resolve) => setTimeout(resolve, 20));
+
+		expect(cancel).toHaveBeenCalledWith("gone");
 	});
 
 	it("calls the hook once with the cancel reason when the client cancels before finish", async () => {
