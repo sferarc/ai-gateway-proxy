@@ -18,6 +18,7 @@ const FORWARDED_RESPONSE_HEADER =
 const MODEL_CALL_HEADER =
 	/^(?:ai-language-model-.+|ai-model-id|ai-[a-z]+-model-specification-version)$/;
 const REQUEST_METADATA_HEADER = /^(?:ai-o11y-.+|idempotency-key|accept)$/;
+const LANGUAGE_MODEL_PATH = /(?:^|\/)language-model$/;
 // @ai-sdk/gateway's batch calls that read or cancel a job rather than start a model call.
 const BATCH_READ_PATH = /(?:^|\/)batch\/(?:status|results|cancel)$/;
 // Successful bodies that are a sequence of values rather than one JSON value: event streams and JSON Lines.
@@ -63,6 +64,27 @@ function isSafePath(path: string): boolean {
 	}
 
 	return true;
+}
+
+// Folds the spellings a server may treat as one path (case, percent-encoding, repeated and trailing slashes, ";" parameters).
+function normalizePathname(pathname: string): string {
+	return pathname
+		.split("/")
+		.map((segment) => {
+			let decoded = segment;
+			for (let i = 0; i < 3; i++) {
+				try {
+					const next = decodeURIComponent(decoded);
+					if (next === decoded) break;
+					decoded = next;
+				} catch {
+					break;
+				}
+			}
+			return decoded.split(";")[0].toLowerCase();
+		})
+		.filter(Boolean)
+		.join("/");
 }
 
 /**
@@ -393,9 +415,13 @@ export const createGatewayProxy = ({
 			// on a language model call by adding ai-model-id. Batch status, results and cancel send no
 			// model header and post only a batch id, so they run none either. The match is on the
 			// resolved pathname, so a "?" or "#" in the path cannot make a model call look like one.
+			// The /language-model path runs them whatever the headers, since a client sets its own.
+			const pathname = normalizePathname(new URL(upstream).pathname);
 			const runsHooks =
-				!BATCH_READ_PATH.test(new URL(upstream).pathname) &&
-				(!request.headers.has("ai-model-id") || request.headers.has("ai-language-model-id"));
+				!BATCH_READ_PATH.test(pathname) &&
+				(LANGUAGE_MODEL_PATH.test(pathname) ||
+					!request.headers.has("ai-model-id") ||
+					request.headers.has("ai-language-model-id"));
 
 			// Apply beforeRequest hook
 			if (beforeRequest && runsHooks) {

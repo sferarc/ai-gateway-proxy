@@ -9,10 +9,10 @@ There is no milestone on the repository. This note collects the open gaps record
 
 ## Can be done without the owner
 
-3. **Language model calls that send `ai-model-id` alone.** Whether the gateway serves a `/language-model` call without `ai-language-model-id` is unknown, and if it does, that call skips the hooks. Settle it against the gateway docs or a recorded request before changing the check. Source: step 6 of [[architecture/proxy]].
+None open.
 
 ## Order
 
-Item 3 first, since it fixes behavior without changing the public API. Items 1 and 2 wait on the owner, and item 2 is best done together with a V4 type bump in a major or minor release the owner picks ([[development/release]]).
+Items 1 and 2 wait on the owner, and item 2 is best done together with a V4 type bump in a major or minor release the owner picks ([[development/release]]).
 
 Update this note when an item lands or a new gap is recorded in the architecture notes.
