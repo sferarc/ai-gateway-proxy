@@ -532,6 +532,32 @@ describe("createGatewayProxy", () => {
 			);
 		});
 
+		it.each([
+			["a string", "text"],
+			["a number", 1],
+			["an array", []],
+		])("returns 500 when the hook returns %s", async (_name, result) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+
+			const proxy = createGatewayProxy({
+				// @ts-expect-error the hook type requires a response object
+				afterResponse: () => result,
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			await expectGatewayError(
+				response,
+				500,
+				"proxy_error",
+				"Error proxying request to AI Gateway",
+			);
+			expect(consoleError).toHaveBeenCalledOnce();
+		});
+
 		it("receives original request in context", async () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 
@@ -582,6 +608,76 @@ describe("createGatewayProxy", () => {
 				temperature: 0.5,
 				maxOutputTokens: 500,
 			});
+		});
+	});
+
+	describe("redirects", () => {
+		it("sends the upstream call with redirect manual", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+
+			const proxy = createGatewayProxy({});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+			await proxy(request, createMockContext(["chat"]));
+
+			expect(mockFetch.mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+		});
+
+		it("returns 502 and does not follow a 3xx on a body request", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(null, { status: 302, headers: { location: "https://evil.example/steal" } }),
+			);
+
+			const proxy = createGatewayProxy({});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			await expectGatewayError(
+				response,
+				502,
+				"proxy_error",
+				"Upstream redirected, the proxy does not follow redirects",
+			);
+			expect(response.headers.get("location")).toBeNull();
+			expect(mockFetch).toHaveBeenCalledOnce();
+		});
+
+		it("returns 502 and does not follow a 3xx on a bodyless GET", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(null, { status: 307, headers: { location: "https://evil.example/steal" } }),
+			);
+
+			const proxy = createGatewayProxy({});
+			const request = createMockRequest("http://localhost/api/config", { method: "GET" });
+			const response = await proxy(request, createMockContext(["config"]));
+
+			await expectGatewayError(
+				response,
+				502,
+				"proxy_error",
+				"Upstream redirected, the proxy does not follow redirects",
+			);
+			expect(mockFetch.mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+			expect(mockFetch).toHaveBeenCalledOnce();
+		});
+
+		it("does not run onError on a redirect", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(null, { status: 301, headers: { location: "/x" } }),
+			);
+			const onError = vi.fn();
+
+			const proxy = createGatewayProxy({ onError });
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(502);
+			expect(onError).not.toHaveBeenCalled();
 		});
 	});
 
