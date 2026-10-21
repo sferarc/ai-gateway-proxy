@@ -1,4 +1,4 @@
-import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
+import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { type GatewayAuthToken, getGatewayAuthToken } from "./auth";
 import { createStreamTransformer } from "./stream";
 import type {
@@ -263,7 +263,7 @@ function responseHeaders(res: Response, contentType: string): Headers {
 async function createErrorResponse(
 	res: Response,
 	errorBody: GatewayError,
-	requestBody: LanguageModelV3CallOptions,
+	requestBody: LanguageModelV4CallOptions,
 	onError: CreateGatewayProxyOptions["onError"],
 ): Promise<Response> {
 	if (onError) {
@@ -296,7 +296,7 @@ async function createErrorResponse(
  */
 function handleStreamingResponse(
 	res: Response,
-	requestBody: LanguageModelV3CallOptions,
+	requestBody: LanguageModelV4CallOptions,
 	afterResponse: CreateGatewayProxyOptions["afterResponse"],
 ): Response {
 	if (!res.body) {
@@ -329,7 +329,7 @@ function handleStreamingResponse(
  */
 async function handleJsonResponse(
 	res: Response,
-	requestBody: LanguageModelV3CallOptions,
+	requestBody: LanguageModelV4CallOptions,
 	afterResponse: CreateGatewayProxyOptions["afterResponse"],
 ): Promise<Response> {
 	let responseBody: GatewayResponse = await res.json();
@@ -357,7 +357,7 @@ async function handleJsonResponse(
 /**
  * Creates a proxy handler for the Vercel AI Gateway.
  *
- * Uses AI SDK V3 Language Model.
+ * Uses AI SDK V4 Language Model.
  * @see https://github.com/vercel/ai/blob/main/packages/gateway/src/gateway-language-model.ts
  */
 export const createGatewayProxy = ({
@@ -402,7 +402,7 @@ export const createGatewayProxy = ({
 			}
 
 			// Parse request body
-			let requestBody: LanguageModelV3CallOptions;
+			let requestBody: LanguageModelV4CallOptions;
 			try {
 				requestBody = JSON.parse(text);
 			} catch {

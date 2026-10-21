@@ -57,14 +57,12 @@ Beyond the transformer, `src/proxy-stream.test.ts` drives `createGatewayProxy` w
 
 ## Specification version 4 parts
 
-The proxy forwards `ai-language-model-specification-version` from the client ([[proxy]] step 7), and `@ai-sdk/gateway` 4.x sends `4`, so the gateway can answer with `LanguageModelV4StreamPart` events while `StreamContentAggregator` is typed against `LanguageModelV3StreamPart`. Every event is still forwarded to the client unchanged; the gap is only in what `afterResponse` receives. Comparing the two unions in `@ai-sdk/provider` 4.0.27 (`dist/index.d.ts`):
+The hook types are specification version 4 (`LanguageModelV4*` from `@ai-sdk/provider`), the version `@ai-sdk/gateway` 4.x sends in `ai-language-model-specification-version` ([[proxy]] step 7). `GatewayResponse`, `StreamContentAggregator` and the request type of the hooks moved from V3 in a changeset (`.changeset/spec-v4-hook-types.md`), since `GatewayResponse` is public. Every event is still forwarded to the client unchanged; only what `afterResponse` receives changed. Against `@ai-sdk/provider` 4.0.29 (`dist/index.d.ts`):
 
 - `finish`, `usage` and `finishReason` have the same shape, so metering in the hook is unaffected.
-- V4 adds `custom` and `reasoning-file` parts. The aggregator has no case for them, so they are missing from the aggregated `content`.
-- V4 `text-end` may carry `citations`. The aggregator builds text blocks as `{ type, text }`, so citations are dropped, as `providerMetadata` already is.
-- V4 `file` parts carry `data` as a tagged object (`SharedV4FileData...`) instead of V3's `string | Uint8Array`. The aggregator pushes the part as is, so the hook receives the V4 shape under a V3 type. The non-streaming `afterResponse` body has the same type mismatch.
-
-Moving the hook types to V4 changes the public `GatewayResponse` type, so it is left for a deliberate change rather than made here.
+- `custom` and `reasoning-file` parts are pushed into `content` at the position they arrive, like `file`. Pinned by "includes custom content", "includes reasoning-file content" and "keeps custom and reasoning-file parts in arrival order around text".
+- `citations` on `text-end` are set on the text block with that id. A `text-end` with no open block adds nothing, and a block without citations has no `citations` key. Pinned by the `citations` suite in `src/stream.test.ts`. `providerMetadata` on the text parts is still dropped.
+- `file` parts keep the tagged `data` object, now typed as such. The aggregator does not convert it, and over the wire a `url` variant is a string, not a `URL`, so the type is a promise the JSON parse does not check. Pinned by "includes file content" and "passes version 4 parts to the hook and forwards them unchanged".
 
 ## Open question: streams that end without `finish`
 
