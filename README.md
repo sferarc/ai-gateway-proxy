@@ -130,7 +130,7 @@ The proxy gets a credential on every request with `getGatewayAuthToken()`, in th
 1. **API key:** the `AI_GATEWAY_API_KEY` environment variable
 2. **OIDC:** a Vercel OIDC token, available when deployed on Vercel
 
-`getGatewayAuthToken()` is exported. It resolves to `{ token, authMethod: "api-key" | "oidc" }`, or `null` when neither is available, in which case the proxy answers `500 AI Gateway authentication not configured`. The proxy sends the token upstream as `authorization: Bearer <token>` with `ai-gateway-auth-method`, so the credential never reaches the client.
+`getGatewayAuthToken()` is exported. It resolves to `{ token, authMethod: "api-key" | "oidc" }`, or `null` when neither is available, in which case the proxy answers `500` with an `authentication_error` (see below). The proxy sends the token upstream as `authorization: Bearer <token>` with `ai-gateway-auth-method`, so the credential never reaches the client.
 
 ## Options
 
@@ -162,16 +162,16 @@ Receives `{ request, error, status }`, where `error` is the gateway's JSON error
 
 ## Responses the proxy generates
 
-Apart from forwarding the gateway's own responses, the handler can answer with:
+Apart from forwarding the gateway's own responses, the handler can answer with a JSON `GatewayError` body, `{ "error": { "message", "type" } }`, with the `type` and `message` below (`499` has an empty body):
 
-| Status | Body | When |
-| --- | --- | --- |
-| 500 | `AI Gateway authentication not configured` | `getGatewayAuthToken()` returned `null`. |
-| 400 | `Invalid path` | The path is not a safe relative path under `baseUrl`. |
-| 400 | `Invalid JSON body` | A request other than `GET` or `HEAD` has a non-empty body that is not JSON. |
-| 499 | empty | The client aborted the request (`request.signal`) before the handler returned. The signal is passed to the upstream `fetch`, so the abort also cancels the upstream request. |
-| 500 | `Error proxying request to AI Gateway` | Anything else that throws: `extractPath`, `beforeRequest`, the upstream `fetch`, a successful non-streamed response that is not JSON, `afterResponse` on a non-streamed request, or `onError`. |
-| 500 | `No response body` | A successful streamed response arrived without a body. |
+| Status | Type | Message | When |
+| --- | --- | --- | --- |
+| 500 | `authentication_error` | `AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled` | `getGatewayAuthToken()` returned `null`. |
+| 400 | `invalid_request_error` | `Invalid path` | The path is not a safe relative path under `baseUrl`. |
+| 400 | `invalid_request_error` | `Invalid JSON body` | A request other than `GET` or `HEAD` has a non-empty body that is not JSON. |
+| 499 | none | none | The client aborted the request (`request.signal`) before the handler returned. The signal is passed to the upstream `fetch`, so the abort also cancels the upstream request. |
+| 500 | `proxy_error` | `Error proxying request to AI Gateway` | Anything else that throws: `extractPath`, `beforeRequest`, the upstream `fetch`, a successful non-streamed response that is not JSON, `afterResponse` on a non-streamed request, or `onError`. |
+| 500 | `proxy_error` | `No response body` | A successful streamed response arrived without a body. |
 
 ## Other exports
 
