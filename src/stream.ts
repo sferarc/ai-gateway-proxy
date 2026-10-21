@@ -9,7 +9,7 @@ import type {
 	SharedV4Warning,
 } from "@ai-sdk/provider";
 import { EventSourceParserStream } from "@ai-sdk/provider-utils";
-import type { CreateGatewayProxyOptions, GatewayResponse } from "./types";
+import type { CreateGatewayProxyOptions, GatewayResponse, IncompleteStream } from "./types";
 
 /**
  * Aggregator for collecting stream content.
@@ -27,23 +27,11 @@ export class StreamContentAggregator {
 	private reasoningContent = new Map<string, { type: "reasoning"; text: string }>();
 
 	private finishReason: LanguageModelV4FinishReason = {
-		unified: "stop",
+		unified: "other",
 		raw: undefined,
 	};
 
-	private usage: LanguageModelV4Usage = {
-		inputTokens: {
-			total: undefined,
-			noCache: undefined,
-			cacheRead: undefined,
-			cacheWrite: undefined,
-		},
-		outputTokens: {
-			total: undefined,
-			text: undefined,
-			reasoning: undefined,
-		},
-	};
+	private usage: LanguageModelV4Usage | undefined;
 
 	private providerMetadata: SharedV4ProviderMetadata | undefined;
 
@@ -144,7 +132,8 @@ export class StreamContentAggregator {
 	}
 
 	/**
-	 * Get the aggregated response.
+	 * Get the aggregated response. Before a `finish` part, `usage` is undefined and
+	 * `finishReason` is `other`.
 	 */
 	getResponse(): GatewayResponse {
 		return {
@@ -172,7 +161,8 @@ function sseEvent(data: string): string {
  * Creates a transform stream that:
  * 1. Passes through all SSE events immediately
  * 2. Aggregates content using StreamContentAggregator
- * 3. Calls afterResponse when finish event is received
+ * 3. Calls afterResponse when finish event is received, or once with partial content if the
+ *    stream ends, fails or is cancelled first
  * 4. Modifies the finish event based on afterResponse result
  *
  * Uses EventSourceParserStream from @ai-sdk/provider-utils for SSE parsing.
@@ -194,6 +184,7 @@ export function createStreamTransformer(
 	const reader = eventStream.getReader();
 	let cancelled = false;
 	let finishSeen = false;
+	let incompleteReported = false;
 	let warnedNonJson = false;
 
 	/**
@@ -238,13 +229,30 @@ export function createStreamTransformer(
 			const modifiedFinish: LanguageModelV4StreamPart = {
 				type: "finish",
 				finishReason: modifiedResponse.finishReason,
-				usage: modifiedResponse.usage,
+				usage: modifiedResponse.usage ?? parsed.usage,
 				providerMetadata: modifiedResponse.providerMetadata,
 			};
 			return JSON.stringify(modifiedFinish);
 		} catch (error) {
 			console.error("afterResponse hook failed, forwarding original finish event:", error);
 			return data;
+		}
+	}
+
+	// No finish event is left to rewrite, so the result is ignored and a throw only logged.
+	async function reportIncomplete(incomplete: IncompleteStream): Promise<void> {
+		if (finishSeen || incompleteReported) {
+			return;
+		}
+		incompleteReported = true;
+		const response = aggregator.getResponse();
+		if (incomplete.reason === "error") {
+			response.finishReason = { unified: "error", raw: undefined };
+		}
+		try {
+			await afterResponse({ request: requestBody, response, incomplete });
+		} catch (error) {
+			console.error("afterResponse hook failed on an unfinished stream:", error);
 		}
 	}
 
@@ -255,10 +263,9 @@ export function createStreamTransformer(
 			try {
 				const { done, value } = await reader.read();
 				if (done) {
-					if (!finishSeen && !cancelled) {
-						console.warn(
-							"upstream stream ended without a finish event, afterResponse was not called",
-						);
+					// Awaited before close so a serverless handler stays alive until the hook finishes.
+					if (!cancelled) {
+						await reportIncomplete({ reason: "ended" });
 					}
 					controller.close();
 					reader.releaseLock();
@@ -269,14 +276,18 @@ export function createStreamTransformer(
 			} catch (error) {
 				if (!cancelled) {
 					console.error("upstream stream failed, erroring the client stream:", error);
+					await reportIncomplete({ reason: "error", error });
 				}
 				controller.error(error);
 				reader.releaseLock();
 			}
 		},
-		cancel(reason) {
+		async cancel(reason) {
 			cancelled = true;
-			return reader.cancel(reason);
+			const upstream = reader.cancel(reason);
+			upstream.catch(() => {});
+			await reportIncomplete({ reason: "cancelled", cancelReason: reason });
+			return upstream;
 		},
 	});
 }

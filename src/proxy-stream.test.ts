@@ -153,8 +153,7 @@ describe("createGatewayProxy streaming with afterResponse", () => {
 		expect(hook).toHaveBeenCalledOnce();
 	});
 
-	// Pins current behavior: without a finish event the hook never runs, so usage goes unreported.
-	it("does not call the hook when the upstream ends without a finish event", async () => {
+	it("calls the hook with partial content and unknown usage when the upstream ends without a finish event", async () => {
 		const upstream = contentParts.map(sse).join("");
 		mockFetch.mockResolvedValueOnce(upstreamResponse(upstream));
 		const hook = spyHook();
@@ -162,10 +161,13 @@ describe("createGatewayProxy streaming with afterResponse", () => {
 		const response = await callProxy(hook);
 
 		expect(await response.text()).toBe(upstream);
-		expect(hook).not.toHaveBeenCalled();
+		expect(hook).toHaveBeenCalledOnce();
+		const context = hook.mock.calls[0]?.[0];
+		expect(context?.incomplete).toEqual({ reason: "ended" });
+		expect(context?.response.usage).toBeUndefined();
 	});
 
-	it("errors the client stream and skips the hook when the upstream body fails mid-stream", async () => {
+	it("errors the client stream and reports the failure to the hook when the upstream body fails mid-stream", async () => {
 		const body = new ReadableStream<Uint8Array>({
 			start(controller) {
 				controller.enqueue(encoder.encode(sse(contentParts[5] as LanguageModelV4StreamPart)));
@@ -182,7 +184,8 @@ describe("createGatewayProxy streaming with afterResponse", () => {
 
 		expect(response.status).toBe(200);
 		await expect(response.text()).rejects.toThrow("upstream reset");
-		expect(hook).not.toHaveBeenCalled();
+		expect(hook).toHaveBeenCalledOnce();
+		expect(hook.mock.calls[0]?.[0].incomplete?.reason).toBe("error");
 	});
 
 	it("cancels the upstream body when the client cancels the response", async () => {
@@ -204,6 +207,10 @@ describe("createGatewayProxy streaming with afterResponse", () => {
 		await reader.cancel("client went away");
 
 		await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith("client went away"));
-		expect(hook).not.toHaveBeenCalled();
+		expect(hook).toHaveBeenCalledOnce();
+		expect(hook.mock.calls[0]?.[0].incomplete).toEqual({
+			reason: "cancelled",
+			cancelReason: "client went away",
+		});
 	});
 });

@@ -2,6 +2,7 @@
 
 Dated records of choices a later change could undo by accident. Each says what was decided, why, and what would reopen it. Newest first.
 
+- [[2026-10-21-hook-on-unfinished-streams]]: `afterResponse` also runs on streams that end, fail or are cancelled before `finish`, as a minor change
 - [[2026-10-21-language-model-path-runs-hooks]]: a `/language-model` path runs every hook, whatever model headers the client sends
 - [[2026-10-08-standalone-repository]]: the proxy left the SferaDev/SferaDev monorepo for its own repository
 - [[2026-10-08-release-off-until-enabled]]: `release.yml` does nothing until the owner sets `RELEASE_ENABLED`
