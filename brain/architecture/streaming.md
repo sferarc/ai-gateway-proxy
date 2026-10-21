@@ -3,7 +3,7 @@
 A request is treated as streaming when it carries `ai-language-model-streaming: true` (`src/proxy.ts`).
 
 - **No `afterResponse` hook:** the upstream body is returned as is, keeping its `content-type` (default `text/event-stream`) and the allowlisted upstream response headers ([[proxy]] step 9).
-- **With `afterResponse`:** `createStreamTransformer` (`src/stream.ts`) parses the SSE body with `EventSourceParserStream` from `@ai-sdk/provider-utils`. Every event is forwarded immediately and also fed to a `StreamContentAggregator`. On the `finish` event it calls `afterResponse` with the aggregated `GatewayResponse` and emits a rewritten `finish` event carrying the hook's `finishReason`, `usage` and `providerMetadata`. Content has already been streamed by then, so the hook can only change that metadata (doc comment on `afterResponse` in `src/types.ts`). If the hook throws, the error is logged with `console.error` and the upstream `finish` event is forwarded instead, so the stream still completes (#11).
+- **With `afterResponse`:** `createStreamTransformer` (`src/stream.ts`) parses the SSE body with `EventSourceParserStream` from `@ai-sdk/provider-utils`. Every event is forwarded immediately and also fed to a `StreamContentAggregator`. On the `finish` event it calls `afterResponse` with the aggregated `GatewayResponse` and emits a rewritten `finish` event carrying the hook's `finishReason`, `usage` and `providerMetadata`. A hook `usage` of `undefined` keeps the upstream usage, so a hook cannot strip it. Content has already been streamed by then, so the hook can only change that metadata (doc comment on `afterResponse` in `src/types.ts`). If the hook throws, the error is logged with `console.error` and the upstream `finish` event is forwarded instead, so the stream still completes (#11).
 
 `DONE` and `[DONE]` markers and events whose data is not a JSON object pass through unchanged without reaching the aggregator. That covers valid JSON that is not an object, such as `null`, `42` or `"text"`: it used to reach `StreamContentAggregator.process`, whose `part.type` read threw on `null` and errored the client stream, where the same upstream with no hook reached the client intact. Pinned by "passes JSON data that is not an object through like non-JSON data".
 
@@ -20,7 +20,7 @@ Events are re-encoded with `sseEvent` (`src/stream.ts`), which writes one `data:
 - `console.warn` once per stream on the first non-`DONE` event whose data is not a JSON object ("is not a JSON object, passing it through unparsed"). The event itself is still forwarded unchanged.
 - `console.error("afterResponse hook failed, forwarding original finish event:", error)` when the hook throws.
 
-A client cancel is not logged: `cancel` sets a flag that suppresses the read error log, calls the hook with `incomplete` set, and still cancels the upstream with the same reason. Covered by `src/stream.test.ts`, which spies on `console.warn` and `console.error` and checks that payload text never reaches them.
+A client cancel is not logged unless the hook throws: `cancel` sets a flag that suppresses the read error log, calls the hook with `incomplete` set, and cancels the upstream with the same reason without waiting for the hook. Covered by `src/stream.test.ts`, which spies on `console.warn` and `console.error` and checks that payload text never reaches them.
 
 ## Backpressure
 
@@ -68,7 +68,7 @@ Moving the hook types to V4 changes the public `GatewayResponse` type, so it is 
 
 ## Streams that end without `finish`
 
-When the upstream ends, errors or is cancelled before `finish`, `createStreamTransformer` calls `afterResponse` once through `reportIncomplete` (`src/stream.ts`), so a consumer metering usage sees the request. The context carries `incomplete` (`IncompleteStream` in `src/types.ts`), `response.content` holds what arrived, `response.usage` is `undefined` and `response.finishReason` is `error` for a failed read and `other` otherwise. The return value is ignored, since no `finish` event is left to rewrite, and a throw is logged. A flag keeps the hook to one call per stream, and it never runs after `finish` was seen. Decision and why it is a major change: [[decisions/2026-10-21-hook-on-unfinished-streams]]. Pinned by the unfinished-stream tests in `src/stream.test.ts`, `src/proxy-stream.test.ts` and `src/e2e.test.ts`.
+When the upstream ends, errors or is cancelled before `finish`, `createStreamTransformer` calls `afterResponse` once through `reportIncomplete` (`src/stream.ts`), so a consumer metering usage sees the request. The context carries `incomplete` (`IncompleteStream` in `src/types.ts`), `response.content` holds what arrived, `response.usage` is `undefined` and `response.finishReason` is `error` for a failed read and `other` otherwise. The return value is ignored, since no `finish` event is left to rewrite, and a throw is logged. A flag keeps the hook to one call per stream, and it never runs after `finish` was seen. Decision and why it is a minor change: [[decisions/2026-10-21-hook-on-unfinished-streams]]. Pinned by the unfinished-stream tests in `src/stream.test.ts`, `src/proxy-stream.test.ts` and `src/e2e.test.ts`.
 
 ## Hook result without stream metadata
 

@@ -10,9 +10,9 @@ Recorded 2026-10-21, from `src/stream.ts`, `src/types.ts` and the open question 
 
 A consumer that meters usage in the hook recorded nothing for these requests and could not tell them from requests that never happened. Reusing the existing hook keeps metering in one place; a separate hook would mean a second option for the same lifecycle.
 
-## Why major
+## Why minor
 
-`GatewayResponse.usage` is now `LanguageModelV3Usage | undefined`, so code reading `response.usage.inputTokens` stops compiling. Libraries here follow semver, so the changeset is major. Hooks that never touch `usage` only see an extra call.
+`GatewayResponse.usage` is now `LanguageModelV3Usage | undefined`, so code reading `response.usage.inputTokens` stops compiling. This is a breaking type change, but the package is 0.x and files breaking changes as `minor` (see `update-runtime-dependencies.md` and [[development/release]]), so the next version stays 0.2.0 and 1.0.0 remains the owner's call. Hooks that never touch `usage` only see an extra call. It should ship in the same release as the V4 type bump in [[plans/roadmap]].
 
 ## What would reopen it
 

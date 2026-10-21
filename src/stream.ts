@@ -231,8 +231,7 @@ export function createStreamTransformer(
 		}
 	}
 
-	// Reports a stream that never delivered finish. The hook cannot rewrite anything then, so
-	// its result is ignored and a failure is only logged.
+	// No finish event is left to rewrite, so the result is ignored and a throw only logged.
 	async function reportIncomplete(incomplete: IncompleteStream): Promise<void> {
 		if (finishSeen || incompleteReported) {
 			return;
@@ -256,6 +255,7 @@ export function createStreamTransformer(
 			try {
 				const { done, value } = await reader.read();
 				if (done) {
+					// Awaited before close so a serverless handler stays alive until the hook finishes.
 					if (!cancelled) {
 						await reportIncomplete({ reason: "ended" });
 					}
@@ -276,8 +276,9 @@ export function createStreamTransformer(
 		},
 		async cancel(reason) {
 			cancelled = true;
+			const upstream = reader.cancel(reason);
 			await reportIncomplete({ reason: "cancelled", cancelReason: reason });
-			return reader.cancel(reason);
+			return upstream;
 		},
 	});
 }

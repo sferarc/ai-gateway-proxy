@@ -21,9 +21,7 @@ export type GatewayResponse = {
 };
 
 /**
- * Why a streamed response never delivered a `finish` event.
- * `ended`: the upstream closed early. `error`: reading the upstream failed, with the failure in `error`.
- * `cancelled`: the client went away, with the cancel reason in `reason`.
+ * Why a stream had no `finish` event; the cancel reason is in `cancelReason`.
  */
 export type IncompleteStream =
 	| { reason: "ended" }
