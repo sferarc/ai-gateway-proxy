@@ -1,5 +1,5 @@
 import { createGatewayProvider } from "@ai-sdk/gateway";
-import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
+import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { createGatewayProxy } from "./proxy";
 import type { GatewayError, GatewayResponse } from "./types";
@@ -535,7 +535,7 @@ describe("createGatewayProxy", () => {
 		it("receives original request in context", async () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 
-			let capturedRequest: LanguageModelV3CallOptions | null = null;
+			let capturedRequest: LanguageModelV4CallOptions | null = null;
 			const proxy = createGatewayProxy({
 				afterResponse: ({ request, response }) => {
 					capturedRequest = request;
@@ -561,7 +561,7 @@ describe("createGatewayProxy", () => {
 		it("receives beforeRequest modifications in afterResponse", async () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 
-			let capturedRequest: LanguageModelV3CallOptions | null = null;
+			let capturedRequest: LanguageModelV4CallOptions | null = null;
 			const proxy = createGatewayProxy({
 				beforeRequest: ({ request }) => ({
 					...request,
@@ -664,7 +664,7 @@ describe("createGatewayProxy", () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(errorResponse, { status: 500 }));
 
 			type ErrorContext = {
-				request: LanguageModelV3CallOptions;
+				request: LanguageModelV4CallOptions;
 				error: GatewayError;
 				status: number;
 			};
@@ -1022,6 +1022,37 @@ describe("createGatewayProxy", () => {
 			});
 			expect(onError).toHaveBeenCalledOnce();
 		});
+
+		it.each([
+			["language-model"],
+			["ai/language-model"],
+			["language-model/"],
+			["language-model//"],
+			["language%2Dmodel"],
+			["language%252Dmodel"],
+			["Language-Model"],
+			["language-model;x=1"],
+		])(
+			"runs every hook on the language model path %s that sends ai-model-id alone",
+			async (path) => {
+				mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+				const beforeRequest = vi.fn(({ request }) => ({ ...request, maxOutputTokens: 10 }));
+				const afterResponse = vi.fn(({ response }) => response);
+				const proxy = createGatewayProxy({ beforeRequest, afterResponse });
+
+				const response = await proxy(
+					createMockRequest(`http://localhost/api/${path}`, {
+						body: { prompt: [] },
+						headers: { "ai-model-id": "openai/gpt-4o" },
+					}),
+					createMockContext([path]),
+				);
+
+				expect(response.status).toBe(200);
+				expect(beforeRequest).toHaveBeenCalledOnce();
+				expect(afterResponse).toHaveBeenCalledOnce();
+			},
+		);
 
 		it("runs no hook on a batch status or cancel call from @ai-sdk/gateway", async () => {
 			mockFetch.mockImplementation(async () =>

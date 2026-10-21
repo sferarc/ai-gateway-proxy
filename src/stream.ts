@@ -1,11 +1,12 @@
 import type {
-	LanguageModelV3CallOptions,
-	LanguageModelV3Content,
-	LanguageModelV3FinishReason,
-	LanguageModelV3StreamPart,
-	LanguageModelV3Usage,
-	SharedV3ProviderMetadata,
-	SharedV3Warning,
+	LanguageModelV4CallOptions,
+	LanguageModelV4Content,
+	LanguageModelV4FinishReason,
+	LanguageModelV4StreamPart,
+	LanguageModelV4Text,
+	LanguageModelV4Usage,
+	SharedV4ProviderMetadata,
+	SharedV4Warning,
 } from "@ai-sdk/provider";
 import { EventSourceParserStream } from "@ai-sdk/provider-utils";
 import type { CreateGatewayProxyOptions, GatewayResponse, IncompleteStream } from "./types";
@@ -14,33 +15,33 @@ import type { CreateGatewayProxyOptions, GatewayResponse, IncompleteStream } fro
  * Aggregator for collecting stream content.
  * Tracks text deltas, reasoning, tool calls, and other content to build the final GatewayResponse.
  *
- * Uses AI SDK V3 protocol types.
- * @see https://github.com/vercel/ai/blob/main/packages/provider/src/language-model/v3/language-model-v3-stream-part.ts
+ * Uses AI SDK V4 protocol types.
+ * @see https://github.com/vercel/ai/blob/main/packages/provider/src/language-model/v4/language-model-v4-stream-part.ts
  */
 export class StreamContentAggregator {
-	private content: LanguageModelV3Content[] = [];
-	private warnings: SharedV3Warning[] = [];
+	private content: LanguageModelV4Content[] = [];
+	private warnings: SharedV4Warning[] = [];
 
 	// Open text and reasoning blocks by id. Each block already holds its slot in `content`.
-	private textContent = new Map<string, { type: "text"; text: string }>();
+	private textContent = new Map<string, LanguageModelV4Text>();
 	private reasoningContent = new Map<string, { type: "reasoning"; text: string }>();
 
-	private finishReason: LanguageModelV3FinishReason = {
+	private finishReason: LanguageModelV4FinishReason = {
 		unified: "other",
 		raw: undefined,
 	};
 
-	private usage: LanguageModelV3Usage | undefined;
+	private usage: LanguageModelV4Usage | undefined;
 
-	private providerMetadata: SharedV3ProviderMetadata | undefined;
+	private providerMetadata: SharedV4ProviderMetadata | undefined;
 
 	/**
 	 * Process a stream part and update aggregated state.
-	 * Uses LanguageModelV3StreamPart type from @ai-sdk/provider.
+	 * Uses LanguageModelV4StreamPart type from @ai-sdk/provider.
 	 *
-	 * @see https://github.com/vercel/ai/blob/main/packages/provider/src/language-model/v3/language-model-v3-stream-part.ts
+	 * @see https://github.com/vercel/ai/blob/main/packages/provider/src/language-model/v4/language-model-v4-stream-part.ts
 	 */
-	process(part: LanguageModelV3StreamPart): void {
+	process(part: LanguageModelV4StreamPart): void {
 		switch (part.type) {
 			case "stream-start":
 				// The part comes off the wire, so a missing or malformed warnings field adds none.
@@ -57,9 +58,14 @@ export class StreamContentAggregator {
 				(this.textContent.get(part.id) ?? this.openText(part.id)).text += part.delta;
 				break;
 
-			case "text-end":
+			case "text-end": {
+				const block = this.textContent.get(part.id);
+				if (block && Array.isArray(part.citations)) {
+					block.citations = part.citations;
+				}
 				this.textContent.delete(part.id);
 				break;
+			}
 
 			case "reasoning-start":
 				this.openReasoning(part.id);
@@ -92,6 +98,8 @@ export class StreamContentAggregator {
 				break;
 
 			case "file":
+			case "custom":
+			case "reasoning-file":
 				this.content.push(part);
 				break;
 
@@ -110,7 +118,7 @@ export class StreamContentAggregator {
 	}
 
 	private openText(id: string) {
-		const block = { type: "text" as const, text: "" };
+		const block: LanguageModelV4Text = { type: "text", text: "" };
 		this.textContent.set(id, block);
 		this.content.push(block);
 		return block;
@@ -164,7 +172,7 @@ function sseEvent(data: string): string {
  */
 export function createStreamTransformer(
 	body: ReadableStream<Uint8Array>,
-	requestBody: LanguageModelV3CallOptions,
+	requestBody: LanguageModelV4CallOptions,
 	afterResponse: NonNullable<CreateGatewayProxyOptions["afterResponse"]>,
 ): ReadableStream<Uint8Array> {
 	const encoder = new TextEncoder();
@@ -201,7 +209,7 @@ export function createStreamTransformer(
 			}
 			return data;
 		}
-		const parsed = json as LanguageModelV3StreamPart;
+		const parsed = json as LanguageModelV4StreamPart;
 
 		// Track content for aggregation
 		aggregator.process(parsed);
@@ -218,7 +226,7 @@ export function createStreamTransformer(
 				request: requestBody,
 				response: aggregator.getResponse(),
 			});
-			const modifiedFinish: LanguageModelV3StreamPart = {
+			const modifiedFinish: LanguageModelV4StreamPart = {
 				type: "finish",
 				finishReason: modifiedResponse.finishReason,
 				usage: modifiedResponse.usage ?? parsed.usage,
