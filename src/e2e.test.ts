@@ -9,7 +9,7 @@ import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { generateText, streamText } from "ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startProxyServer } from "./test-server";
-import type { CreateGatewayProxyOptions, GatewayResponse } from "./types";
+import type { CreateGatewayProxyOptions, GatewayResponse, IncompleteStream } from "./types";
 
 const MODEL = "test/fake-model";
 const GATEWAY_KEY = "e2e-dummy-gateway-key";
@@ -265,7 +265,9 @@ describe("E2E: AI SDK client through the proxy to a fake gateway", () => {
 
 		it("closes the upstream stream when the client aborts mid-stream", async () => {
 			upstream.respondWith(respondStreamThenHang);
-			const afterResponse = vi.fn(({ response }: { response: GatewayResponse }) => response);
+			const afterResponse = vi.fn(
+				({ response }: { response: GatewayResponse; incomplete?: IncompleteStream }) => response,
+			);
 			// Without the abort signal the only path upstream is cancelling the response body.
 			const gateway = await startProxy({ afterResponse }, { forwardAbortSignal: false });
 			const controller = new AbortController();
@@ -282,7 +284,10 @@ describe("E2E: AI SDK client through the proxy to a fake gateway", () => {
 			}
 
 			expect(await upstream.requests[0].closedEarly).toBe(true);
-			expect(afterResponse).not.toHaveBeenCalled();
+			await vi.waitFor(() => expect(afterResponse).toHaveBeenCalledOnce());
+			const context = afterResponse.mock.calls[0]?.[0];
+			expect(context?.incomplete?.reason).toBe("cancelled");
+			expect(context?.response.usage).toBeUndefined();
 		});
 	});
 });
