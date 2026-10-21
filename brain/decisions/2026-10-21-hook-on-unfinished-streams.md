@@ -12,7 +12,7 @@ A consumer that meters usage in the hook recorded nothing for these requests and
 
 ## Why minor
 
-`GatewayResponse.usage` is now `LanguageModelV3Usage | undefined`, so code reading `response.usage.inputTokens` stops compiling. This is a breaking type change, but the package is 0.x and files breaking changes as `minor` (see `update-runtime-dependencies.md` and [[development/release]]), so the next version stays 0.2.0 and 1.0.0 remains the owner's call. Hooks that never touch `usage` only see an extra call. It should ship in the same release as the V4 type bump in [[plans/roadmap]].
+`GatewayResponse.usage` is now `LanguageModelV4Usage | undefined`, so code reading `response.usage.inputTokens` stops compiling. This is a breaking type change, but the package is 0.x and files breaking changes as `minor` (see `update-runtime-dependencies.md` and [[development/release]]), so the next version stays 0.2.0 and 1.0.0 remains the owner's call. Hooks that never touch `usage` only see an extra call.
 
 ## What would reopen it
 
