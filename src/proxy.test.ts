@@ -934,7 +934,7 @@ describe("createGatewayProxy", () => {
 			const beforeRequest = vi.fn(({ request }) => ({ ...request, temperature: 0 }));
 			// A usage logger written for language model responses, which embedding responses are not.
 			const afterResponse = vi.fn(({ response }: { response: GatewayResponse }) => {
-				void response.usage.inputTokens.total;
+				void response.usage?.inputTokens.total;
 				return response;
 			});
 			const proxy = createGatewayProxy({ beforeRequest, afterResponse });
@@ -1030,7 +1030,7 @@ describe("createGatewayProxy", () => {
 			const beforeRequest = vi.fn(({ request }) => ({ ...request, temperature: 0 }));
 			// A usage logger written for language model responses, which batch status bodies are not.
 			const afterResponse = vi.fn(({ response }: { response: GatewayResponse }) => {
-				void response.usage.inputTokens.total;
+				void response.usage?.inputTokens.total;
 				return response;
 			});
 			const proxy = createGatewayProxy({ beforeRequest, afterResponse });

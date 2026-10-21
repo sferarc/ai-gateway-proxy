@@ -1,7 +1,7 @@
 import type { LanguageModelV3CallOptions, LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { createStreamTransformer, StreamContentAggregator } from "./stream";
-import type { GatewayResponse } from "./types";
+import type { GatewayResponse, IncompleteStream } from "./types";
 
 describe("StreamContentAggregator", () => {
 	describe("text content", () => {
@@ -434,7 +434,8 @@ async function readAll(stream: ReadableStream<Uint8Array>): Promise<string> {
 	return new Response(stream).text();
 }
 
-const passThroughHook = ({ response }: { response: GatewayResponse }) => response;
+const passThroughHook = (context: { response: GatewayResponse; incomplete?: IncompleteStream }) =>
+	context.response;
 
 describe("createStreamTransformer", () => {
 	let consoleWarn: MockInstance<typeof console.warn>;
@@ -625,24 +626,76 @@ describe("createStreamTransformer", () => {
 		expect(consoleError).toHaveBeenCalledOnce();
 		expect(consoleError.mock.calls[0]?.[0]).toMatch(/^upstream stream failed/);
 		expect(consoleError.mock.calls[0]?.[1]).toBe(failure);
-		expect(hook).not.toHaveBeenCalled();
+		expect(hook).toHaveBeenCalledOnce();
+		expect(hook.mock.calls[0]?.[0].incomplete).toEqual({ reason: "error", error: failure });
+		expect(hook.mock.calls[0]?.[0].response.usage).toBeUndefined();
+		expect(hook.mock.calls[0]?.[0].response.finishReason.unified).toBe("error");
 		expect(loggedText()).not.toContain("secret");
 	});
 
-	it("warns once and closes normally when the upstream ends without a finish event", async () => {
+	it("calls the hook once with partial content when the upstream ends without a finish event", async () => {
 		const hook = vi.fn(passThroughHook);
-		const events = [sse({ type: "text-delta", id: "t1", delta: "secret" }), sse("[DONE]")];
+		const events = [
+			sse({ type: "text-start", id: "t1" }),
+			sse({ type: "text-delta", id: "t1", delta: "partial" }),
+			sse("[DONE]"),
+		];
 
 		const output = await readAll(createStreamTransformer(sourceOf(events), requestBody, hook));
 
 		expect(output).toBe(events.join(""));
-		expect(hook).not.toHaveBeenCalled();
-		expect(consoleWarn).toHaveBeenCalledOnce();
-		expect(consoleWarn.mock.calls[0]?.[0]).toMatch(
-			/without a finish event, afterResponse was not called/,
-		);
+		expect(hook).toHaveBeenCalledOnce();
+		const context = hook.mock.calls[0]?.[0];
+		expect(context?.incomplete).toEqual({ reason: "ended" });
+		expect(context?.response.content).toEqual([{ type: "text", text: "partial" }]);
+		expect(context?.response.usage).toBeUndefined();
+		expect(context?.response.finishReason.unified).toBe("other");
 		expect(consoleError).not.toHaveBeenCalled();
-		expect(loggedText()).not.toContain("secret");
+		expect(consoleWarn).not.toHaveBeenCalled();
+	});
+
+	it("does not set incomplete when the stream finishes", async () => {
+		const hook = vi.fn(passThroughHook);
+		const events = [sse(finishPart), sse("[DONE]")];
+
+		await readAll(createStreamTransformer(sourceOf(events), requestBody, hook));
+
+		expect(hook).toHaveBeenCalledOnce();
+		expect(hook.mock.calls[0]?.[0].incomplete).toBeUndefined();
+	});
+
+	it("logs and still closes the stream when the hook throws on an unfinished stream", async () => {
+		const hook = vi.fn(() => {
+			throw new Error("hook broke");
+		});
+		const events = [sse({ type: "text-delta", id: "t1", delta: "x" })];
+
+		const output = await readAll(createStreamTransformer(sourceOf(events), requestBody, hook));
+
+		expect(output).toBe(events.join(""));
+		expect(hook).toHaveBeenCalledOnce();
+		expect(consoleError).toHaveBeenCalledOnce();
+	});
+
+	it("calls the hook once with the cancel reason when the client cancels before finish", async () => {
+		const hook = vi.fn(passThroughHook);
+		const source = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(
+					new TextEncoder().encode(sse({ type: "text-delta", id: "t1", delta: "so far" })),
+				);
+			},
+		});
+		const reader = createStreamTransformer(source, requestBody, hook).getReader();
+
+		await reader.read();
+		await reader.cancel("client went away");
+
+		expect(hook).toHaveBeenCalledOnce();
+		const context = hook.mock.calls[0]?.[0];
+		expect(context?.incomplete).toEqual({ reason: "cancelled", cancelReason: "client went away" });
+		expect(context?.response.content).toEqual([{ type: "text", text: "so far" }]);
+		expect(context?.response.usage).toBeUndefined();
 	});
 
 	it("warns once per stream about non-JSON events without logging their payload", async () => {

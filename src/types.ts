@@ -14,10 +14,21 @@ import type {
 export type GatewayResponse = {
 	content: LanguageModelV3Content[];
 	finishReason: LanguageModelV3FinishReason;
-	usage: LanguageModelV3Usage;
+	/** `undefined` when a stream ended without a `finish` event, so the usage is unknown. */
+	usage: LanguageModelV3Usage | undefined;
 	warnings: SharedV3Warning[];
 	providerMetadata?: SharedV3ProviderMetadata;
 };
+
+/**
+ * Why a streamed response never delivered a `finish` event.
+ * `ended`: the upstream closed early. `error`: reading the upstream failed, with the failure in `error`.
+ * `cancelled`: the client went away, with the cancel reason in `reason`.
+ */
+export type IncompleteStream =
+	| { reason: "ended" }
+	| { reason: "error"; error: unknown }
+	| { reason: "cancelled"; cancelReason?: unknown };
 
 /**
  * Error response from the AI Gateway.
@@ -101,6 +112,11 @@ export type CreateGatewayProxyOptions = {
 	 * If the hook throws while handling a stream, the error is logged and the
 	 * original finish event is forwarded unchanged.
 	 *
+	 * A stream that ends, fails or is cancelled before its finish event calls the hook once
+	 * with the content received so far, `incomplete` set, `response.usage` undefined and
+	 * `response.finishReason` `error` or `other`. Nothing can be rewritten then, so the
+	 * returned value is ignored and a throw is logged.
+	 *
 	 * Not called for an event stream or JSON Lines body answering a request not marked
 	 * `ai-language-model-streaming: true`, such as a video model call or batch results, which is
 	 * forwarded as is.
@@ -115,6 +131,8 @@ export type CreateGatewayProxyOptions = {
 	afterResponse?: (context: {
 		request: LanguageModelV3CallOptions;
 		response: GatewayResponse;
+		/** Set only for a stream that did not deliver its `finish` event. */
+		incomplete?: IncompleteStream;
 	}) => GatewayResponse | Promise<GatewayResponse>;
 	/**
 	 * Called when the gateway returns an error response.
