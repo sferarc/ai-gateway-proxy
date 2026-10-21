@@ -313,10 +313,16 @@ async function handleJsonResponse(
 	let responseBody: GatewayResponse = await res.json();
 
 	if (afterResponse) {
-		responseBody = await afterResponse({
+		const modified = await afterResponse({
 			request: requestBody,
 			response: responseBody,
 		});
+		// A JavaScript caller can return nothing; send the upstream body rather than an empty or `null` one.
+		if (modified === undefined || modified === null) {
+			console.error("afterResponse hook returned no response, forwarding the upstream body");
+		} else {
+			responseBody = modified;
+		}
 	}
 
 	return new Response(JSON.stringify(responseBody), {
