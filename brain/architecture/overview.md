@@ -13,11 +13,11 @@ A TypeScript library published to npm as `ai-gateway-proxy`, shipped as ESM and 
 
 ## Runtime dependencies
 
-`@ai-sdk/provider` (the `LanguageModelV3*` types), `@ai-sdk/provider-utils` (`EventSourceParserStream`) and `@vercel/oidc` (`getVercelOidcToken`), all from `package.json` `dependencies`. Versions are pinned in the `catalog` of `pnpm-workspace.yaml`.
+`@ai-sdk/provider` (the `LanguageModelV4*` types), `@ai-sdk/provider-utils` (`EventSourceParserStream`) and `@vercel/oidc` (`getVercelOidcToken`), all from `package.json` `dependencies`. Versions are pinned in the `catalog` of `pnpm-workspace.yaml`.
 
 ## Protocol
 
-The handler speaks the AI SDK gateway language model protocol, version 3 types, as the `@ai-sdk/gateway` provider sends it (doc comment on `createGatewayProxy` in `src/proxy.ts`). The client is expected to be an `@ai-sdk/gateway` provider whose `baseURL` points at the proxy route (`src/e2e.test.ts` against a local fake gateway, `src/integration.test.ts` against the real one). The GitHub repository description says "OpenAI-compatible"; nothing in `src/` handles the OpenAI API shape, so that description does not match the code.
+The handler speaks the AI SDK gateway language model protocol, version 4 types, as the `@ai-sdk/gateway` provider sends it (doc comment on `createGatewayProxy` in `src/proxy.ts`). The client is expected to be an `@ai-sdk/gateway` provider whose `baseURL` points at the proxy route (`src/e2e.test.ts` against a local fake gateway, `src/integration.test.ts` against the real one). The GitHub repository description says "OpenAI-compatible"; nothing in `src/` handles the OpenAI API shape, so that description does not match the code.
 
 ## Invariants
 
