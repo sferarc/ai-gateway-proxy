@@ -66,6 +66,27 @@ function isSafePath(path: string): boolean {
 	return true;
 }
 
+// Folds the spellings a server may treat as one path (case, percent-encoding, repeated and trailing slashes, ";" parameters).
+function normalizePathname(pathname: string): string {
+	return pathname
+		.split("/")
+		.map((segment) => {
+			let decoded = segment;
+			for (let i = 0; i < 3; i++) {
+				try {
+					const next = decodeURIComponent(decoded);
+					if (next === decoded) break;
+					decoded = next;
+				} catch {
+					break;
+				}
+			}
+			return decoded.split(";")[0].toLowerCase();
+		})
+		.filter(Boolean)
+		.join("/");
+}
+
 /**
  * Builds the upstream URL from base URL, path, and query params.
  * Returns null when the path would leave the base URL.
@@ -314,10 +335,16 @@ async function handleJsonResponse(
 	let responseBody: GatewayResponse = await res.json();
 
 	if (afterResponse) {
-		responseBody = await afterResponse({
+		const modified = await afterResponse({
 			request: requestBody,
 			response: responseBody,
 		});
+		// A JavaScript caller can return nothing.
+		if (modified === undefined || modified === null) {
+			console.error("afterResponse hook returned no response, forwarding the upstream body");
+		} else {
+			responseBody = modified;
+		}
 	}
 
 	return new Response(JSON.stringify(responseBody), {
@@ -389,7 +416,7 @@ export const createGatewayProxy = ({
 			// model header and post only a batch id, so they run none either. The match is on the
 			// resolved pathname, so a "?" or "#" in the path cannot make a model call look like one.
 			// The /language-model path runs them whatever the headers, since a client sets its own.
-			const pathname = new URL(upstream).pathname;
+			const pathname = normalizePathname(new URL(upstream).pathname);
 			const runsHooks =
 				!BATCH_READ_PATH.test(pathname) &&
 				(LANGUAGE_MODEL_PATH.test(pathname) ||
