@@ -167,6 +167,19 @@ function proxyErrorResponse(status: number, type: ProxyErrorType, message: strin
 	});
 }
 
+function isRedirect(res: Response): boolean {
+	return res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400);
+}
+
+function redirectRefusedResponse(res: Response): Response {
+	res.body?.cancel().catch(() => {});
+	return proxyErrorResponse(
+		502,
+		"proxy_error",
+		"Upstream redirected, the proxy does not follow redirects",
+	);
+}
+
 function proxyFailureResponse(request: Request, error: unknown): Response {
 	if (request.signal.aborted) {
 		return new Response(null, { status: 499 });
@@ -195,7 +208,12 @@ async function forwardBodylessRequest(
 				"ai-gateway-auth-method": auth.authMethod,
 				"ai-gateway-protocol-version": PROTOCOL_VERSION,
 			}),
+			redirect: "manual",
 		});
+
+		if (isRedirect(res)) {
+			return redirectRefusedResponse(res);
+		}
 
 		return new Response(res.body, {
 			status: res.status,
@@ -342,6 +360,8 @@ async function handleJsonResponse(
 		// A JavaScript caller can return nothing.
 		if (modified === undefined || modified === null) {
 			console.error("afterResponse hook returned no response, forwarding the upstream body");
+		} else if (typeof modified !== "object" || Array.isArray(modified)) {
+			throw new TypeError("afterResponse hook must return a response object");
 		} else {
 			responseBody = modified;
 		}
@@ -436,7 +456,12 @@ export const createGatewayProxy = ({
 				duplex: "half",
 				signal: request.signal,
 				headers: buildRequestHeaders(auth, request, headers),
+				redirect: "manual",
 			} as RequestInit);
+
+			if (isRedirect(res)) {
+				return redirectRefusedResponse(res);
+			}
 
 			// Handle error responses
 			if (!res.ok) {
