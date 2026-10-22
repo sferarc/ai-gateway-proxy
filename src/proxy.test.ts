@@ -1150,6 +1150,52 @@ describe("createGatewayProxy", () => {
 			},
 		);
 
+		it.each([
+			["LANGUAGE-MODEL/"],
+			["%4Canguage-model"],
+			["language-model;a=1/"],
+			["language%2Dmodel%3Bx=1"],
+			["%61i/Language%252DModel//"],
+		])("folds the path %s to a language model call", async (path) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const beforeRequest = vi.fn(({ request }) => request);
+			const afterResponse = vi.fn(({ response }) => response);
+			const proxy = createGatewayProxy({ beforeRequest, afterResponse });
+
+			await proxy(
+				createMockRequest(`http://localhost/api/${path}`, {
+					body: { prompt: [] },
+					headers: { "ai-model-id": "openai/gpt-4o" },
+				}),
+				createMockContext([path]),
+			);
+
+			expect(beforeRequest).toHaveBeenCalledOnce();
+			expect(afterResponse).toHaveBeenCalledOnce();
+		});
+
+		it.each([
+			["Batch/Status"],
+			["batch/status/"],
+			["batch;x=1/cancel"],
+			["batch//results"],
+			["%62atch/%73tatus"],
+		])("folds the path %s to a batch read and runs no hook", async (path) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ status: "pending" }));
+			const beforeRequest = vi.fn(({ request }) => request);
+			const afterResponse = vi.fn(({ response }) => response);
+			const proxy = createGatewayProxy({ beforeRequest, afterResponse });
+
+			await proxy(
+				createMockRequest(`http://localhost/api/ai/${path}`, { body: { batchId: "batch_1" } }),
+				createMockContext(["ai", path]),
+			);
+
+			expect(mockFetch).toHaveBeenCalledOnce();
+			expect(beforeRequest).not.toHaveBeenCalled();
+			expect(afterResponse).not.toHaveBeenCalled();
+		});
+
 		it("runs no hook on a batch status or cancel call from @ai-sdk/gateway", async () => {
 			mockFetch.mockImplementation(async () =>
 				createMockHttpResponse({ status: "pending", requestCounts: { total: 2, pending: 2 } }),
