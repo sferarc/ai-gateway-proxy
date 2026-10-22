@@ -31,8 +31,8 @@ function close(server: Server): Promise<void> {
 }
 
 describe("redirecting gateway over HTTP", () => {
-	let gatewayServer: Server;
-	let targetServer: Server;
+	let gatewayServer: Server | undefined;
+	let targetServer: Server | undefined;
 	let closeProxy: (() => Promise<void>) | undefined;
 	let gatewayRequests: IncomingMessage[];
 	let targetRequests: IncomingMessage[];
@@ -46,8 +46,10 @@ describe("redirecting gateway over HTTP", () => {
 	afterEach(async () => {
 		await closeProxy?.();
 		closeProxy = undefined;
-		await close(gatewayServer);
-		await close(targetServer);
+		if (gatewayServer) await close(gatewayServer);
+		if (targetServer) await close(targetServer);
+		gatewayServer = undefined;
+		targetServer = undefined;
 		vi.unstubAllEnvs();
 	});
 
@@ -122,6 +124,7 @@ describe("redirecting gateway over HTTP", () => {
 		await result.consumeStream({ onError: () => {} });
 
 		expectRefused(streamError);
+		expect(gatewayRequests).toHaveLength(1);
 		expect(targetRequests).toHaveLength(0);
 		expect(onError).not.toHaveBeenCalled();
 	});
