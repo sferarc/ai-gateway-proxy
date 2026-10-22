@@ -10,6 +10,10 @@ The upstream `fetch` uses `redirect: "manual"`, and any 3xx answer returns 502 `
 
 `fetch` follows redirects by default and resends the request, so a redirecting upstream or `baseUrl` would receive the gateway bearer token and the request body. The proxy has no reason to follow one, so it refuses. A string or number from a hook was serialised into the body, which a client cannot parse as a response.
 
+## Tests
+
+`redirects` in `src/proxy.test.ts` pins it with a mocked `fetch`; `src/redirect.test.ts` pins it over real HTTP, asserting that a second listener behind the `Location` receives no request.
+
 ## What would reopen it
 
 A gateway endpoint that legitimately answers with a redirect the proxy must follow.

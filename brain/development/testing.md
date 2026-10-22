@@ -1,6 +1,6 @@
 # Testing
 
-`pnpm test` (also a step of `pnpm check`) runs vitest over the `*.test.ts` files in `src/` (`vitest.config.ts`, node environment; the suites import `describe`, `it` and `expect` from `vitest` rather than relying on globals). On 2026-10-21 at `main` cfa4c3b without a key, on vitest 5.0.5: 6 files, 159 tests, 146 passed and 13 skipped (the skipped file is `src/integration.test.ts`).
+`pnpm test` (also a step of `pnpm check`) runs vitest over the `*.test.ts` files in `src/` (`vitest.config.ts`, node environment; the suites import `describe`, `it` and `expect` from `vitest` rather than relying on globals). On 2026-10-23 at `main` 5f9f069 plus `redirect.test.ts`, without a key, on vitest 5.0.5: 8 files, 209 tests, 196 passed and 13 skipped (the skipped file is `src/integration.test.ts`).
 
 | File | What it covers |
 | --- | --- |
@@ -10,8 +10,9 @@
 | `src/proxy-stream.test.ts` | `createGatewayProxy` streaming with an `afterResponse` spy over a mocked SSE upstream: the usage and content the hook sees, the rewritten `finish` the client gets, no `finish`, upstream error, client cancel |
 | `src/e2e.test.ts` | A real `@ai-sdk/gateway` client calling `generateText` and `streamText` through the proxy over HTTP to a local fake gateway: text round-trip, the path and gateway headers upstream, `beforeRequest` reaching upstream, `afterResponse` content in both modes, client aborts closing the upstream request |
 | `src/non-language-model.test.ts` | Keyless, over HTTP to a local fake gateway: embedding, image, video and batch start calls from `@ai-sdk/gateway` reach the upstream path unchanged with the proxy's key and auth method, the response comes back, and `beforeRequest`, `afterResponse` and `onError` never run. Documents current behavior, not a contract; the fake responses follow the client's schemas, so it leaves gap 3 in [[plans/post-0-2-0-gaps]] |
+| `src/redirect.test.ts` | Keyless, over HTTP: a local fake gateway answers 301, 302, 307 and 308 with a `Location` pointing at a second local listener, on a `generateText` and a `streamText` call. The client gets 502 `proxy_error` `Upstream redirected, the proxy does not follow redirects`, the second listener receives no request (so no bearer token or body leaves), and `onError` does not run. Complements the mock-fetch `redirects` tests in `src/proxy.test.ts` ([[decisions/2026-10-21-fail-closed-redirects-and-hook-results]]) |
 | `src/integration.test.ts` | Real calls through the proxy to the AI Gateway |
-| `src/test-server.ts` | Not a test: `startProxyServer`, the node:http bridge that `e2e.test.ts`, `non-language-model.test.ts` and `integration.test.ts` serve the proxy with |
+| `src/test-server.ts` | Not a test: `startProxyServer`, the node:http bridge that `e2e.test.ts`, `non-language-model.test.ts`, `redirect.test.ts` and `integration.test.ts` serve the proxy with |
 
 ## Keyless end-to-end tests
 
