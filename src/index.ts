@@ -7,4 +7,5 @@ export type {
 	CreateGatewayProxyResult,
 	GatewayError,
 	GatewayResponse,
+	IncompleteStream,
 } from "./types";
