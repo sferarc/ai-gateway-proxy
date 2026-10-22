@@ -11,6 +11,7 @@ As of 2026-10-22 (`gh issue list --state open`), no issue is open.
 - #48 (e31b432): action pins updated to their latest versions. It bumped `jdx/mise-action` to v5.2.1 in `release.yml` (the publish path). The pin was confirmed in #50.
 - #55 (470c224): the upstream finish event is forwarded when the hook returns nothing.
 - #56 (cfa4c3b): the first npm release is prepared, with the verified publish path and a minor changeset, so the first version pull request is `0.2.0`.
+- #57 (0ffa695): the plans index refresh after #55 and #56.
 - #58 (b0d54de): the upstream body is forwarded when `afterResponse` returns nothing.
 - #59 (f1a24e7): a `language-model` path runs every hook ([[decisions/2026-10-21-language-model-path-runs-hooks]]).
 - #60 (2f71431): the hooks are typed on specification version 4.
