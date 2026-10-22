@@ -9,8 +9,9 @@
 | `src/stream.test.ts` | Two suites. `StreamContentAggregator`: each stream part type, content in the order each block started, deltas without a start part. `createStreamTransformer` in isolation: pass-through, `[DONE]` and non-JSON data, `finish` replaced by the hook result, original `finish` forwarded when the hook throws, cancellation reaching the source, the failure and missing-`finish` logs, an event split across chunks |
 | `src/proxy-stream.test.ts` | `createGatewayProxy` streaming with an `afterResponse` spy over a mocked SSE upstream: the usage and content the hook sees, the rewritten `finish` the client gets, no `finish`, upstream error, client cancel |
 | `src/e2e.test.ts` | A real `@ai-sdk/gateway` client calling `generateText` and `streamText` through the proxy over HTTP to a local fake gateway: text round-trip, the path and gateway headers upstream, `beforeRequest` reaching upstream, `afterResponse` content in both modes, client aborts closing the upstream request |
+| `src/non-language-model.test.ts` | Keyless, over HTTP to a local fake gateway: embedding, image, video and batch start calls from `@ai-sdk/gateway` reach the upstream path unchanged with the proxy's key and auth method, the response comes back, and `beforeRequest`, `afterResponse` and `onError` never run. Documents current behavior, not a contract; the fake responses follow the client's schemas, so it leaves gap 3 in [[plans/post-0-2-0-gaps]] |
 | `src/integration.test.ts` | Real calls through the proxy to the AI Gateway |
-| `src/test-server.ts` | Not a test: `startProxyServer`, the node:http bridge both suites above serve the proxy with |
+| `src/test-server.ts` | Not a test: `startProxyServer`, the node:http bridge that `e2e.test.ts`, `non-language-model.test.ts` and `integration.test.ts` serve the proxy with |
 
 ## Keyless end-to-end tests
 
