@@ -1,6 +1,6 @@
 # Standalone repository
 
-Recorded 2026-10-08, from commit 9f416d6.
+Recorded 2026-10-08, from commit a8cb76e.
 
 ## Decision
 
@@ -8,11 +8,11 @@ The proxy moved out of the SferaDev/SferaDev monorepo into `sferarc/ai-gateway-p
 
 ## Why
 
-So it can build, test and release on its own (9f416d6 message).
+So it can build, test and release on its own (a8cb76e message).
 
 ## Consequences
 
-- History before 9f416d6 is the monorepo's. Pull request numbers in those commit subjects, such as `(#12)` and `(#16)`, refer to the monorepo, not to this repository.
+- History before a8cb76e is the monorepo's. Pull request numbers in those commit subjects, such as `(#12)` and `(#16)`, refer to the monorepo, not to this repository.
 - The `overrides` security floors in `pnpm-workspace.yaml` were carried over from the monorepo.
 - The README still links to documentation hosted outside this repository; whether it is kept current is unknown.
 

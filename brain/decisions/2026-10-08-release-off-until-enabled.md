@@ -1,6 +1,6 @@
 # Release stays off until the owner enables it
 
-Recorded 2026-10-08, from `.github/workflows/release.yml` and commit 9f416d6.
+Recorded 2026-10-08, from `.github/workflows/release.yml` and commit a8cb76e.
 
 ## Decision
 

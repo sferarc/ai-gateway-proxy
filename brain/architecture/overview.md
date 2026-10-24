@@ -28,4 +28,4 @@ The handler speaks the AI SDK gateway language model protocol, version 4 types, 
 
 ## History
 
-The package was developed in the SferaDev/SferaDev monorepo and moved to its own repository in 9f416d6. See [[decisions/2026-10-08-standalone-repository]].
+The package was developed in the SferaDev/SferaDev monorepo and moved to its own repository in a8cb76e. See [[decisions/2026-10-08-standalone-repository]].
