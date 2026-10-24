@@ -1,6 +1,6 @@
 # bunchee builds the package
 
-Recorded 2025-12-28, from commit 8b9dde6 (monorepo pull request #12).
+Recorded 2025-12-28, from commit 195a421 (monorepo pull request #12).
 
 ## Decision
 
@@ -8,7 +8,7 @@ The build moved from tsup to bunchee, which reads `package.json` `exports` and e
 
 ## Why
 
-"Better ESM exports" (8b9dde6 message). Nothing more specific is recorded.
+"Switch build system from tsup to bunchee for better ESM exports" (195a421 message body). Nothing more specific is recorded.
 
 ## Consequences
 
