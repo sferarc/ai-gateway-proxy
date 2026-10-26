@@ -18,9 +18,20 @@ const FORWARDED_RESPONSE_HEADER =
 const MODEL_CALL_HEADER =
 	/^(?:ai-language-model-.+|ai-model-id|ai-[a-z]+-model-specification-version)$/;
 const REQUEST_METADATA_HEADER = /^(?:ai-o11y-.+|idempotency-key|accept)$/;
-const LANGUAGE_MODEL_PATH = /(?:^|\/)language-model$/;
-// @ai-sdk/gateway's batch calls that read or cancel a job rather than start a model call.
-const BATCH_READ_PATH = /(?:^|\/)batch\/(?:status|results|cancel)$/;
+// Paths relative to baseUrl where @ai-sdk/gateway 4.x posts a call that is not a language model call.
+const NON_LANGUAGE_MODEL_PATHS = new Set([
+	"embedding-model",
+	"image-model",
+	"video-model",
+	"video-model/start",
+	"speech-model",
+	"transcription-model",
+	"reranking-model",
+	"decision-model",
+	"batch/start",
+]);
+// @ai-sdk/gateway's calls that read or cancel a job rather than start a model call.
+const READ_PATHS = new Set(["batch/status", "batch/results", "batch/cancel", "video-model/status"]);
 // Successful bodies that are a sequence of values rather than one JSON value: event streams and JSON Lines.
 const STREAM_CONTENT_TYPE =
 	/^\s*(?:text\/event-stream|application\/(?:x-ndjson|jsonl|jsonlines|x-jsonlines))\s*(?:;|$)/i;
@@ -66,32 +77,15 @@ function isSafePath(path: string): boolean {
 	return true;
 }
 
-// Folds the spellings a server may treat as one path (case, percent-encoding, repeated and trailing slashes, ";" parameters).
-function normalizePathname(pathname: string): string {
-	return pathname
-		.split("/")
-		.map((segment) => {
-			let decoded = segment;
-			for (let i = 0; i < 3; i++) {
-				try {
-					const next = decodeURIComponent(decoded);
-					if (next === decoded) break;
-					decoded = next;
-				} catch {
-					break;
-				}
-			}
-			return decoded.split(";")[0].toLowerCase();
-		})
-		.filter(Boolean)
-		.join("/");
-}
-
 /**
- * Builds the upstream URL from base URL, path, and query params.
- * Returns null when the path would leave the base URL.
+ * Builds the upstream URL from base URL, path, and query params, with its pathname relative to
+ * the base URL. Returns null when the path would leave the base URL.
  */
-function buildUpstreamUrl(baseUrl: string, path: string, requestUrl: string): string | null {
+function buildUpstreamUrl(
+	baseUrl: string,
+	path: string,
+	requestUrl: string,
+): { url: string; relativePath: string } | null {
 	if (!isSafePath(path)) {
 		return null;
 	}
@@ -107,7 +101,7 @@ function buildUpstreamUrl(baseUrl: string, path: string, requestUrl: string): st
 	if (queryString) {
 		url.search = queryString;
 	}
-	return url.toString();
+	return { url: url.toString(), relativePath: url.pathname.slice(base.pathname.length) };
 }
 
 /**
@@ -408,10 +402,11 @@ export const createGatewayProxy = ({
 		try {
 			// Build upstream URL
 			const path = await extractPathFromRequest(request, context, { extractPath, segmentsParam });
-			const upstream = buildUpstreamUrl(baseUrl, path, request.url);
-			if (!upstream) {
+			const resolved = buildUpstreamUrl(baseUrl, path, request.url);
+			if (!resolved) {
 				return proxyErrorResponse(400, "invalid_request_error", "Invalid path");
 			}
+			const upstream = resolved.url;
 
 			if (request.method === "GET" || request.method === "HEAD" || request.body === null) {
 				return await forwardBodylessRequest(request, upstream, auth, headers);
@@ -431,19 +426,10 @@ export const createGatewayProxy = ({
 				return proxyErrorResponse(400, "invalid_request_error", "Invalid JSON body");
 			}
 
-			// @ai-sdk/gateway sends ai-model-id on every model call but a language model's, such as an
-			// embedding or image call. The hooks are typed for language model calls, so none run there.
-			// A request that also names a language model runs them, so a client cannot skip the hooks
-			// on a language model call by adding ai-model-id. Batch status, results and cancel send no
-			// model header and post only a batch id, so they run none either. The match is on the
-			// resolved pathname, so a "?" or "#" in the path cannot make a model call look like one.
-			// The /language-model path runs them whatever the headers, since a client sets its own.
-			const pathname = normalizePathname(new URL(upstream).pathname);
+			// Fail closed: only an exact listed path, after "?" and "#" are resolved away, skips the hooks.
 			const runsHooks =
-				!BATCH_READ_PATH.test(pathname) &&
-				(LANGUAGE_MODEL_PATH.test(pathname) ||
-					!request.headers.has("ai-model-id") ||
-					request.headers.has("ai-language-model-id"));
+				!NON_LANGUAGE_MODEL_PATHS.has(resolved.relativePath) &&
+				!READ_PATHS.has(resolved.relativePath);
 
 			// Apply beforeRequest hook
 			if (beforeRequest && runsHooks) {

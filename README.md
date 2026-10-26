@@ -146,7 +146,17 @@ The proxy gets a credential on every request with `getGatewayAuthToken()`, in th
 | `afterResponse` | none | `({ request, response }) => GatewayResponse`. Runs on a successful response; see below. |
 | `onError` | none | `({ request, error, status }) => GatewayError \| Response`. Runs when the gateway returns a non-OK status; see below. |
 
-Each hook may also return a promise. The hooks are typed for language model calls and run only for requests with a body. A `GET` or `HEAD` request, such as the provider's `GET /config` model list, and any other request whose body is missing or empty, such as a bodyless `DELETE`, is forwarded without a body and without running any hook, and the upstream status and body come back unchanged, except that a redirect is answered with a 502 as below. A request carrying `ai-model-id`, which `@ai-sdk/gateway` sends on every model call but a language model's (embedding, image, video, speech, transcription, reranking, decision and batch start), is forwarded with its body and runs no hook either, since its body and response are not language model ones. A request that also carries `ai-language-model-id`, or whose path ends in `language-model` once case, percent-encoding, repeated or trailing slashes and `;` parameters are folded away, is a language model call and runs every hook, so a client cannot turn the hooks off by adding `ai-model-id` or by dropping `ai-language-model-id`. The batch calls that read or cancel a job, whose upstream path ends in `batch/status`, `batch/results` or `batch/cancel`, send neither header and post only a batch id, so they run no hook either. Any other request with a body and neither header runs the hooks.
+Each hook may also return a promise. The hooks are typed for language model calls and run only for requests with a body. A `GET` or `HEAD` request, such as the provider's `GET /config` model list, and any other request whose body is missing or empty, such as a bodyless `DELETE`, is forwarded without a body and without running any hook, and the upstream status and body come back unchanged, except that a redirect is answered with a 502 as below.
+
+Path matching fails closed: the hooks run on every request with a body except one whose path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway` uses for calls that are not language model calls:
+
+| Path | Call |
+| --- | --- |
+| `embedding-model`, `image-model`, `video-model`, `video-model/start`, `speech-model`, `transcription-model`, `reranking-model`, `decision-model` | Model calls of the other kinds |
+| `batch/start` | Starting a batch |
+| `video-model/status`, `batch/status`, `batch/results`, `batch/cancel` | Reading or cancelling a job |
+
+The match is exact and ignores headers, so a request to any other path, including a different spelling of a listed one (`Embedding-Model`, `embedding-model/`, `embedding%2Dmodel`) or a listed path under a further prefix (`ai/embedding-model`), runs every hook, and a client cannot turn the hooks off by sending `ai-model-id` or dropping `ai-language-model-id`. Set `baseUrl` to the URL the client's paths are relative to, so the listed paths match.
 
 The path, whether from `extractPath` or the route param, must stay relative: one that starts with `/`, contains `://`, or has a segment that decodes to `.` or `..` or contains `/`, `\` or a NUL byte is rejected with `400 Invalid path` before anything is sent upstream.
 

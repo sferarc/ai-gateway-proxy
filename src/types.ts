@@ -90,10 +90,11 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
-	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
-	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
-	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
-	 * `batch/cancel`. A path ending in `language-model` always runs it.
+	 * Not called when the path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway`
+	 * uses for other calls: `embedding-model`, `image-model`, `video-model`, `video-model/start`,
+	 * `video-model/status`, `speech-model`, `transcription-model`, `reranking-model`,
+	 * `decision-model`, `batch/start`, `batch/status`, `batch/results` and `batch/cancel`.
+	 * Every other path runs it, whatever headers the request sends.
 	 */
 	beforeRequest?: (context: {
 		request: LanguageModelV4CallOptions;
@@ -121,10 +122,11 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
-	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
-	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
-	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
-	 * `batch/cancel`. A path ending in `language-model` always runs it.
+	 * Not called when the path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway`
+	 * uses for other calls: `embedding-model`, `image-model`, `video-model`, `video-model/start`,
+	 * `video-model/status`, `speech-model`, `transcription-model`, `reranking-model`,
+	 * `decision-model`, `batch/start`, `batch/status`, `batch/results` and `batch/cancel`.
+	 * Every other path runs it, whatever headers the request sends.
 	 */
 	afterResponse?: (context: {
 		request: LanguageModelV4CallOptions;
@@ -141,10 +143,11 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
-	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
-	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
-	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
-	 * `batch/cancel`. A path ending in `language-model` always runs it.
+	 * Not called when the path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway`
+	 * uses for other calls: `embedding-model`, `image-model`, `video-model`, `video-model/start`,
+	 * `video-model/status`, `speech-model`, `transcription-model`, `reranking-model`,
+	 * `decision-model`, `batch/start`, `batch/status`, `batch/results` and `batch/cancel`.
+	 * Every other path runs it, whatever headers the request sends.
 	 */
 	onError?: (context: {
 		request: LanguageModelV4CallOptions;

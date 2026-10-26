@@ -1085,7 +1085,7 @@ describe("createGatewayProxy", () => {
 			expect(afterResponse).not.toHaveBeenCalled();
 		});
 
-		it("runs no onError on a failed call marked with ai-model-id", async () => {
+		it("runs no onError on a failed image model call", async () => {
 			mockFetch.mockResolvedValueOnce(
 				createMockHttpResponse(
 					{ error: { message: "Bad input", type: "invalid_request_error" } },
@@ -1151,43 +1151,78 @@ describe("createGatewayProxy", () => {
 		});
 
 		it.each([
-			["language-model"],
-			["ai/language-model"],
-			["language-model/"],
-			["language-model//"],
-			["language%2Dmodel"],
-			["language%252Dmodel"],
-			["Language-Model"],
-			["language-model;x=1"],
-		])(
-			"runs every hook on the language model path %s that sends ai-model-id alone",
-			async (path) => {
-				mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
-				const beforeRequest = vi.fn(({ request }) => ({ ...request, maxOutputTokens: 10 }));
-				const afterResponse = vi.fn(({ response }) => response);
-				const proxy = createGatewayProxy({ beforeRequest, afterResponse });
+			["embedding-model"],
+			["image-model"],
+			["video-model"],
+			["video-model/start"],
+			["video-model/status"],
+			["speech-model"],
+			["transcription-model"],
+			["reranking-model"],
+			["decision-model"],
+			["batch/start"],
+			["batch/status"],
+			["batch/results"],
+			["batch/cancel"],
+		])("runs no hook on the listed path %s, whatever headers it sends", async (path) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ ok: true }));
+			const beforeRequest = vi.fn(({ request }) => request);
+			const afterResponse = vi.fn(({ response }) => response);
+			const proxy = createGatewayProxy({ beforeRequest, afterResponse });
 
-				const response = await proxy(
-					createMockRequest(`http://localhost/api/${path}`, {
-						body: { prompt: [] },
-						headers: { "ai-model-id": "openai/gpt-4o" },
-					}),
-					createMockContext([path]),
-				);
+			const response = await proxy(
+				createMockRequest(`http://localhost/api/${path}`, {
+					body: { prompt: "a cat" },
+					headers: { "ai-language-model-id": "openai/gpt-4o" },
+				}),
+				createMockContext(path.split("/")),
+			);
 
-				expect(response.status).toBe(200);
-				expect(beforeRequest).toHaveBeenCalledOnce();
-				expect(afterResponse).toHaveBeenCalledOnce();
-			},
-		);
+			expect(response.status).toBe(200);
+			expect(await response.json()).toEqual({ ok: true });
+			expect(beforeRequest).not.toHaveBeenCalled();
+			expect(afterResponse).not.toHaveBeenCalled();
+		});
 
 		it.each([
-			["LANGUAGE-MODEL/"],
-			["%4Canguage-model"],
-			["language-model;a=1/"],
-			["language%2Dmodel%3Bx=1"],
-			["%61i/Language%252DModel//"],
-		])("folds the path %s to a language model call", async (path) => {
+			["language-model"],
+			["chat"],
+			["ai/language-model"],
+			["language-model/"],
+			["language%2Dmodel"],
+			["Language-Model"],
+			["language-model;x=1"],
+		])("runs every hook on the unlisted path %s that sends ai-model-id alone", async (path) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const beforeRequest = vi.fn(({ request }) => ({ ...request, maxOutputTokens: 10 }));
+			const afterResponse = vi.fn(({ response }) => response);
+			const proxy = createGatewayProxy({ beforeRequest, afterResponse });
+
+			const response = await proxy(
+				createMockRequest(`http://localhost/api/${path}`, {
+					body: { prompt: [] },
+					headers: { "ai-model-id": "openai/gpt-4o" },
+				}),
+				createMockContext([path]),
+			);
+
+			expect(response.status).toBe(200);
+			expect(beforeRequest).toHaveBeenCalledOnce();
+			expect(afterResponse).toHaveBeenCalledOnce();
+		});
+
+		it.each([
+			["Embedding-Model"],
+			["embedding-model/"],
+			["image%2Dmodel"],
+			["Batch/Status"],
+			["batch/status/"],
+			["batch;x=1/cancel"],
+			["batch//results"],
+			["%62atch/%73tatus"],
+			["ai/batch/status"],
+			["language-model/embedding-model"],
+		])("runs every hook on %s, which is not exactly a listed path", async (path) => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 			const beforeRequest = vi.fn(({ request }) => request);
 			const afterResponse = vi.fn(({ response }) => response);
@@ -1196,35 +1231,31 @@ describe("createGatewayProxy", () => {
 			await proxy(
 				createMockRequest(`http://localhost/api/${path}`, {
 					body: { prompt: [] },
-					headers: { "ai-model-id": "openai/gpt-4o" },
+					headers: { "ai-model-id": "openai/text-embedding-3-small" },
 				}),
 				createMockContext([path]),
 			);
 
+			expect(mockFetch).toHaveBeenCalledOnce();
 			expect(beforeRequest).toHaveBeenCalledOnce();
 			expect(afterResponse).toHaveBeenCalledOnce();
 		});
 
-		it.each([
-			["Batch/Status"],
-			["batch/status/"],
-			["batch;x=1/cancel"],
-			["batch//results"],
-			["%62atch/%73tatus"],
-		])("folds the path %s to a batch read and runs no hook", async (path) => {
-			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ status: "pending" }));
-			const beforeRequest = vi.fn(({ request }) => request);
+		it("matches the listed paths relative to a custom baseUrl", async () => {
+			mockFetch.mockImplementation(async () => createMockHttpResponse(createMockGatewayResponse()));
 			const afterResponse = vi.fn(({ response }) => response);
-			const proxy = createGatewayProxy({ beforeRequest, afterResponse });
+			const proxy = createGatewayProxy({ baseUrl: "https://gateway.example/v1/", afterResponse });
+			const send = (path: string) =>
+				proxy(
+					createMockRequest(`http://localhost/api/${path}`, { body: { values: ["a"] } }),
+					createMockContext(path.split("/")),
+				);
 
-			await proxy(
-				createMockRequest(`http://localhost/api/ai/${path}`, { body: { batchId: "batch_1" } }),
-				createMockContext(["ai", path]),
-			);
-
-			expect(mockFetch).toHaveBeenCalledOnce();
-			expect(beforeRequest).not.toHaveBeenCalled();
+			await send("embedding-model");
 			expect(afterResponse).not.toHaveBeenCalled();
+
+			await send("ai/embedding-model");
+			expect(afterResponse).toHaveBeenCalledOnce();
 		});
 
 		it("runs no hook on a batch status or cancel call from @ai-sdk/gateway", async () => {
