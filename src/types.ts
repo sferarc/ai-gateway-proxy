@@ -40,6 +40,44 @@ export type GatewayError = {
 };
 
 /**
+ * The kind of a call that is not a language model call, named after the `@ai-sdk/gateway` model it comes from.
+ */
+export type ModelCallKind =
+	| "embedding"
+	| "image"
+	| "video"
+	| "speech"
+	| "transcription"
+	| "reranking"
+	| "decision"
+	| "batch";
+
+/**
+ * What `beforeRawRequest` receives.
+ */
+export type RawRequestContext = {
+	kind: ModelCallKind;
+	/** The upstream path relative to `baseUrl`, such as `embedding-model` or `batch/start`. */
+	path: string;
+	/** The `ai-model-id` header the client sent, which names the model; a batch names it per request too. */
+	modelId: string | undefined;
+	/** The parsed JSON body, unchecked. */
+	request: unknown;
+};
+
+/**
+ * What `afterRawResponse` receives.
+ */
+export type RawResponseContext = RawRequestContext & {
+	/**
+	 * The response the proxy would send: the upstream status, `content-type` and allowlisted
+	 * headers, with the upstream body on success and a `GatewayError` JSON body on failure.
+	 * Its body can be read once, so read `response.clone()` to leave it for the client.
+	 */
+	response: Response;
+};
+
+/**
  * Options for creating a gateway proxy.
  */
 export type CreateGatewayProxyOptions = {
@@ -90,10 +128,11 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
-	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
-	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
-	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
-	 * `batch/cancel`. A path ending in `language-model` always runs it.
+	 * Not called when the path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway`
+	 * uses for other calls: `embedding-model`, `image-model`, `video-model`, `video-model/start`,
+	 * `video-model/status`, `speech-model`, `transcription-model`, `reranking-model`,
+	 * `decision-model`, `batch/start`, `batch/status`, `batch/results` and `batch/cancel`.
+	 * Every other path runs it, whatever headers the request sends.
 	 */
 	beforeRequest?: (context: {
 		request: LanguageModelV4CallOptions;
@@ -103,6 +142,9 @@ export type CreateGatewayProxyOptions = {
 	 * Allows modification of the response body.
 	 *
 	 * For non-streaming responses, the returned object replaces the JSON body sent to the client.
+	 * A result with a missing or wrong-typed field is not sent: the client gets a 500 naming the
+	 * field, and on a stream the original finish event is forwarded. `null` stands for an absent
+	 * field, and `warnings` may be left out.
 	 *
 	 * For streaming responses, this is called when the stream completes with
 	 * the aggregated response. The content has already been streamed, but you
@@ -121,10 +163,11 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
-	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
-	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
-	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
-	 * `batch/cancel`. A path ending in `language-model` always runs it.
+	 * Not called when the path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway`
+	 * uses for other calls: `embedding-model`, `image-model`, `video-model`, `video-model/start`,
+	 * `video-model/status`, `speech-model`, `transcription-model`, `reranking-model`,
+	 * `decision-model`, `batch/start`, `batch/status`, `batch/results` and `batch/cancel`.
+	 * Every other path runs it, whatever headers the request sends.
 	 */
 	afterResponse?: (context: {
 		request: LanguageModelV4CallOptions;
@@ -141,16 +184,39 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
-	 * Not called for a request with an `ai-model-id` header and no `ai-language-model-id` header,
-	 * which is how `@ai-sdk/gateway` sends every model call but a language model's, such as an
-	 * embedding or image call, nor for a path ending in `batch/status`, `batch/results` or
-	 * `batch/cancel`. A path ending in `language-model` always runs it.
+	 * Not called when the path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway`
+	 * uses for other calls: `embedding-model`, `image-model`, `video-model`, `video-model/start`,
+	 * `video-model/status`, `speech-model`, `transcription-model`, `reranking-model`,
+	 * `decision-model`, `batch/start`, `batch/status`, `batch/results` and `batch/cancel`.
+	 * Every other path runs it, whatever headers the request sends.
 	 */
 	onError?: (context: {
 		request: LanguageModelV4CallOptions;
 		error: GatewayError;
 		status: number;
 	}) => GatewayError | Response | Promise<GatewayError | Response>;
+	/**
+	 * Called before a call that is not a language model call is sent to the gateway: a request
+	 * with a body whose path relative to `baseUrl` is exactly `embedding-model`, `image-model`,
+	 * `video-model`, `video-model/start`, `speech-model`, `transcription-model`,
+	 * `reranking-model`, `decision-model` or `batch/start`. Job reads (`video-model/status` and
+	 * `batch/status`, `batch/results`, `batch/cancel`) run no hook.
+	 *
+	 * A returned value replaces the body sent upstream; `undefined` sends the body as is.
+	 */
+	beforeRawRequest?: (context: RawRequestContext) => unknown;
+	/**
+	 * Called with the response to a call `beforeRawRequest` would run for, on success and on an
+	 * upstream error status, but not on a redirect, which is answered with a 502, nor when the
+	 * upstream request fails.
+	 *
+	 * A returned `Response` is sent instead. Returning nothing sends `response`, which must then
+	 * be unread; a hook that read it without returning a `Response`, or returned anything else,
+	 * is a 500.
+	 */
+	afterRawResponse?: (
+		context: RawResponseContext,
+	) => Response | undefined | Promise<Response | undefined>;
 };
 
 /**

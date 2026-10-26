@@ -4,7 +4,7 @@ There was no milestone as of 2026-10-22 (`gh api repos/sferarc/ai-gateway-proxy/
 
 ## Open issues
 
-As of 2026-10-24 (`gh issue list --state open`), one issue is open: #70 asks the owner to decide the owner-blocked items in [[post-0-2-0-gaps]] (item 1's choice between the folded path match and the fail-closed alternative, items 2 and 4), and leaves item 3's paid gateway check with the owner.
+As of 2026-10-26 (`gh issue list --state open`), one issue is open: #70 asked the owner to decide the owner-blocked items in [[post-0-2-0-gaps]], and leaves item 3's paid gateway check with the owner. The owner decided on 2026-10-26 to build items 1, 2 and 4: fail-closed path matching, raw hooks for the other calls, and strict `afterResponse` validation.
 
 ## Landed on main
 

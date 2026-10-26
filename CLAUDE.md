@@ -1,6 +1,6 @@
 # ai-gateway-proxy
 
-A route handler that forwards AI SDK language model calls to the Vercel AI Gateway, with API key or Vercel OIDC authentication and `beforeRequest`, `afterResponse` and `onError` hooks. A TypeScript library on npm. `README.md` is the user documentation.
+A route handler that forwards AI SDK language model calls to the Vercel AI Gateway, with API key or Vercel OIDC authentication, `beforeRequest`, `afterResponse` and `onError` hooks for language model calls, and `beforeRawRequest` and `afterRawResponse` for the other calls. A TypeScript library on npm. `README.md` is the user documentation.
 
 ## Knowledge Base
 

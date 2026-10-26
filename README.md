@@ -4,7 +4,7 @@ A lightweight proxy handler for [Vercel AI Gateway](https://vercel.com/docs/ai-g
 
 ## Features
 
-- **Request and response hooks:** transform requests and responses with `beforeRequest`, `afterResponse` and `onError`
+- **Request and response hooks:** transform language model requests and responses with `beforeRequest`, `afterResponse` and `onError`, and meter or rewrite the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) with `beforeRawRequest` and `afterRawResponse`
 - **Streaming:** forwards the gateway's SSE stream as it arrives and gives `afterResponse` the aggregated result when the stream finishes (AI SDK V4 protocol)
 - **Fetch handler:** takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js and Hono directly and into Express or `node:http` through a small adapter
 
@@ -145,20 +145,64 @@ The proxy gets a credential on every request with `getGatewayAuthToken()`, in th
 | `beforeRequest` | none | `({ request }) => LanguageModelV4CallOptions`. Receives the parsed JSON body and returns the body to send upstream. |
 | `afterResponse` | none | `({ request, response }) => GatewayResponse`. Runs on a successful response; see below. |
 | `onError` | none | `({ request, error, status }) => GatewayError \| Response`. Runs when the gateway returns a non-OK status; see below. |
+| `beforeRawRequest` | none | `({ kind, path, modelId, request }) => unknown`. Runs on the calls that are not language model calls; see below. |
+| `afterRawResponse` | none | `({ kind, path, modelId, request, response }) => Response \| undefined`. Runs on the response to those calls; see below. |
 
-Each hook may also return a promise. The hooks are typed for language model calls and run only for requests with a body. A `GET` or `HEAD` request, such as the provider's `GET /config` model list, and any other request whose body is missing or empty, such as a bodyless `DELETE`, is forwarded without a body and without running any hook, and the upstream status and body come back unchanged, except that a redirect is answered with a 502 as below. A request carrying `ai-model-id`, which `@ai-sdk/gateway` sends on every model call but a language model's (embedding, image, video, speech, transcription, reranking, decision and batch start), is forwarded with its body and runs no hook either, since its body and response are not language model ones. A request that also carries `ai-language-model-id`, or whose path ends in `language-model` once case, percent-encoding, repeated or trailing slashes and `;` parameters are folded away, is a language model call and runs every hook, so a client cannot turn the hooks off by adding `ai-model-id` or by dropping `ai-language-model-id`. The batch calls that read or cancel a job, whose upstream path ends in `batch/status`, `batch/results` or `batch/cancel`, send neither header and post only a batch id, so they run no hook either. Any other request with a body and neither header runs the hooks.
+Each hook may also return a promise. `beforeRequest`, `afterResponse` and `onError` are typed for language model calls, and every hook runs only for requests with a body. A `GET` or `HEAD` request, such as the provider's `GET /config` model list, and any other request whose body is missing or empty, such as a bodyless `DELETE`, is forwarded without a body and without running any hook, and the upstream status and body come back unchanged, except that a redirect is answered with a 502 as below.
+
+Path matching fails closed: the language model hooks run on every request with a body except one whose path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway` uses for calls that are not language model calls:
+
+| Path | Call |
+| --- | --- |
+| `embedding-model`, `image-model`, `video-model`, `video-model/start`, `speech-model`, `transcription-model`, `reranking-model`, `decision-model` | Model calls of the other kinds |
+| `batch/start` | Starting a batch |
+| `video-model/status`, `batch/status`, `batch/results`, `batch/cancel` | Reading or cancelling a job |
+
+The match is exact and ignores headers, so a request to any other path, including a different spelling of a listed one (`Embedding-Model`, `embedding-model/`, `embedding%2Dmodel`) or a listed path under a further prefix (`ai/embedding-model`), runs the language model hooks, and a client cannot turn them off by sending `ai-model-id` or dropping `ai-language-model-id`. Set `baseUrl` to the URL the client's paths are relative to, so the listed paths match.
 
 The path, whether from `extractPath` or the route param, must stay relative: one that starts with `/`, contains `://`, or has a segment that decodes to `.` or `..` or contains `/`, `\` or a NUL byte is rejected with `400 Invalid path` before anything is sent upstream.
 
 ### `afterResponse`
 
-- **Non-streamed responses:** receives the gateway's JSON body as `response`, and the value it returns is sent to the client instead. The value must be a JSON object; a primitive, an array or a function is a 500, and `undefined` or `null` forwards the upstream body.
-- **Streamed responses:** every event is forwarded to the client as it arrives. When the `finish` event comes, the hook receives the aggregated response, and the `finishReason`, `usage` and `providerMetadata` it returns replace those in the `finish` event; content changes have no effect because the content has already been sent. If the hook throws, the error is logged and the original `finish` event is forwarded. If the stream ends, fails or is cancelled before its `finish` event, the hook runs once with the content received so far, `incomplete` set (`{ reason: "ended" }`, `{ reason: "error", error }` or `{ reason: "cancelled", cancelReason }`), `response.usage` `undefined` and `response.finishReason` `error` or `other`. Nothing can be rewritten then, so its return value is ignored and a throw is logged. `response.usage` is typed `LanguageModelV4Usage | undefined`, so a hook that meters usage must handle `undefined`.
+- **Non-streamed responses:** receives the gateway's JSON body as `response`, and the value it returns is sent to the client instead. `undefined` or `null` forwards the upstream body. Any other result is checked against `GatewayResponse` (see "Result validation" below), and one that fails is answered with a 500 naming the problem instead of being sent.
+- **Streamed responses:** every event is forwarded to the client as it arrives. When the `finish` event comes, the hook receives the aggregated response, and the `finishReason`, `usage` and `providerMetadata` it returns replace those in the `finish` event; content changes have no effect because the content has already been sent. If the hook throws, or returns a result that fails the check below, `undefined` or `null`, the error is logged and the original `finish` event is forwarded. If the stream ends, fails or is cancelled before its `finish` event, the hook runs once with the content received so far, `incomplete` set (`{ reason: "ended" }`, `{ reason: "error", error }` or `{ reason: "cancelled", cancelReason }`), `response.usage` `undefined` and `response.finishReason` `error` or `other`. Nothing can be rewritten then, so its return value is ignored and a throw is logged. `response.usage` is typed `LanguageModelV4Usage | undefined`, so a hook that meters usage must handle `undefined`.
 - **Event streams and JSON Lines on other calls:** a successful `text/event-stream` or JSON Lines (`application/x-ndjson`, `application/jsonl`) response to a request without `ai-language-model-streaming: true`, such as the video model's `doGenerate` or the batch API's `doGetBatchResults`, is forwarded as is and the hook does not run, since it is not a language model response.
+
+#### Result validation
+
+A result is rejected when it is not an object or when a field is missing or has the wrong type:
+
+- `content`: an array of objects, each with a string `type`
+- `finishReason`: an object with a string `unified`, and `raw` a string or absent
+- `usage`: absent, or an object whose `inputTokens` and `outputTokens` are objects with number or absent counts
+- `warnings`: absent or an array; `@ai-sdk/gateway` reads a missing one as none
+- `providerMetadata`: absent or an object
+
+`null` is accepted wherever a field may be absent, since a body that went through JSON cannot hold `undefined`. Other fields are not checked and are forwarded as returned. A rejected result is logged with `console.error` as `afterResponse hook returned an invalid response: <problem>`, and on a non-streamed request the client gets the same message as a 500 `proxy_error`.
 
 ### `onError`
 
 Receives `{ request, error, status }`, where `error` is the gateway's JSON error body. When the body is not JSON of the form `{ error: { message } }`, such as an HTML page from a load balancer, `error` is `{ error: { message: "AI Gateway returned <status>: <excerpt>", type: "gateway_error" } }`, with the first 200 characters of the body as the excerpt. Return a replacement body to send it as JSON with the upstream status, or return a `Response` to send that as is. Returning `undefined` or `null`, as a hook that only logs does, forwards the error body unchanged. Without `onError`, the error body is sent with the upstream status.
+
+### Raw hooks
+
+`beforeRawRequest` and `afterRawResponse` run where the language model hooks do not: on a request with a body whose path is exactly one of the model call paths in the table above or `batch/start`. They are untyped, since each kind has its own body. They do not run on the job reads (`video-model/status`, `batch/status`, `batch/results`, `batch/cancel`) or on bodyless requests.
+
+Both receive `kind` (`"embedding"`, `"image"`, `"video"`, `"speech"`, `"transcription"`, `"reranking"`, `"decision"` or `"batch"`), `path` (such as `video-model/start`), `modelId` (the client's `ai-model-id` header, which is the only place an embedding or image call names its model) and `request`, the parsed JSON body.
+
+- **`beforeRawRequest`:** a returned value replaces the body sent upstream; `undefined` sends it as is.
+- **`afterRawResponse`:** also receives `response`, the `Response` the proxy would send: the upstream status, `content-type` and the allowlisted headers below, with the upstream body on success (a video call's event stream included) and the `GatewayError` body described under `onError` on a failure. Return a `Response` to send that instead, or nothing to send `response`. The body can be read once, so read `response.clone()` when returning nothing; a hook that reads `response` itself and returns nothing, or returns anything but a `Response`, is a 500. It does not run on a redirect or when the upstream request fails.
+
+```typescript
+createGatewayProxy({
+  afterRawResponse: async ({ kind, modelId, response }) => {
+    if (kind === "embedding" && response.ok) {
+      const { usage } = await response.clone().json();
+      await meter(modelId, usage);
+    }
+  },
+});
+```
 
 ## Responses the proxy generates
 
@@ -170,14 +214,15 @@ Apart from forwarding the gateway's own responses, the handler can answer with a
 | 400 | `invalid_request_error` | `Invalid path` | The path is not a safe relative path under `baseUrl`. |
 | 400 | `invalid_request_error` | `Invalid JSON body` | A request other than `GET` or `HEAD` has a non-empty body that is not JSON. |
 | 499 | none | none | The client aborted the request (`request.signal`) before the handler returned. The signal is passed to the upstream `fetch`, so the abort also cancels the upstream request. |
-| 500 | `proxy_error` | `Error proxying request to AI Gateway` | Anything else that throws: `extractPath`, `beforeRequest`, the upstream `fetch`, a successful non-streamed response that is not JSON, `afterResponse` on a non-streamed request, or `onError`. |
+| 500 | `proxy_error` | `Error proxying request to AI Gateway` | Anything else that throws: `extractPath`, `beforeRequest`, `beforeRawRequest`, the upstream `fetch`, a successful non-streamed response that is not JSON, `afterResponse` on a non-streamed request, `onError` or `afterRawResponse`, or an `afterRawResponse` that read the body and returned no `Response`. |
+| 500 | `proxy_error` | `afterResponse hook returned an invalid response: <problem>` | `afterResponse` on a non-streamed request returned a result that fails the result validation above. |
 | 500 | `proxy_error` | `No response body` | A successful streamed response arrived without a body. |
 | 502 | `proxy_error` | `Upstream redirected, the proxy does not follow redirects` | The gateway answered with a 3xx status. The proxy sets `redirect: "manual"`, runs no `onError` and forwards no `Location`. |
 
 ## Other exports
 
 - `createStreamTransformer(body, request, afterResponse)` and `StreamContentAggregator`: the pieces the proxy uses to run `afterResponse` on a stream, for building your own streaming handler.
-- Types: `CreateGatewayProxyOptions`, `CreateGatewayProxyFn`, `CreateGatewayProxyResult`, `GatewayResponse`, `GatewayError` and `GatewayAuthToken`.
+- Types: `CreateGatewayProxyOptions`, `CreateGatewayProxyFn`, `CreateGatewayProxyResult`, `GatewayResponse`, `GatewayError`, `IncompleteStream`, `ModelCallKind`, `RawRequestContext`, `RawResponseContext` and `GatewayAuthToken`.
 
 ## Documentation
 
