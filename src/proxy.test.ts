@@ -469,6 +469,34 @@ describe("createGatewayProxy", () => {
 				"beforeRequest hook returned no request, sending the original body",
 			);
 		});
+
+		it.each([
+			["a string", "prompt"],
+			["a number", 1],
+			["a boolean", false],
+			["an array", [{ role: "user" }]],
+		])(
+			"returns 500 without calling the gateway when the hook returns %s",
+			async (_name, result) => {
+				const onError = vi.fn();
+				const proxy = createGatewayProxy({
+					// @ts-expect-error the hook type requires call options
+					beforeRequest: () => result,
+					onError,
+				});
+				const request = createMockRequest("http://localhost/api/chat", { body: { prompt: [] } });
+
+				const response = await proxy(request, createMockContext(["chat"]));
+
+				const message =
+					"beforeRequest hook returned an invalid request: the result must be an object";
+				await expectGatewayError(response, 500, "proxy_error", message);
+				expect(mockFetch).not.toHaveBeenCalled();
+				expect(onError).not.toHaveBeenCalled();
+				expect(consoleError).toHaveBeenCalledOnce();
+				expect(consoleError).toHaveBeenCalledWith(message);
+			},
+		);
 	});
 
 	describe("afterResponse hook", () => {

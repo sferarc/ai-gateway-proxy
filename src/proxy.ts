@@ -1,6 +1,6 @@
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { type GatewayAuthToken, getGatewayAuthToken } from "./auth";
-import { gatewayResponseProblem } from "./hook-result";
+import { gatewayResponseProblem, isRecord } from "./hook-result";
 import { createStreamTransformer } from "./stream";
 import type {
 	CreateGatewayProxyOptions,
@@ -503,6 +503,11 @@ export const createGatewayProxy = ({
 				// A JavaScript caller can return nothing, such as a hook that only logs.
 				if (replaced === undefined || replaced === null) {
 					console.error("beforeRequest hook returned no request, sending the original body");
+				} else if (!isRecord(replaced)) {
+					const message =
+						"beforeRequest hook returned an invalid request: the result must be an object";
+					console.error(message);
+					return proxyErrorResponse(500, "proxy_error", message);
 				} else {
 					requestBody = replaced;
 				}
