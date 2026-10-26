@@ -1,6 +1,6 @@
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { type GatewayAuthToken, getGatewayAuthToken } from "./auth";
-import { gatewayResponseProblem } from "./hook-result";
+import { gatewayErrorProblem, gatewayResponseProblem } from "./hook-result";
 import { createStreamTransformer } from "./stream";
 import type {
 	CreateGatewayProxyOptions,
@@ -297,7 +297,14 @@ async function createErrorResponse(
 		if (result === undefined || result === null) {
 			console.error("onError hook returned no response, forwarding the upstream error body");
 		} else {
-			errorBody = result;
+			const problem = gatewayErrorProblem(result);
+			if (problem) {
+				console.error(
+					`onError hook returned an invalid error, forwarding the upstream error body: ${problem}`,
+				);
+			} else {
+				errorBody = result;
+			}
 		}
 	}
 

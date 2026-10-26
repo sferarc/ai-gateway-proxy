@@ -928,6 +928,93 @@ describe("createGatewayProxy", () => {
 			);
 		});
 
+		it.each([
+			["a string", "Rate limited", "the result must be an object or a Response"],
+			["an array", [], "the result must be an object or a Response"],
+			["a bare message", { message: "Slow down" }, "error must be an object"],
+			["a string error", { error: "Slow down" }, "error must be an object"],
+			["no message", { error: { type: "rate_limit_exceeded" } }, "error.message must be a string"],
+			[
+				"a numeric type",
+				{ error: { message: "Slow down", type: 429 } },
+				"error.type must be a string or undefined",
+			],
+		])(
+			"forwards the upstream error body when the hook returns %s",
+			async (_name, result, problem) => {
+				const errorResponse: GatewayError = {
+					error: { message: "Rate limited", type: "rate_limit_exceeded" },
+				};
+				const upstream = createMockHttpResponse(errorResponse, { status: 429 });
+				upstream.headers.set("retry-after", "3");
+				mockFetch.mockResolvedValueOnce(upstream);
+
+				// @ts-expect-error the hook type does not allow these results
+				const proxy = createGatewayProxy({ onError: () => result });
+				const request = createMockRequest("http://localhost/api/chat", {
+					body: { prompt: [] },
+				});
+
+				const response = await proxy(request, createMockContext(["chat"]));
+
+				expect(response.status).toBe(429);
+				expect(response.headers.get("retry-after")).toBe("3");
+				expect(await response.json()).toEqual(errorResponse);
+				expect(consoleError).toHaveBeenCalledOnce();
+				expect(consoleError).toHaveBeenCalledWith(
+					`onError hook returned an invalid error, forwarding the upstream error body: ${problem}`,
+				);
+			},
+		);
+
+		it.each([
+			["without a type", { error: { message: "Slow down" } }],
+			["with a null type", { error: { message: "Slow down", type: null } }],
+		])("sends a hook error %s", async (_name, result) => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse({ error: { message: "Rate limited", type: "x" } }, { status: 429 }),
+			);
+
+			// @ts-expect-error the hook type requires a string type
+			const proxy = createGatewayProxy({ onError: () => result });
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(429);
+			expect(await response.json()).toEqual(result);
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+
+		it("gives a client built on @ai-sdk/gateway the upstream message when the hook result is invalid", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse(
+					{ error: { message: "Rate limited", type: "rate_limit_exceeded" } },
+					{ status: 429 },
+				),
+			);
+
+			// @ts-expect-error the hook type requires an error object
+			const proxy = createGatewayProxy({ onError: () => ({ message: "Slow down" }) });
+			const provider = createGatewayProvider({
+				baseURL: "http://localhost/api",
+				apiKey: "client-key",
+				fetch: (input, init) =>
+					proxy(new Request(input, init), createMockContext(["language-model"])),
+			});
+
+			const error = await provider("openai/gpt-5")
+				.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] })
+				.then(
+					() => undefined,
+					(e: unknown) => e as Error,
+				);
+
+			expect(error?.message).toBe("Rate limited");
+		});
+
 		it("handles non-JSON error response from gateway", async () => {
 			const html = `<html>
 	<head><title>502 Bad Gateway</title></head>
