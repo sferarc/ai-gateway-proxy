@@ -184,6 +184,35 @@ A result is rejected when it is not an object or when a field is missing or has 
 
 Receives `{ request, error, status }`, where `error` is the gateway's JSON error body. When the body is not JSON of the form `{ error: { message } }`, such as an HTML page from a load balancer, `error` is `{ error: { message: "AI Gateway returned <status>: <excerpt>", type: "gateway_error" } }`, with the first 200 characters of the body as the excerpt. Return a replacement body to send it as JSON with the upstream status, or return a `Response` to send that as is. Returning `undefined` or `null`, as a hook that only logs does, forwards the error body unchanged. Without `onError`, the error body is sent with the upstream status.
 
+### Example: cap, meter and mask
+
+The three language model hooks together: cap output tokens, record usage, and keep upstream server errors from the client. `meter` stands for your own function.
+
+```typescript
+createGatewayProxy({
+  beforeRequest: ({ request }) => ({
+    ...request,
+    maxOutputTokens: Math.min(request.maxOutputTokens ?? 1024, 1024),
+  }),
+  afterResponse: async ({ request, response, incomplete }) => {
+    // usage is undefined when a stream ended before its finish event.
+    await meter({
+      inputTokens: response.usage?.inputTokens.total,
+      outputTokens: response.usage?.outputTokens.total,
+      maxOutputTokens: request.maxOutputTokens,
+      complete: incomplete === undefined,
+    });
+    return response;
+  },
+  onError: ({ error, status }) =>
+    status >= 500
+      ? { error: { message: "The model provider is unavailable", type: "gateway_error" } }
+      : error,
+});
+```
+
+`afterResponse` returns `response` unchanged, so the client gets the gateway's body on a non-streamed call and the upstream `finish` event on a stream. `request` is the body after `beforeRequest`, so `maxOutputTokens` is the capped value.
+
 ### Raw hooks
 
 `beforeRawRequest` and `afterRawResponse` run where the language model hooks do not: on a request with a body whose path is exactly one of the model call paths in the table above or `batch/start`. They are untyped, since each kind has its own body. They do not run on the job reads (`video-model/status`, `batch/status`, `batch/results`, `batch/cancel`) or on bodyless requests.
