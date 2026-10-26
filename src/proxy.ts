@@ -1,5 +1,6 @@
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { type GatewayAuthToken, getGatewayAuthToken } from "./auth";
+import { gatewayResponseProblem } from "./hook-result";
 import { createStreamTransformer } from "./stream";
 import type {
 	CreateGatewayProxyOptions,
@@ -358,9 +359,13 @@ async function handleJsonResponse(
 		// A JavaScript caller can return nothing.
 		if (modified === undefined || modified === null) {
 			console.error("afterResponse hook returned no response, forwarding the upstream body");
-		} else if (typeof modified !== "object" || Array.isArray(modified)) {
-			throw new TypeError("afterResponse hook must return a response object");
 		} else {
+			const problem = gatewayResponseProblem(modified);
+			if (problem) {
+				const message = `afterResponse hook returned an invalid response: ${problem}`;
+				console.error(message);
+				return proxyErrorResponse(500, "proxy_error", message);
+			}
 			responseBody = modified;
 		}
 	}

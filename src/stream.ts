@@ -9,6 +9,7 @@ import type {
 	SharedV4Warning,
 } from "@ai-sdk/provider";
 import { EventSourceParserStream } from "@ai-sdk/provider-utils";
+import { gatewayResponseProblem } from "./hook-result";
 import type { CreateGatewayProxyOptions, GatewayResponse, IncompleteStream } from "./types";
 
 /**
@@ -220,23 +221,30 @@ export function createStreamTransformer(
 		}
 
 		finishSeen = true;
-		// Inside the try so an undefined or null result falls back like a throwing hook.
+		let modifiedResponse: GatewayResponse;
 		try {
-			const modifiedResponse = await afterResponse({
+			modifiedResponse = await afterResponse({
 				request: requestBody,
 				response: aggregator.getResponse(),
 			});
-			const modifiedFinish: LanguageModelV4StreamPart = {
-				type: "finish",
-				finishReason: modifiedResponse.finishReason,
-				usage: modifiedResponse.usage ?? parsed.usage,
-				providerMetadata: modifiedResponse.providerMetadata,
-			};
-			return JSON.stringify(modifiedFinish);
 		} catch (error) {
 			console.error("afterResponse hook failed, forwarding original finish event:", error);
 			return data;
 		}
+		const problem = gatewayResponseProblem(modifiedResponse);
+		if (problem) {
+			console.error(
+				`afterResponse hook returned an invalid response, forwarding original finish event: ${problem}`,
+			);
+			return data;
+		}
+		const modifiedFinish: LanguageModelV4StreamPart = {
+			type: "finish",
+			finishReason: modifiedResponse.finishReason,
+			usage: modifiedResponse.usage ?? parsed.usage,
+			providerMetadata: modifiedResponse.providerMetadata ?? undefined,
+		};
+		return JSON.stringify(modifiedFinish);
 	}
 
 	// No finish event is left to rewrite, so the result is ignored and a throw only logged.

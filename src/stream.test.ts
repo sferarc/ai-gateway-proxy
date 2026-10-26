@@ -689,6 +689,31 @@ describe("createStreamTransformer", () => {
 		},
 	);
 
+	it.each([
+		["no finishReason", { finishReason: undefined }, "finishReason must be an object"],
+		["a string usage", { usage: "10" }, "usage must be an object or undefined"],
+		["an array for providerMetadata", { providerMetadata: [] }, "providerMetadata must be"],
+	])(
+		"forwards the original finish event and names the problem when the hook returns %s",
+		async (_name, override, problem) => {
+			const output = await readAll(
+				createStreamTransformer(
+					sourceOf([sse(finishEvent), sse("[DONE]")]),
+					requestBody,
+					// @ts-expect-error the overrides break the response type on purpose
+					({ response }) => ({ ...response, ...override }),
+				),
+			);
+
+			expect(output).toBe(`${sse(finishEvent)}data: [DONE]\n\n`);
+			expect(consoleError).toHaveBeenCalledOnce();
+			expect(consoleError.mock.calls[0]?.[0]).toMatch(
+				/^afterResponse hook returned an invalid response, forwarding original finish event: /,
+			);
+			expect(consoleError.mock.calls[0]?.[0]).toContain(problem);
+		},
+	);
+
 	it("cancels the source when the output stream is cancelled", async () => {
 		const cancel = vi.fn();
 		const source = new ReadableStream<Uint8Array>({

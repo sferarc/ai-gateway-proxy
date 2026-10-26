@@ -142,6 +142,9 @@ export type CreateGatewayProxyOptions = {
 	 * Allows modification of the response body.
 	 *
 	 * For non-streaming responses, the returned object replaces the JSON body sent to the client.
+	 * A result with a missing or wrong-typed field is not sent: the client gets a 500 naming the
+	 * field, and on a stream the original finish event is forwarded. `null` stands for an absent
+	 * field, and `warnings` may be left out.
 	 *
 	 * For streaming responses, this is called when the stream completes with
 	 * the aggregated response. The content has already been streamed, but you

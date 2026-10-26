@@ -532,30 +532,96 @@ describe("createGatewayProxy", () => {
 			);
 		});
 
+		const valid = createMockGatewayResponse();
 		it.each([
-			["a string", "text"],
-			["a number", 1],
-			["an array", []],
-		])("returns 500 when the hook returns %s", async (_name, result) => {
+			["a string", "text", "the result must be an object"],
+			["a number", 1, "the result must be an object"],
+			["an array", [], "the result must be an object"],
+			["no content", { ...valid, content: undefined }, "content must be an array"],
+			[
+				"a content part without a type",
+				{ ...valid, content: [{ text: "Hi" }] },
+				"content must hold objects with a string type",
+			],
+			[
+				"no finishReason",
+				{ ...valid, finishReason: undefined },
+				"finishReason must be an object with a string unified",
+			],
+			[
+				"a string finishReason",
+				{ ...valid, finishReason: "stop" },
+				"finishReason must be an object with a string unified",
+			],
+			[
+				"a numeric finishReason.raw",
+				{ ...valid, finishReason: { unified: "stop", raw: 1 } },
+				"finishReason.raw must be a string or undefined",
+			],
+			["a string usage", { ...valid, usage: "10" }, "usage must be an object or undefined"],
+			[
+				"usage without inputTokens",
+				{ ...valid, usage: { outputTokens: { total: 5 } } },
+				"usage.inputTokens must be an object",
+			],
+			[
+				"a string token count",
+				{ ...valid, usage: { inputTokens: { total: 10 }, outputTokens: { total: "5" } } },
+				"usage.outputTokens.total must be a number or undefined",
+			],
+			["an object for warnings", { ...valid, warnings: {} }, "warnings must be an array"],
+			[
+				"an array for providerMetadata",
+				{ ...valid, providerMetadata: [] },
+				"providerMetadata must be an object or undefined",
+			],
+		])(
+			"returns 500 naming the problem when the hook returns %s",
+			async (_name, result, problem) => {
+				mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+
+				const proxy = createGatewayProxy({
+					// @ts-expect-error the hook type requires a valid response
+					afterResponse: () => result,
+				});
+				const request = createMockRequest("http://localhost/api/chat", {
+					body: { prompt: [] },
+				});
+
+				const response = await proxy(request, createMockContext(["chat"]));
+
+				const message = `afterResponse hook returned an invalid response: ${problem}`;
+				await expectGatewayError(response, 500, "proxy_error", message);
+				expect(consoleError).toHaveBeenCalledOnce();
+				expect(consoleError).toHaveBeenCalledWith(message);
+			},
+		);
+
+		it.each([
+			["no warnings", { ...valid, warnings: undefined }],
+			["no usage", { ...valid, usage: undefined }],
+			["null in place of undefined", { ...valid, finishReason: { unified: "stop", raw: null } }],
+			[
+				"partial token counts",
+				{ ...valid, usage: { inputTokens: { total: 1 }, outputTokens: { total: 2, text: null } } },
+			],
+			["extra fields", { ...valid, response: { id: "r1" } }],
+		])("forwards a hook result with %s", async (_name, result) => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 
 			const proxy = createGatewayProxy({
-				// @ts-expect-error the hook type requires a response object
+				// @ts-expect-error the cases loosen the response type the way JSON does
 				afterResponse: () => result,
 			});
-			const request = createMockRequest("http://localhost/api/chat", {
-				body: { prompt: [] },
-			});
 
-			const response = await proxy(request, createMockContext(["chat"]));
-
-			await expectGatewayError(
-				response,
-				500,
-				"proxy_error",
-				"Error proxying request to AI Gateway",
+			const response = await proxy(
+				createMockRequest("http://localhost/api/chat", { body: { prompt: [] } }),
+				createMockContext(["chat"]),
 			);
-			expect(consoleError).toHaveBeenCalledOnce();
+
+			expect(response.status).toBe(200);
+			expect(await response.json()).toEqual(JSON.parse(JSON.stringify(result)));
+			expect(consoleError).not.toHaveBeenCalled();
 		});
 
 		it("receives original request in context", async () => {
