@@ -497,7 +497,15 @@ export const createGatewayProxy = ({
 			};
 
 			if (beforeRequest && runsHooks) {
-				requestBody = await beforeRequest({ request: requestBody as LanguageModelV4CallOptions });
+				const replaced = await beforeRequest({
+					request: requestBody as LanguageModelV4CallOptions,
+				});
+				// A JavaScript caller can return nothing, such as a hook that only logs.
+				if (replaced === undefined || replaced === null) {
+					console.error("beforeRequest hook returned no request, sending the original body");
+				} else {
+					requestBody = replaced;
+				}
 			}
 
 			if (beforeRawRequest && rawContext) {
