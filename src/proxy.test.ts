@@ -805,6 +805,37 @@ describe("createGatewayProxy", () => {
 			expect(body.error.message).toBe("Async modified");
 		});
 
+		it.each([
+			["undefined", undefined],
+			["null", null],
+		])("forwards the upstream error body when the hook returns %s", async (_name, result) => {
+			const errorResponse: GatewayError = {
+				error: { message: "Rate limited", type: "rate_limit_exceeded" },
+			};
+			const upstream = createMockHttpResponse(errorResponse, { status: 429 });
+			upstream.headers.set("retry-after", "3");
+			mockFetch.mockResolvedValueOnce(upstream);
+
+			const onError = vi.fn(async () => result);
+			// @ts-expect-error the hook type does not allow undefined or null
+			const proxy = createGatewayProxy({ onError });
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(onError).toHaveBeenCalledOnce();
+			expect(response.status).toBe(429);
+			expect(response.headers.get("content-type")).toBe("application/json");
+			expect(response.headers.get("retry-after")).toBe("3");
+			expect(await response.json()).toEqual(errorResponse);
+			expect(consoleError).toHaveBeenCalledOnce();
+			expect(consoleError).toHaveBeenCalledWith(
+				"onError hook returned no response, forwarding the upstream error body",
+			);
+		});
+
 		it("handles non-JSON error response from gateway", async () => {
 			const html = `<html>
 	<head><title>502 Bad Gateway</title></head>

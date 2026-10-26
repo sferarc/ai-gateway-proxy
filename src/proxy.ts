@@ -280,14 +280,15 @@ function responseHeaders(res: Response, contentType: string): Headers {
  */
 async function createErrorResponse(
 	res: Response,
-	errorBody: GatewayError,
+	upstreamError: GatewayError,
 	requestBody: LanguageModelV4CallOptions,
 	onError: CreateGatewayProxyOptions["onError"],
 ): Promise<Response> {
+	let errorBody = upstreamError;
 	if (onError) {
 		const result = await onError({
 			request: requestBody,
-			error: errorBody,
+			error: upstreamError,
 			status: res.status,
 		});
 
@@ -295,11 +296,12 @@ async function createErrorResponse(
 			return result;
 		}
 
-		return new Response(JSON.stringify(result), {
-			status: res.status,
-			statusText: res.statusText,
-			headers: responseHeaders(res, "application/json"),
-		});
+		// A JavaScript caller can return nothing, such as a hook that only logs.
+		if (result === undefined || result === null) {
+			console.error("onError hook returned no response, forwarding the upstream error body");
+		} else {
+			errorBody = result;
+		}
 	}
 
 	return new Response(JSON.stringify(errorBody), {
