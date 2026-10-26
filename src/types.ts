@@ -124,7 +124,8 @@ export type CreateGatewayProxyOptions = {
 	extractPath?: (request: Request) => string | Promise<string>;
 	/**
 	 * Called before the request is sent to the gateway.
-	 * Allows modification of the request body.
+	 * Allows modification of the request body. Returning `undefined` or `null` sends the
+	 * parsed body unchanged and logs an error.
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *

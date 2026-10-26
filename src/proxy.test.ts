@@ -443,6 +443,32 @@ describe("createGatewayProxy", () => {
 				}),
 			);
 		});
+
+		it.each([
+			["undefined", undefined],
+			["null", null],
+		])("sends the original body when the hook returns %s", async (_name, result) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+
+			const afterResponse = vi.fn(({ response }) => response);
+			const proxy = createGatewayProxy({
+				// @ts-expect-error the hook type does not allow undefined or null
+				beforeRequest: async () => result,
+				afterResponse,
+			});
+			const body = { prompt: [], temperature: 0.2 };
+			const request = createMockRequest("http://localhost/api/chat", { body });
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(200);
+			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual(body);
+			expect(afterResponse).toHaveBeenCalledWith(expect.objectContaining({ request: body }));
+			expect(consoleError).toHaveBeenCalledOnce();
+			expect(consoleError).toHaveBeenCalledWith(
+				"beforeRequest hook returned no request, sending the original body",
+			);
+		});
 	});
 
 	describe("afterResponse hook", () => {
