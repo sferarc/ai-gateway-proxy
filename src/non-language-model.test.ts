@@ -8,6 +8,7 @@ import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startProxyServer } from "./test-server";
+import type { CreateGatewayProxyOptions } from "./types";
 
 const GATEWAY_KEY = "non-lm-dummy-gateway-key";
 
@@ -64,7 +65,7 @@ describe("non-language-model calls through the proxy to a fake gateway", () => {
 		vi.unstubAllEnvs();
 	});
 
-	async function setup(reply: Reply) {
+	async function setup(reply: Reply, rawHooks: CreateGatewayProxyOptions = {}) {
 		upstream = await startFakeGateway(reply);
 		// Hooks written for language model calls; each would change or break these calls if it ran.
 		const beforeRequest = vi.fn(({ request }) => ({ ...request, temperature: 0 }));
@@ -73,7 +74,13 @@ describe("non-language-model calls through the proxy to a fake gateway", () => {
 		});
 		const onError = vi.fn();
 		const { gateway, close } = await startProxyServer({
-			proxyOptions: { baseUrl: upstream.baseUrl, beforeRequest, afterResponse, onError },
+			proxyOptions: {
+				baseUrl: upstream.baseUrl,
+				beforeRequest,
+				afterResponse,
+				onError,
+				...rawHooks,
+			},
 		});
 		closeProxy = close;
 		return { gateway, upstream, hooks: { beforeRequest, afterResponse, onError } };
@@ -204,6 +211,48 @@ describe("non-language-model calls through the proxy to a fake gateway", () => {
 		expect(received.headers["ai-model-id"]).toBe("openai/gpt-5");
 		expect(received.headers["idempotency-key"]).toBe("batch-42");
 		expect(received.body).toEqual({ requests });
+		expectNoHookRan(hooks);
+	});
+
+	it("runs the raw hooks on a batch start and no language model hook", async () => {
+		const beforeRawRequest = vi.fn(() => undefined);
+		const statuses: number[] = [];
+		const afterRawResponse = vi.fn(async ({ response }: { response: Response }) => {
+			statuses.push(response.status);
+			return undefined;
+		});
+		const { gateway, upstream, hooks } = await setup(
+			{
+				contentType: "application/json",
+				body: JSON.stringify({ batchId: "batch_1", status: "pending" }),
+			},
+			{ beforeRawRequest, afterRawResponse },
+		);
+		const requests = [
+			{
+				id: "r1",
+				type: "text" as const,
+				modelId: "openai/gpt-5",
+				options: {
+					prompt: [{ role: "user" as const, content: [{ type: "text" as const, text: "hi" }] }],
+				},
+			},
+		];
+
+		const result = await gateway.experimental_batch().doStartBatch({
+			requests,
+			providerOptions: undefined,
+		});
+
+		expect(result.batchId).toBe("batch_1");
+		expect(upstream.requests[0].body).toEqual({ requests });
+		expect(beforeRawRequest).toHaveBeenCalledWith({
+			kind: "batch",
+			path: "batch/start",
+			modelId: "openai/gpt-5",
+			request: { requests },
+		});
+		expect(statuses).toEqual([200]);
 		expectNoHookRan(hooks);
 	});
 });

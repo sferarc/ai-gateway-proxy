@@ -6,6 +6,8 @@ import type {
 	CreateGatewayProxyResult,
 	GatewayError,
 	GatewayResponse,
+	ModelCallKind,
+	RawResponseContext,
 } from "./types";
 
 const DEFAULT_BASE_URL = "https://ai-gateway.vercel.sh/v1/ai";
@@ -19,16 +21,16 @@ const MODEL_CALL_HEADER =
 	/^(?:ai-language-model-.+|ai-model-id|ai-[a-z]+-model-specification-version)$/;
 const REQUEST_METADATA_HEADER = /^(?:ai-o11y-.+|idempotency-key|accept)$/;
 // Paths relative to baseUrl where @ai-sdk/gateway 4.x posts a call that is not a language model call.
-const NON_LANGUAGE_MODEL_PATHS = new Set([
-	"embedding-model",
-	"image-model",
-	"video-model",
-	"video-model/start",
-	"speech-model",
-	"transcription-model",
-	"reranking-model",
-	"decision-model",
-	"batch/start",
+const NON_LANGUAGE_MODEL_PATHS = new Map<string, ModelCallKind>([
+	["embedding-model", "embedding"],
+	["image-model", "image"],
+	["video-model", "video"],
+	["video-model/start", "video"],
+	["speech-model", "speech"],
+	["transcription-model", "transcription"],
+	["reranking-model", "reranking"],
+	["decision-model", "decision"],
+	["batch/start", "batch"],
 ]);
 // @ai-sdk/gateway's calls that read or cancel a job rather than start a model call.
 const READ_PATHS = new Set(["batch/status", "batch/results", "batch/cancel", "video-model/status"]);
@@ -370,6 +372,58 @@ async function handleJsonResponse(
 	});
 }
 
+type LanguageModelHooks = Pick<CreateGatewayProxyOptions, "afterResponse" | "onError">;
+
+/**
+ * Builds the client response for a non-redirect upstream response, running the language model hooks given.
+ */
+async function forwardUpstreamResponse(
+	res: Response,
+	requestBody: LanguageModelV4CallOptions,
+	isStreaming: boolean,
+	{ afterResponse, onError }: LanguageModelHooks,
+): Promise<Response> {
+	if (!res.ok) {
+		const errorBody = await parseErrorBody(res);
+		return await createErrorResponse(res, errorBody, requestBody, onError);
+	}
+
+	if (isStreaming) {
+		return handleStreamingResponse(res, requestBody, afterResponse);
+	}
+
+	// Other calls can answer with a body that is not one JSON value, such as the video model's
+	// event stream or the batch results' JSON Lines. It is not a language model response, so it
+	// passes through without afterResponse.
+	if (STREAM_CONTENT_TYPE.test(res.headers.get("content-type") ?? "")) {
+		return handleStreamingResponse(res, requestBody, undefined);
+	}
+
+	return await handleJsonResponse(res, requestBody, afterResponse);
+}
+
+/**
+ * Runs afterRawResponse and returns the response to send.
+ */
+async function applyAfterRawResponse(
+	afterRawResponse: NonNullable<CreateGatewayProxyOptions["afterRawResponse"]>,
+	context: RawResponseContext,
+): Promise<Response> {
+	const result: unknown = await afterRawResponse(context);
+	if (result instanceof Response) {
+		return result;
+	}
+	if (result !== undefined && result !== null) {
+		throw new TypeError("afterRawResponse hook must return a Response or nothing");
+	}
+	if (context.response.bodyUsed) {
+		throw new TypeError(
+			"afterRawResponse hook read the response body and returned no Response; read response.clone() instead",
+		);
+	}
+	return context.response;
+}
+
 /**
  * Creates a proxy handler for the Vercel AI Gateway.
  *
@@ -384,6 +438,8 @@ export const createGatewayProxy = ({
 	beforeRequest,
 	afterResponse,
 	onError,
+	beforeRawRequest,
+	afterRawResponse,
 }: CreateGatewayProxyOptions = {}): CreateGatewayProxyResult => {
 	const handler = async (
 		request: Request,
@@ -419,7 +475,7 @@ export const createGatewayProxy = ({
 			}
 
 			// Parse request body
-			let requestBody: LanguageModelV4CallOptions;
+			let requestBody: unknown;
 			try {
 				requestBody = JSON.parse(text);
 			} catch {
@@ -427,13 +483,23 @@ export const createGatewayProxy = ({
 			}
 
 			// Fail closed: only an exact listed path, after "?" and "#" are resolved away, skips the hooks.
-			const runsHooks =
-				!NON_LANGUAGE_MODEL_PATHS.has(resolved.relativePath) &&
-				!READ_PATHS.has(resolved.relativePath);
+			const kind = NON_LANGUAGE_MODEL_PATHS.get(resolved.relativePath);
+			const runsHooks = kind === undefined && !READ_PATHS.has(resolved.relativePath);
+			const rawContext = kind && {
+				kind,
+				path: resolved.relativePath,
+				modelId: request.headers.get("ai-model-id") ?? undefined,
+			};
 
-			// Apply beforeRequest hook
 			if (beforeRequest && runsHooks) {
-				requestBody = await beforeRequest({ request: requestBody });
+				requestBody = await beforeRequest({ request: requestBody as LanguageModelV4CallOptions });
+			}
+
+			if (beforeRawRequest && rawContext) {
+				const replaced = await beforeRawRequest({ ...rawContext, request: requestBody });
+				if (replaced !== undefined) {
+					requestBody = replaced;
+				}
 			}
 
 			const isStreaming = request.headers.get("ai-language-model-streaming") === "true";
@@ -451,30 +517,21 @@ export const createGatewayProxy = ({
 				return redirectRefusedResponse(res);
 			}
 
-			// Handle error responses
-			if (!res.ok) {
-				const errorBody = await parseErrorBody(res);
-				return await createErrorResponse(
-					res,
-					errorBody,
-					requestBody,
-					runsHooks ? onError : undefined,
-				);
-			}
+			const response = await forwardUpstreamResponse(
+				res,
+				requestBody as LanguageModelV4CallOptions,
+				isStreaming,
+				runsHooks ? { afterResponse, onError } : {},
+			);
 
-			// Handle successful responses
-			if (isStreaming) {
-				return handleStreamingResponse(res, requestBody, runsHooks ? afterResponse : undefined);
+			if (afterRawResponse && rawContext) {
+				return await applyAfterRawResponse(afterRawResponse, {
+					...rawContext,
+					request: requestBody,
+					response,
+				});
 			}
-
-			// Other calls can answer with a body that is not one JSON value, such as the video model's
-			// event stream or the batch results' JSON Lines. It is not a language model response, so it
-			// passes through without afterResponse.
-			if (STREAM_CONTENT_TYPE.test(res.headers.get("content-type") ?? "")) {
-				return handleStreamingResponse(res, requestBody, undefined);
-			}
-
-			return await handleJsonResponse(res, requestBody, runsHooks ? afterResponse : undefined);
+			return response;
 		} catch (error) {
 			return proxyFailureResponse(request, error);
 		}

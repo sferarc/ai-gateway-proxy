@@ -1359,6 +1359,250 @@ describe("createGatewayProxy", () => {
 		);
 	});
 
+	describe("raw hooks", () => {
+		beforeEach(() => {
+			process.env.AI_GATEWAY_API_KEY = "test-api-key";
+		});
+
+		function viaGateway(proxy: ReturnType<typeof createGatewayProxy>) {
+			return createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: async (input, init) => {
+					const request = new Request(input, init);
+					const path = new URL(request.url).pathname.replace(/^\/api\/ai\/?/, "");
+					return proxy(request, createMockContext(path.split("/")));
+				},
+			});
+		}
+
+		it("runs both raw hooks on an embedding call from @ai-sdk/gateway", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse({ embeddings: [[0.1, 0.2]], usage: { tokens: 2 } }),
+			);
+			const beforeRequest = vi.fn();
+			const afterResponse = vi.fn();
+			const beforeRawRequest = vi.fn(({ request }) => ({
+				...(request as object),
+				dimensions: 2,
+			}));
+			let metered: unknown;
+			const afterRawResponse = vi.fn(async ({ response }: { response: Response }) => {
+				metered = await response.clone().json();
+				return undefined;
+			});
+			const proxy = createGatewayProxy({
+				beforeRequest,
+				afterResponse,
+				beforeRawRequest,
+				afterRawResponse,
+			});
+
+			const result = await viaGateway(proxy)
+				.embeddingModel("openai/text-embedding-3-small")
+				.doEmbed({ values: ["hello"] });
+
+			expect(result.embeddings).toEqual([[0.1, 0.2]]);
+			expect(beforeRawRequest).toHaveBeenCalledWith({
+				kind: "embedding",
+				path: "embedding-model",
+				modelId: "openai/text-embedding-3-small",
+				request: { values: ["hello"] },
+			});
+			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+				values: ["hello"],
+				dimensions: 2,
+			});
+			expect(afterRawResponse).toHaveBeenCalledOnce();
+			expect(afterRawResponse.mock.calls[0][0]).toMatchObject({
+				kind: "embedding",
+				path: "embedding-model",
+				modelId: "openai/text-embedding-3-small",
+				request: { values: ["hello"], dimensions: 2 },
+			});
+			expect(metered).toEqual({ embeddings: [[0.1, 0.2]], usage: { tokens: 2 } });
+			expect(beforeRequest).not.toHaveBeenCalled();
+			expect(afterResponse).not.toHaveBeenCalled();
+		});
+
+		it.each([
+			["embedding-model", "embedding"],
+			["image-model", "image"],
+			["video-model", "video"],
+			["video-model/start", "video"],
+			["speech-model", "speech"],
+			["transcription-model", "transcription"],
+			["reranking-model", "reranking"],
+			["decision-model", "decision"],
+			["batch/start", "batch"],
+		])("runs the raw hooks on %s as a %s call", async (path, kind) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ ok: true }));
+			const beforeRawRequest = vi.fn();
+			const afterRawResponse = vi.fn();
+			const proxy = createGatewayProxy({ beforeRawRequest, afterRawResponse });
+
+			const response = await proxy(
+				createMockRequest(`http://localhost/api/${path}`, { body: { prompt: "a cat" } }),
+				createMockContext(path.split("/")),
+			);
+
+			expect(await response.json()).toEqual({ ok: true });
+			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ prompt: "a cat" });
+			expect(beforeRawRequest).toHaveBeenCalledWith({
+				kind,
+				path,
+				modelId: undefined,
+				request: { prompt: "a cat" },
+			});
+			expect(afterRawResponse).toHaveBeenCalledOnce();
+		});
+
+		it.each([
+			["language-model"],
+			["chat"],
+			["Embedding-Model"],
+			["batch/status"],
+			["batch/results"],
+			["batch/cancel"],
+			["video-model/status"],
+		])("runs no raw hook on %s", async (path) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const beforeRawRequest = vi.fn();
+			const afterRawResponse = vi.fn();
+			const proxy = createGatewayProxy({ beforeRawRequest, afterRawResponse });
+
+			const response = await proxy(
+				createMockRequest(`http://localhost/api/${path}`, { body: { prompt: [] } }),
+				createMockContext(path.split("/")),
+			);
+
+			expect(response.status).toBe(200);
+			expect(beforeRawRequest).not.toHaveBeenCalled();
+			expect(afterRawResponse).not.toHaveBeenCalled();
+		});
+
+		it("sends a Response returned by afterRawResponse instead", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ images: ["AAAA"] }));
+			const proxy = createGatewayProxy({
+				afterRawResponse: () => new Response("replaced", { status: 202 }),
+			});
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/image-model", { body: { prompt: "a cat" } }),
+				createMockContext(["image-model"]),
+			);
+
+			expect(response.status).toBe(202);
+			expect(await response.text()).toBe("replaced");
+		});
+
+		it("gives afterRawResponse the error response and runs no onError", async () => {
+			mockFetch.mockResolvedValueOnce(new Response("<html>bad gateway</html>", { status: 502 }));
+			const onError = vi.fn();
+			let seen: { status: number; body: unknown } | undefined;
+			const proxy = createGatewayProxy({
+				onError,
+				afterRawResponse: async ({ response }) => {
+					seen = { status: response.status, body: await response.clone().json() };
+					return undefined;
+				},
+			});
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/image-model", { body: { prompt: "a cat" } }),
+				createMockContext(["image-model"]),
+			);
+
+			const expected = {
+				error: {
+					message: "AI Gateway returned 502: <html>bad gateway</html>",
+					type: "gateway_error",
+				},
+			};
+			expect(response.status).toBe(502);
+			expect(await response.json()).toEqual(expected);
+			expect(seen).toEqual({ status: 502, body: expected });
+			expect(onError).not.toHaveBeenCalled();
+		});
+
+		it("passes an event stream to afterRawResponse and still streams it to the client", async () => {
+			const event = `data: ${JSON.stringify({ type: "result", videos: [] })}\n\n`;
+			mockFetch.mockResolvedValueOnce(
+				new Response(event, { headers: { "content-type": "text/event-stream" } }),
+			);
+			let seen: string | undefined;
+			const proxy = createGatewayProxy({
+				afterRawResponse: async ({ response }) => {
+					seen = await response.clone().text();
+					return undefined;
+				},
+			});
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/video-model", { body: { prompt: "a cat" } }),
+				createMockContext(["video-model"]),
+			);
+
+			expect(response.headers.get("content-type")).toBe("text/event-stream");
+			expect(await response.text()).toBe(event);
+			expect(seen).toBe(event);
+		});
+
+		it("does not run afterRawResponse on a redirect", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(null, { status: 307, headers: { location: "https://elsewhere.example/" } }),
+			);
+			const afterRawResponse = vi.fn();
+			const proxy = createGatewayProxy({ afterRawResponse });
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/embedding-model", { body: { values: ["a"] } }),
+				createMockContext(["embedding-model"]),
+			);
+
+			expect(response.status).toBe(502);
+			expect(afterRawResponse).not.toHaveBeenCalled();
+		});
+
+		it.each([
+			[
+				"reads the body without returning a Response",
+				async ({ response }: { response: Response }) => {
+					await response.text();
+					return undefined;
+				},
+			],
+			["returns an object that is not a Response", () => ({ embeddings: [] })],
+		])("returns 500 when afterRawResponse %s", async (_name, afterRawResponse) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ embeddings: [[0.1]] }));
+			// @ts-expect-error the second case breaks the hook's return type on purpose
+			const proxy = createGatewayProxy({ afterRawResponse });
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/embedding-model", { body: { values: ["a"] } }),
+				createMockContext(["embedding-model"]),
+			);
+
+			await expectProxyFailure(response);
+		});
+
+		it("returns 500 without calling fetch when beforeRawRequest throws", async () => {
+			const proxy = createGatewayProxy({
+				beforeRawRequest: () => {
+					throw new Error("denied");
+				},
+			});
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/embedding-model", { body: { values: ["a"] } }),
+				createMockContext(["embedding-model"]),
+			);
+
+			await expectProxyFailure(response);
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
+	});
+
 	describe("upstream response headers", () => {
 		beforeEach(() => {
 			process.env.AI_GATEWAY_API_KEY = "test-key";

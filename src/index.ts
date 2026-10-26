@@ -8,4 +8,7 @@ export type {
 	GatewayError,
 	GatewayResponse,
 	IncompleteStream,
+	ModelCallKind,
+	RawRequestContext,
+	RawResponseContext,
 } from "./types";
