@@ -1770,21 +1770,28 @@ describe("createGatewayProxy", () => {
 			await reader?.cancel();
 		});
 
-		it("keeps the upstream body when the replacement Response pipes it", async () => {
-			const upstream = mockVideoStream();
-			const proxy = createGatewayProxy({
-				afterRawResponse: ({ response }) =>
+		it.each([
+			[
+				"pipes it",
+				({ response }: { response: Response }) =>
 					new Response(response.body?.pipeThrough(new TransformStream())),
-			});
+			],
+			["is its clone", ({ response }: { response: Response }) => response.clone()],
+		])(
+			"keeps the upstream body when the replacement Response %s",
+			async (_name, afterRawResponse) => {
+				const upstream = mockVideoStream();
+				const proxy = createGatewayProxy({ afterRawResponse });
 
-			const response = await videoRequest(proxy);
-			const reader = response.body?.getReader();
-			const { value } = (await reader?.read()) ?? {};
+				const response = await videoRequest(proxy);
+				const reader = response.body?.getReader();
+				const { value } = (await reader?.read()) ?? {};
 
-			expect(new TextDecoder().decode(value)).toBe('data: {"type":"progress"}\n\n');
-			expect(upstream.cancel).not.toHaveBeenCalled();
-			await reader?.cancel();
-		});
+				expect(new TextDecoder().decode(value)).toBe('data: {"type":"progress"}\n\n');
+				expect(upstream.cancel).not.toHaveBeenCalled();
+				await reader?.cancel();
+			},
+		);
 
 		it("gives afterRawResponse the error response and runs no onError", async () => {
 			mockFetch.mockResolvedValueOnce(new Response("<html>bad gateway</html>", { status: 502 }));
