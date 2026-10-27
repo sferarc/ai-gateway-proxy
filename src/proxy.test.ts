@@ -1793,6 +1793,24 @@ describe("createGatewayProxy", () => {
 			await expectProxyFailure(response);
 		});
 
+		it.each([
+			["undefined", undefined],
+			["null", null],
+		])("sends the parsed body when beforeRawRequest returns %s", async (_label, result) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ embeddings: [[0.1]] }));
+			const beforeRawRequest = vi.fn(() => result);
+			const proxy = createGatewayProxy({ beforeRawRequest });
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/embedding-model", { body: { values: ["a"] } }),
+				createMockContext(["embedding-model"]),
+			);
+
+			expect(response.status).toBe(200);
+			expect(beforeRawRequest).toHaveBeenCalledOnce();
+			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ values: ["a"] });
+		});
+
 		it("returns 500 without calling fetch when beforeRawRequest throws", async () => {
 			const proxy = createGatewayProxy({
 				beforeRawRequest: () => {

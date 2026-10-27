@@ -219,7 +219,7 @@ createGatewayProxy({
 
 Both receive `kind` (`"embedding"`, `"image"`, `"video"`, `"speech"`, `"transcription"`, `"reranking"`, `"decision"` or `"batch"`), `path` (such as `video-model/start`), `modelId` (the client's `ai-model-id` header, which is the only place an embedding or image call names its model) and `request`, the parsed JSON body.
 
-- **`beforeRawRequest`:** a returned value replaces the body sent upstream; `undefined` sends it as is.
+- **`beforeRawRequest`:** a returned value replaces the body sent upstream; `undefined` or `null` sends it as is.
 - **`afterRawResponse`:** also receives `response`, the `Response` the proxy would send: the upstream status, `content-type` and the allowlisted headers below, with the upstream body on success (a video call's event stream included) and the `GatewayError` body described under `onError` on a failure. Return a `Response` to send that instead, or nothing to send `response`. The body can be read once, so read `response.clone()` when returning nothing; a hook that reads `response` itself and returns nothing, or returns anything but a `Response`, is a 500. It does not run on a redirect or when the upstream request fails.
 
 ```typescript
