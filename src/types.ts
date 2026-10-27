@@ -216,7 +216,8 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * A returned `Response` is sent instead. Returning nothing sends `response`, which must then
 	 * be unread; a hook that read it without returning a `Response`, or returned anything else,
-	 * is a 500.
+	 * is a 500. When the hook returns another `Response`, throws or returns anything else, an
+	 * unread `response.body` is cancelled unless the returned `Response` is built on it.
 	 */
 	afterRawResponse?: (
 		context: RawResponseContext,

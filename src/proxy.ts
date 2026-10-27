@@ -415,17 +415,37 @@ async function forwardUpstreamResponse(
 }
 
 /**
+ * Cancels a body nothing will read, since an unread fetch body holds its upstream connection.
+ */
+function discardUnreadBody(response: Response): void {
+	if (response.body && !response.bodyUsed && !response.body.locked) {
+		response.body.cancel().catch(() => {});
+	}
+}
+
+/**
  * Runs afterRawResponse and returns the response to send.
  */
 async function applyAfterRawResponse(
 	afterRawResponse: NonNullable<CreateGatewayProxyOptions["afterRawResponse"]>,
 	context: RawResponseContext,
 ): Promise<Response> {
-	const result: unknown = await afterRawResponse(context);
+	let result: unknown;
+	try {
+		result = await afterRawResponse(context);
+	} catch (error) {
+		discardUnreadBody(context.response);
+		throw error;
+	}
 	if (result instanceof Response) {
+		// A replacement built on response.body still needs it.
+		if (result.body !== context.response.body) {
+			discardUnreadBody(context.response);
+		}
 		return result;
 	}
 	if (result !== undefined && result !== null) {
+		discardUnreadBody(context.response);
 		throw new TypeError("afterRawResponse hook must return a Response or nothing");
 	}
 	if (context.response.bodyUsed) {

@@ -1703,6 +1703,89 @@ describe("createGatewayProxy", () => {
 			expect(await response.text()).toBe("replaced");
 		});
 
+		function mockVideoStream(): { cancel: ReturnType<typeof vi.fn> } {
+			const cancel = vi.fn();
+			const body = new ReadableStream<Uint8Array>({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode('data: {"type":"progress"}\n\n'));
+				},
+				cancel,
+			});
+			mockFetch.mockResolvedValueOnce(
+				new Response(body, { headers: { "content-type": "text/event-stream" } }),
+			);
+			return { cancel };
+		}
+
+		function videoRequest(proxy: ReturnType<typeof createGatewayProxy>): Promise<Response> {
+			return proxy(
+				createMockRequest("http://localhost/api/video-model", { body: { prompt: "a cat" } }),
+				createMockContext(["video-model"]),
+			);
+		}
+
+		it("cancels the upstream body when afterRawResponse sends another Response", async () => {
+			const upstream = mockVideoStream();
+			const proxy = createGatewayProxy({
+				afterRawResponse: () => new Response("replaced", { status: 202 }),
+			});
+
+			const response = await videoRequest(proxy);
+
+			expect(await response.text()).toBe("replaced");
+			expect(upstream.cancel).toHaveBeenCalledOnce();
+		});
+
+		it.each([
+			[
+				"throws",
+				() => {
+					throw new Error("denied");
+				},
+			],
+			["returns an object that is not a Response", () => ({ videos: [] })],
+		])("cancels the upstream body when afterRawResponse %s", async (_name, afterRawResponse) => {
+			const upstream = mockVideoStream();
+			// @ts-expect-error the second case breaks the hook's return type on purpose
+			const proxy = createGatewayProxy({ afterRawResponse });
+
+			await expectProxyFailure(await videoRequest(proxy));
+			expect(upstream.cancel).toHaveBeenCalledOnce();
+		});
+
+		it("keeps the upstream body when the replacement Response is built on it", async () => {
+			const upstream = mockVideoStream();
+			const proxy = createGatewayProxy({
+				afterRawResponse: ({ response }) =>
+					new Response(response.body, { status: 201, headers: response.headers }),
+			});
+
+			const response = await videoRequest(proxy);
+			const reader = response.body?.getReader();
+			const { value } = (await reader?.read()) ?? {};
+
+			expect(response.status).toBe(201);
+			expect(new TextDecoder().decode(value)).toBe('data: {"type":"progress"}\n\n');
+			expect(upstream.cancel).not.toHaveBeenCalled();
+			await reader?.cancel();
+		});
+
+		it("keeps the upstream body when the replacement Response pipes it", async () => {
+			const upstream = mockVideoStream();
+			const proxy = createGatewayProxy({
+				afterRawResponse: ({ response }) =>
+					new Response(response.body?.pipeThrough(new TransformStream())),
+			});
+
+			const response = await videoRequest(proxy);
+			const reader = response.body?.getReader();
+			const { value } = (await reader?.read()) ?? {};
+
+			expect(new TextDecoder().decode(value)).toBe('data: {"type":"progress"}\n\n');
+			expect(upstream.cancel).not.toHaveBeenCalled();
+			await reader?.cancel();
+		});
+
 		it("gives afterRawResponse the error response and runs no onError", async () => {
 			mockFetch.mockResolvedValueOnce(new Response("<html>bad gateway</html>", { status: 502 }));
 			const onError = vi.fn();
