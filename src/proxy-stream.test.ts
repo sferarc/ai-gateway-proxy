@@ -51,9 +51,10 @@ function upstreamResponse(
 	return new Response(body, { status: 200, headers: { "content-type": contentType } });
 }
 
-function streamingRequest(): Request {
+function streamingRequest(signal?: AbortSignal): Request {
 	return new Request("http://localhost/api/language-model", {
 		method: "POST",
+		signal,
 		body: JSON.stringify(requestBody),
 		headers: {
 			"content-type": "application/json",
@@ -212,5 +213,41 @@ describe("createGatewayProxy streaming with afterResponse", () => {
 			reason: "cancelled",
 			cancelReason: "client went away",
 		});
+	});
+
+	it("reports a client abort mid-stream to the hook as cancelled without logging an upstream failure", async () => {
+		mockFetch.mockImplementationOnce(async (_url: string, init: RequestInit) => {
+			// As undici does, aborting the fetch signal errors the body it is still reading.
+			const body = new ReadableStream<Uint8Array>({
+				start(controller) {
+					controller.enqueue(encoder.encode(sse(contentParts[5] as LanguageModelV4StreamPart)));
+					init.signal?.addEventListener("abort", () => controller.error(init.signal?.reason));
+				},
+			});
+			return upstreamResponse(body);
+		});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const hook = spyHook();
+		const client = new AbortController();
+		const proxy = createGatewayProxy({ afterResponse: hook });
+
+		const response = await proxy(streamingRequest(client.signal), {
+			params: Promise.resolve({ segments: ["language-model"] }),
+		});
+		const reader = response.body?.getReader();
+		if (!reader) throw new Error("expected a response body");
+		await reader.read();
+		const pending = reader.read();
+		client.abort("client went away");
+
+		await expect(pending).rejects.toBe("client went away");
+		expect(hook).toHaveBeenCalledOnce();
+		expect(hook.mock.calls[0]?.[0].incomplete).toEqual({
+			reason: "cancelled",
+			cancelReason: "client went away",
+		});
+		expect(hook.mock.calls[0]?.[0].response.finishReason.unified).toBe("other");
+		expect(errorSpy).not.toHaveBeenCalled();
+		errorSpy.mockRestore();
 	});
 });

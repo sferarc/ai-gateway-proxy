@@ -166,6 +166,9 @@ function sseEvent(data: string): string {
  *    stream ends, fails or is cancelled first
  * 4. Modifies the finish event based on afterResponse result
  *
+ * Pass the client request's `signal` when it is also the upstream fetch's signal: a read that
+ * fails because it aborted is then reported as a cancel rather than an upstream failure.
+ *
  * Uses EventSourceParserStream from @ai-sdk/provider-utils for SSE parsing.
  * EventSourceParserStream is re-exported from the eventsource-parser package.
  * @see https://github.com/vercel/ai/blob/main/packages/provider-utils/src/parse-json-event-stream.ts
@@ -175,6 +178,7 @@ export function createStreamTransformer(
 	body: ReadableStream<Uint8Array>,
 	requestBody: LanguageModelV4CallOptions,
 	afterResponse: NonNullable<CreateGatewayProxyOptions["afterResponse"]>,
+	signal?: AbortSignal,
 ): ReadableStream<Uint8Array> {
 	const encoder = new TextEncoder();
 	const aggregator = new StreamContentAggregator();
@@ -282,7 +286,11 @@ export function createStreamTransformer(
 
 				controller.enqueue(encoder.encode(sseEvent(await transformEvent(value.data))));
 			} catch (error) {
-				if (!cancelled) {
+				// Aborting the fetch signal errors the upstream body, so the client left rather than the upstream failing.
+				if (!cancelled && signal?.aborted) {
+					cancelled = true;
+					await reportIncomplete({ reason: "cancelled", cancelReason: signal.reason });
+				} else if (!cancelled) {
 					console.error("upstream stream failed, erroring the client stream:", error);
 					await reportIncomplete({ reason: "error", error });
 				}
