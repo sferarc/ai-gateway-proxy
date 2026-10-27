@@ -69,3 +69,24 @@ export function gatewayResponseProblem(value: unknown): string | undefined {
 
 	return undefined;
 }
+
+/**
+ * Returns why an `onError` result that is not a `Response` is not a `GatewayError`, or undefined when it is one.
+ */
+export function gatewayErrorProblem(value: unknown): string | undefined {
+	if (!isRecord(value)) {
+		return "the result must be an object or a Response";
+	}
+	const { error } = value;
+	if (!isRecord(error)) {
+		return "error must be an object";
+	}
+	if (typeof error.message !== "string") {
+		return "error.message must be a string";
+	}
+	// @ai-sdk/gateway accepts a missing type, so only a wrong type is rejected.
+	if (!isNullish(error.type) && typeof error.type !== "string") {
+		return "error.type must be a string or undefined";
+	}
+	return undefined;
+}

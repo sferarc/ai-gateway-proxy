@@ -183,6 +183,8 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * A returned error body is sent as JSON with the upstream status.
 	 * A returned `Response` is sent as is.
+	 * Returning `undefined`, `null` or a body without a string `error.message` (or with a
+	 * non-string `error.type`) logs an error and sends the upstream error body instead.
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
