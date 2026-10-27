@@ -522,7 +522,8 @@ export const createGatewayProxy = ({
 
 			if (beforeRawRequest && rawContext) {
 				const replaced = await beforeRawRequest({ ...rawContext, request: requestBody });
-				if (replaced !== undefined) {
+				// null, like undefined, keeps the body rather than sending the literal null upstream.
+				if (replaced !== undefined && replaced !== null) {
 					requestBody = replaced;
 				}
 			}

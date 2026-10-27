@@ -206,7 +206,7 @@ export type CreateGatewayProxyOptions = {
 	 * `reranking-model`, `decision-model` or `batch/start`. Job reads (`video-model/status` and
 	 * `batch/status`, `batch/results`, `batch/cancel`) run no hook.
 	 *
-	 * A returned value replaces the body sent upstream; `undefined` sends the body as is.
+	 * A returned value replaces the body sent upstream; `undefined` or `null` sends the body as is.
 	 */
 	beforeRawRequest?: (context: RawRequestContext) => unknown;
 	/**
