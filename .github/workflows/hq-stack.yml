@@ -1,9 +1,9 @@
 name: HQ approved stack
 
 # Rendered by `pnpm stack:render --standalone <file> --repository <owner/name>` in
-# sferarc/hq from policy/stack.json and src/stack/check.ts. Do not edit: this repository
-# is public and cannot call HQ's private workflow, so it carries a copy, which HQ's
-# dependency updater refreshes.
+# sferarc/hq from policy/stack.json, src/stack/check.ts and src/stack/attribution.ts.
+# Do not edit: this repository is public and cannot call HQ's private workflow, so it
+# carries a copy, which HQ's dependency updater refreshes.
 
 on:
   pull_request:
@@ -33,7 +33,7 @@ jobs:
 
       # Only mise itself: the check needs Node 26 and none of the repository's own tools.
       - name: Install mise
-        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
         with:
           install: false
           cache: false
@@ -309,7 +309,7 @@ jobs:
            * and every excuse names its reason and the condition that ends it.
            */
 
-          import { appendFileSync, readdirSync, readFileSync, statSync } from "node:fs";
+          import { appendFileSync, readdirSync, readFileSync } from "node:fs";
           import { join, posix, relative, sep } from "node:path";
 
           export type Ecosystem = "npm" | "go" | "mise" | "file";
@@ -398,12 +398,14 @@ jobs:
           /**
            * The default and named catalogs of a `pnpm-workspace.yaml`. A line reader
            * rather than a YAML parser, because the check carries no dependencies; it reads
-           * the two block shapes pnpm writes and nothing else.
+           * the two block shapes pnpm writes, at whatever indent the first named catalog
+           * sets, and nothing else.
            */
           export function readCatalogs(yaml: string): Map<string, Map<string, string>> {
             const catalogs = new Map<string, Map<string, string>>();
             let section: "catalog" | "catalogs" | undefined;
             let named: string | undefined;
+            let headerIndent: number | undefined;
             const entry = /^\s+["']?([^"':]+(?::[^"':\s]+)?)["']?\s*:\s*["']?([^"'#\s]+)["']?/;
             for (const raw of yaml.split("\n")) {
               const line = raw.replace(/\s+#.*$/, "");
@@ -415,6 +417,7 @@ jobs:
                     ? "catalogs"
                     : undefined;
                 named = undefined;
+                headerIndent = undefined;
                 continue;
               }
               if (section === "catalog") {
@@ -424,11 +427,14 @@ jobs:
                 map.set(found[1], found[2]);
                 catalogs.set("default", map);
               } else if (section === "catalogs") {
-                const header = /^ {2}["']?([^"':]+)["']?:\s*$/.exec(line);
-                if (header) {
+                const indent = line.length - line.trimStart().length;
+                const header = /^\s+["']?([^"':]+)["']?:\s*$/.exec(line);
+                if (header && (headerIndent === undefined || indent === headerIndent)) {
+                  headerIndent = indent;
                   named = header[1];
                   continue;
                 }
+                if (headerIndent === undefined || indent <= headerIndent) continue;
                 const found = entry.exec(line);
                 if (!found || !named) continue;
                 const map = catalogs.get(named) ?? new Map<string, string>();
@@ -439,7 +445,19 @@ jobs:
             return catalogs;
           }
 
-          /** Versions in `[tools]` of a `mise.toml`, by tool name. */
+          const MISE_CONFIG_NAME = /^\.?mise(?:\.[\w-]+){0,2}\.toml$/;
+          const MISE_CONFIG_DIR =
+            /(?:^|\/)(?:\.config\/mise|\.?mise)\/(?:config(?:\.local)?\.toml|conf\.d\/[^/]+\.toml)$/;
+
+          /** Whether mise loads `path` as config: `mise.toml`, `.mise.local.toml`, `.config/mise/config.toml` and the rest. */
+          export function isMiseConfig(path: string): boolean {
+            return MISE_CONFIG_NAME.test(posix.basename(path)) || MISE_CONFIG_DIR.test(path);
+          }
+
+          /** Tool names mise accepts as another name for one the policy matches. */
+          const MISE_ALIASES = new Map([["nodejs", "node"]]);
+
+          /** Versions in `[tools]` of a mise config file, by tool name. */
           export function readMiseTools(toml: string): Map<string, string> {
             const tools = new Map<string, string>();
             let inTools = false;
@@ -479,17 +497,19 @@ jobs:
             return modules;
           }
 
-          /** Every file under `root`, as a `/`-separated path relative to it. */
+          /**
+           * Every file under `root`, as a `/`-separated path relative to it. Symbolic
+           * links are skipped: one to an ancestor would loop, and one leading out of the
+           * checkout is not the tenant's code.
+           */
           export function listFiles(root: string): string[] {
             const out: string[] = [];
             const walk = (dir: string) => {
-              for (const name of readdirSync(dir)) {
-                if (SKIPPED_DIRS.has(name)) continue;
-                const full = join(dir, name);
-                const stat = statSync(full, { throwIfNoEntry: false });
-                if (!stat) continue;
-                if (stat.isDirectory()) walk(full);
-                else out.push(relative(root, full).split(sep).join("/"));
+              for (const entry of readdirSync(dir, { withFileTypes: true })) {
+                if (SKIPPED_DIRS.has(entry.name) || entry.isSymbolicLink()) continue;
+                const full = join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (entry.isFile()) out.push(relative(root, full).split(sep).join("/"));
               }
             };
             walk(root);
@@ -534,7 +554,13 @@ jobs:
                 let manifest: Record<string, unknown>;
                 try {
                   manifest = JSON.parse(read(path));
-                } catch {
+                } catch (error) {
+                  findings.push({
+                    rule: "unreadable-manifest",
+                    path,
+                    name: path,
+                    message: `${path} is not valid JSON (${error instanceof Error ? error.message : String(error)}), so its dependencies could not be checked`,
+                  });
                   continue;
                 }
                 for (const field of DEPENDENCY_FIELDS) {
@@ -585,10 +611,15 @@ jobs:
                 }
               }
 
-              if (posix.basename(path) === "mise.toml") {
+              if (isMiseConfig(path)) {
                 for (const [tool, version] of readMiseTools(read(path))) {
                   for (const rule of miseRules) {
-                    if (!ruleMatches(rule, tool) || rule.minimumMajor === undefined) continue;
+                    if (
+                      !ruleMatches(rule, MISE_ALIASES.get(tool) ?? tool) ||
+                      rule.minimumMajor === undefined
+                    ) {
+                      continue;
+                    }
                     const major = majorOf(version);
                     if (major !== undefined && major < rule.minimumMajor) {
                       findings.push({
@@ -751,17 +782,22 @@ jobs:
           }
 
           if (import.meta.main) {
+            const usage =
+              "usage: node check.ts --policy <stack.json> [--root <dir>] [--repository <owner/name>] [--mode warn|enforce]";
             const policyPath = argument("policy");
             if (!policyPath) {
-              console.error(
-                "usage: node check.ts --policy <stack.json> [--root <dir>] [--repository <owner/name>] [--mode warn|enforce]",
-              );
+              console.error(usage);
+              process.exit(2);
+            }
+            const modeArgument = argument("mode");
+            if (modeArgument !== undefined && modeArgument !== "warn" && modeArgument !== "enforce") {
+              console.error(`unknown --mode ${JSON.stringify(modeArgument)}\n${usage}`);
               process.exit(2);
             }
             const root = argument("root") ?? ".";
             const policy = JSON.parse(readFileSync(policyPath, "utf8")) as StackPolicy;
             const repository = argument("repository") ?? process.env.GITHUB_REPOSITORY;
-            const mode = (argument("mode") as Mode | undefined) ?? modeFor(policy, repository);
+            const mode = modeArgument ?? modeFor(policy, repository);
             const result = checkStack(policy, listFiles(root), (path) =>
               readFileSync(join(root, path), "utf8"),
             );
@@ -793,7 +829,7 @@ jobs:
           persist-credentials: false
 
       - name: Install mise
-        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
         with:
           install: false
           cache: false
