@@ -129,6 +129,8 @@ export type CreateGatewayProxyOptions = {
 	 * a string or an array, is not sent: the client gets a 500 and the gateway is not called.
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
+	 * A body that is JSON but not an object gets a 400 before this or any other language model
+	 * hook runs.
 	 *
 	 * Not called when the path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway`
 	 * uses for other calls: `embedding-model`, `image-model`, `video-model`, `video-model/start`,

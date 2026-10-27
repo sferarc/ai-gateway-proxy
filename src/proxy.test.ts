@@ -379,6 +379,89 @@ describe("createGatewayProxy", () => {
 
 			await expectGatewayError(response, 400, "invalid_request_error", "Invalid JSON body");
 		});
+
+		function createRawBodyRequest(body: string): Request {
+			return new Request("http://localhost/api/language-model", {
+				method: "POST",
+				body,
+				headers: { "content-type": "application/json" },
+			});
+		}
+
+		it.each([
+			["an array", "[]"],
+			["a string", '"prompt"'],
+			["a number", "1"],
+			["a boolean", "true"],
+			["null", "null"],
+		])(
+			"returns 400 without running a hook or calling the gateway when the body is %s",
+			async (_name, body) => {
+				const beforeRequest = vi.fn();
+				const afterResponse = vi.fn();
+				const onError = vi.fn();
+				const proxy = createGatewayProxy({ beforeRequest, afterResponse, onError });
+
+				const response = await proxy(
+					createRawBodyRequest(body),
+					createMockContext(["language-model"]),
+				);
+
+				await expectGatewayError(
+					response,
+					400,
+					"invalid_request_error",
+					"Invalid request body: a language model call must be a JSON object",
+				);
+				expect(mockFetch).not.toHaveBeenCalled();
+				expect(beforeRequest).not.toHaveBeenCalled();
+				expect(afterResponse).not.toHaveBeenCalled();
+				expect(onError).not.toHaveBeenCalled();
+			},
+		);
+
+		it("rejects a non-object body when only onError is set", async () => {
+			const onError = vi.fn();
+			const proxy = createGatewayProxy({ onError });
+
+			const response = await proxy(
+				createRawBodyRequest("[]"),
+				createMockContext(["language-model"]),
+			);
+
+			expect(response.status).toBe(400);
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
+
+		it("forwards a non-object body unchanged when no language model hook is set", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ ok: true }));
+			const proxy = createGatewayProxy();
+
+			const response = await proxy(
+				createRawBodyRequest("[1]"),
+				createMockContext(["language-model"]),
+			);
+
+			expect(response.status).toBe(200);
+			expect(mockFetch.mock.calls[0][1].body).toBe("[1]");
+		});
+
+		it("forwards a non-object body on a listed path that runs no language model hook", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ ok: true }));
+			const beforeRequest = vi.fn();
+			const beforeRawRequest = vi.fn();
+			const proxy = createGatewayProxy({ beforeRequest, beforeRawRequest });
+
+			const response = await proxy(
+				createRawBodyRequest("[1]"),
+				createMockContext(["embedding-model"]),
+			);
+
+			expect(response.status).toBe(200);
+			expect(mockFetch.mock.calls[0][1].body).toBe("[1]");
+			expect(beforeRequest).not.toHaveBeenCalled();
+			expect(beforeRawRequest).toHaveBeenCalledWith(expect.objectContaining({ request: [1] }));
+		});
 	});
 
 	describe("HTTP method exports", () => {
