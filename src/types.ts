@@ -125,7 +125,8 @@ export type CreateGatewayProxyOptions = {
 	/**
 	 * Called before the request is sent to the gateway.
 	 * Allows modification of the request body. Returning `undefined` or `null` sends the
-	 * parsed body unchanged and logs an error.
+	 * parsed body unchanged and logs an error. Any other result that is not an object, such as
+	 * a string or an array, is not sent: the client gets a 500 and the gateway is not called.
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *

@@ -1,6 +1,6 @@
 # Fail closed on redirects and malformed hook results
 
-Recorded 2026-10-21, from `src/proxy.ts` and the owner's decision on the proxy gap list (#62). Extended on 2026-10-26 by [[2026-10-26-strict-after-response-results]], which also rejects objects with missing or wrong-typed fields and names the problem in the 500.
+Recorded 2026-10-21, from `src/proxy.ts` and the owner's decision on the proxy gap list (#62). Extended on 2026-10-26 by [[2026-10-26-strict-after-response-results]], which also rejects objects with missing or wrong-typed fields and names the problem in the 500. Extended on 2026-10-26 to `beforeRequest`: a result that is not an object, `undefined` or `null` returns 500 before the gateway is called ([[architecture/proxy]] step 6).
 
 ## Decision
 
