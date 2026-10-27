@@ -517,6 +517,14 @@ export const createGatewayProxy = ({
 			// Fail closed: only an exact listed path, after "?" and "#" are resolved away, skips the hooks.
 			const kind = NON_LANGUAGE_MODEL_PATHS.get(resolved.relativePath);
 			const runsHooks = kind === undefined && !READ_PATHS.has(resolved.relativePath);
+			// The language model hooks are typed for call options, so they never receive another JSON value.
+			if (runsHooks && (beforeRequest || afterResponse || onError) && !isRecord(requestBody)) {
+				return proxyErrorResponse(
+					400,
+					"invalid_request_error",
+					"Invalid request body: a language model call must be a JSON object",
+				);
+			}
 			const rawContext = kind && {
 				kind,
 				path: resolved.relativePath,
@@ -542,7 +550,8 @@ export const createGatewayProxy = ({
 
 			if (beforeRawRequest && rawContext) {
 				const replaced = await beforeRawRequest({ ...rawContext, request: requestBody });
-				if (replaced !== undefined) {
+				// null, like undefined, keeps the body rather than sending the literal null upstream.
+				if (replaced !== undefined && replaced !== null) {
 					requestBody = replaced;
 				}
 			}
