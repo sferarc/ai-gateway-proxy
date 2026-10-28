@@ -492,6 +492,39 @@ describe("StreamContentAggregator", () => {
 			expect(response.providerMetadata).toEqual({ custom: { key: "value" } });
 		});
 
+		it("reports an error finish reason after an error part with no finish", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({ type: "text-delta", id: "text-1", delta: "Partial" });
+			aggregator.process({ type: "error", error: { message: "provider overloaded" } });
+
+			const response = aggregator.getResponse();
+			expect(response.finishReason).toEqual({ unified: "error", raw: undefined });
+			expect(response.content).toEqual([{ type: "text", text: "Partial" }]);
+			expect(response.usage).toBeUndefined();
+		});
+
+		it("keeps the finish reason of a finish part that follows an error part", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({ type: "error", error: { message: "tool failed" } });
+			aggregator.process({
+				type: "finish",
+				finishReason: { unified: "stop", raw: "end_turn" },
+				usage: {
+					inputTokens: {
+						total: 10,
+						noCache: undefined,
+						cacheRead: undefined,
+						cacheWrite: undefined,
+					},
+					outputTokens: { total: 5, text: undefined, reasoning: undefined },
+				},
+			});
+
+			expect(aggregator.getResponse().finishReason).toEqual({ unified: "stop", raw: "end_turn" });
+		});
+
 		it("finalizes incomplete text content on finish", () => {
 			const aggregator = new StreamContentAggregator();
 
@@ -912,6 +945,25 @@ describe("createStreamTransformer", () => {
 		expect(consoleError).not.toHaveBeenCalled();
 		expect(consoleWarn).not.toHaveBeenCalled();
 		expect(loggedText()).not.toContain("partial");
+	});
+
+	it("passes an error part through and reports an error finish reason when no finish follows", async () => {
+		const hook = vi.fn(passThroughHook);
+		const events = [
+			sse({ type: "text-delta", id: "t1", delta: "partial" }),
+			sse({ type: "error", error: { message: "provider overloaded" } }),
+			sse("[DONE]"),
+		];
+
+		const output = await readAll(createStreamTransformer(sourceOf(events), requestBody, hook));
+
+		expect(output).toBe(events.join(""));
+		expect(hook).toHaveBeenCalledOnce();
+		const context = hook.mock.calls[0]?.[0];
+		expect(context?.incomplete).toEqual({ reason: "ended" });
+		expect(context?.response.finishReason).toEqual({ unified: "error", raw: undefined });
+		expect(context?.response.usage).toBeUndefined();
+		expect(consoleError).not.toHaveBeenCalled();
 	});
 
 	it("does not set incomplete when the stream finishes", async () => {
