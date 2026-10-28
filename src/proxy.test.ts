@@ -2393,6 +2393,89 @@ describe("createGatewayProxy", () => {
 		});
 	});
 
+	describe("successful bodies no hook reads", () => {
+		beforeEach(() => {
+			process.env.AI_GATEWAY_API_KEY = "test-key";
+		});
+
+		it("streams a language model body through unread when there is no afterResponse", async () => {
+			const upstreamBody = '{ "content": [], "usage": { "inputTokens": { "total": 1.0 } } }';
+			const upstream = new Response(upstreamBody, {
+				status: 200,
+				headers: { "content-type": "application/json; charset=utf-8", "x-vercel-id": "iad1::abc" },
+			});
+			mockFetch.mockResolvedValueOnce(upstream);
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["language-model"]));
+
+			expect(upstream.bodyUsed).toBe(false);
+			expect(response.status).toBe(200);
+			expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+			expect(response.headers.get("x-vercel-id")).toBe("iad1::abc");
+			expect(await response.text()).toBe(upstreamBody);
+		});
+
+		it("forwards a body that is not JSON when there is no afterResponse", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response("not json", { status: 200, headers: { "content-type": "text/plain" } }),
+			);
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["language-model"]));
+
+			expect(response.status).toBe(200);
+			expect(response.headers.get("content-type")).toBe("text/plain");
+			expect(await response.text()).toBe("not json");
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+
+		it("streams an embedding body through unread although afterResponse is set", async () => {
+			const upstreamBody = '{"embeddings":[[0.10,2e-7]],"usage":{"tokens":3}}';
+			const upstream = new Response(upstreamBody, {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			});
+			mockFetch.mockResolvedValueOnce(upstream);
+			const afterResponse = vi.fn();
+
+			const proxy = createGatewayProxy({ afterResponse });
+			const request = createMockRequest("http://localhost/api/ai/embedding-model", {
+				body: { values: ["a"] },
+			});
+
+			const response = await proxy(request, createMockContext(["embedding-model"]));
+
+			expect(upstream.bodyUsed).toBe(false);
+			expect(await response.text()).toBe(upstreamBody);
+			expect(afterResponse).not.toHaveBeenCalled();
+		});
+
+		it("defaults the content-type to application/json when upstream sends none", async () => {
+			const upstream = new Response('{"ok":true}', { status: 200 });
+			upstream.headers.delete("content-type");
+			mockFetch.mockResolvedValueOnce(upstream);
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/ai/batch/status", {
+				body: { batchId: "batch_1" },
+			});
+
+			const response = await proxy(request, createMockContext(["batch", "status"]));
+
+			expect(response.headers.get("content-type")).toBe("application/json");
+			expect(await response.json()).toEqual({ ok: true });
+		});
+	});
+
 	describe("successful responses without a body", () => {
 		beforeEach(() => {
 			process.env.AI_GATEWAY_API_KEY = "test-key";
@@ -2715,10 +2798,11 @@ describe("createGatewayProxy", () => {
 			expect(consoleError).not.toHaveBeenCalled();
 		});
 
-		it("returns 500 when a successful response body is not JSON", async () => {
+		it("returns 500 when a successful response body for afterResponse is not JSON", async () => {
 			mockFetch.mockResolvedValueOnce(new Response("not json", { status: 200 }));
+			const afterResponse = vi.fn();
 
-			const proxy = createGatewayProxy();
+			const proxy = createGatewayProxy({ afterResponse });
 			const request = createMockRequest("http://localhost/api/chat", {
 				body: { prompt: [] },
 			});
@@ -2726,6 +2810,7 @@ describe("createGatewayProxy", () => {
 			const response = await proxy(request, createMockContext(["chat"]));
 
 			await expectProxyFailure(response);
+			expect(afterResponse).not.toHaveBeenCalled();
 		});
 
 		it("returns 500 when afterResponse throws", async () => {
