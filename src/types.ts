@@ -110,7 +110,8 @@ export type CreateGatewayProxyOptions = {
 	 * When provided, `segmentsParam` is ignored.
 	 *
 	 * Return a path relative to `baseUrl`, without a leading `/`.
-	 * A path that starts with `/`, contains `://` or has a `.` or `..` segment returns 400 Invalid path.
+	 * A path that starts with `/`, contains `://`, or has a segment that fails to decode or decodes
+	 * to `.` or `..` or contains `/`, `\` or a NUL byte returns 400 Invalid path.
 	 *
 	 * @example
 	 * // Hono with a base path
