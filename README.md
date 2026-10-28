@@ -130,7 +130,7 @@ The proxy gets a credential on every request with `getGatewayAuthToken()`, in th
 1. **API key:** the `AI_GATEWAY_API_KEY` environment variable
 2. **OIDC:** a Vercel OIDC token, available when deployed on Vercel
 
-`getGatewayAuthToken()` is exported. It resolves to `{ token, authMethod: "api-key" | "oidc" }`, or `null` when neither is available, in which case the proxy answers `500` with an `authentication_error` (see below). The proxy sends the token upstream as `authorization: Bearer <token>` with `ai-gateway-auth-method`, so the credential never reaches the client.
+`getGatewayAuthToken()` is exported. It resolves to `{ token, authMethod: "api-key" | "oidc" }`, or `null` when neither is available, in which case the proxy answers `500` with a `proxy_error` (see below). The proxy sends the token upstream as `authorization: Bearer <token>` with `ai-gateway-auth-method`, so the credential never reaches the client.
 
 ## Options
 
@@ -240,7 +240,7 @@ Apart from forwarding the gateway's own responses, the handler can answer with a
 
 | Status | Type | Message | When |
 | --- | --- | --- | --- |
-| 500 | `authentication_error` | `AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled` | `getGatewayAuthToken()` returned `null`. |
+| 500 | `proxy_error` | `AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled` | `getGatewayAuthToken()` returned `null`. The type is not `authentication_error`, which `@ai-sdk/gateway` replaces with advice about the client's own key. |
 | 400 | `invalid_request_error` | `Invalid path` | The path is not a safe relative path under `baseUrl`. |
 | 400 | `invalid_request_error` | `Invalid JSON body` | A request other than `GET` or `HEAD` has a non-empty body that is not JSON. |
 | 400 | `invalid_request_error` | `Invalid request body: a language model call must be a JSON object` | The body is JSON but not an object, such as an array or `null`, on a path that runs `beforeRequest`, `afterResponse` or `onError`, and one of them is set. No hook runs and the gateway is not called. |

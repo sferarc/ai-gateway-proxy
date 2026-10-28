@@ -190,7 +190,31 @@ describe("createGatewayProxy", () => {
 			await expectGatewayError(
 				response,
 				500,
-				"authentication_error",
+				"proxy_error",
+				"AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled",
+			);
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
+
+		it("gives a client built on @ai-sdk/gateway the proxy's message when no authentication is available", async () => {
+			vi.mocked(getVercelOidcToken).mockRejectedValueOnce(new Error("No OIDC token"));
+
+			const proxy = createGatewayProxy();
+			const provider = createGatewayProvider({
+				baseURL: "http://localhost/api",
+				apiKey: "client-key",
+				fetch: (input, init) =>
+					proxy(new Request(input, init), createMockContext(["language-model"])),
+			});
+
+			const error = await provider("openai/gpt-5")
+				.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] })
+				.then(
+					() => undefined,
+					(e: unknown) => e as Error,
+				);
+
+			expect(error?.message).toBe(
 				"AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled",
 			);
 			expect(mockFetch).not.toHaveBeenCalled();
