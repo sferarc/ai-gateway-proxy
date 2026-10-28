@@ -322,6 +322,7 @@ function handleStreamingResponse(
 	res: Response,
 	requestBody: LanguageModelV4CallOptions,
 	afterResponse: CreateGatewayProxyOptions["afterResponse"],
+	signal?: AbortSignal,
 ): Response {
 	if (!res.body) {
 		return proxyErrorResponse(500, "proxy_error", "No response body");
@@ -339,7 +340,7 @@ function handleStreamingResponse(
 	}
 
 	// Transform stream to call afterResponse on finish
-	const transformedStream = createStreamTransformer(res.body, requestBody, afterResponse);
+	const transformedStream = createStreamTransformer(res.body, requestBody, afterResponse, signal);
 
 	return new Response(transformedStream, {
 		status: res.status,
@@ -394,6 +395,7 @@ async function forwardUpstreamResponse(
 	requestBody: LanguageModelV4CallOptions,
 	isStreaming: boolean,
 	{ afterResponse, onError }: LanguageModelHooks,
+	signal: AbortSignal,
 ): Promise<Response> {
 	if (!res.ok) {
 		const errorBody = await parseErrorBody(res);
@@ -401,7 +403,7 @@ async function forwardUpstreamResponse(
 	}
 
 	if (isStreaming) {
-		return handleStreamingResponse(res, requestBody, afterResponse);
+		return handleStreamingResponse(res, requestBody, afterResponse, signal);
 	}
 
 	// Other calls can answer with a body that is not one JSON value, such as the video model's
@@ -576,6 +578,7 @@ export const createGatewayProxy = ({
 				requestBody as LanguageModelV4CallOptions,
 				isStreaming,
 				runsHooks ? { afterResponse, onError } : {},
+				request.signal,
 			);
 
 			if (afterRawResponse && rawContext) {

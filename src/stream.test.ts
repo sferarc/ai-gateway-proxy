@@ -782,6 +782,30 @@ describe("createStreamTransformer", () => {
 		expect(loggedText()).not.toContain("secret");
 	});
 
+	it("reports a read that fails after the given signal aborted as a cancel, without logging", async () => {
+		const client = new AbortController();
+		const source = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(encoder.encode(sse({ type: "text-delta", id: "t1", delta: "so far" })));
+				client.signal.addEventListener("abort", () => controller.error(client.signal.reason));
+			},
+		});
+		const hook = vi.fn(passThroughHook);
+		const reader = createStreamTransformer(source, requestBody, hook, client.signal).getReader();
+
+		await reader.read();
+		const pending = reader.read();
+		client.abort("client went away");
+
+		await expect(pending).rejects.toBe("client went away");
+		expect(consoleError).not.toHaveBeenCalled();
+		expect(hook).toHaveBeenCalledOnce();
+		const context = hook.mock.calls[0]?.[0];
+		expect(context?.incomplete).toEqual({ reason: "cancelled", cancelReason: "client went away" });
+		expect(context?.response.content).toEqual([{ type: "text", text: "so far" }]);
+		expect(context?.response.finishReason.unified).toBe("other");
+	});
+
 	it("calls the hook once with partial content when the upstream ends without a finish event", async () => {
 		const hook = vi.fn(passThroughHook);
 		const events = [
