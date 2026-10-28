@@ -97,7 +97,7 @@ async function startFakeGateway() {
 	const { port } = server.address() as AddressInfo;
 
 	return {
-		baseUrl: `http://127.0.0.1:${port}/v1/ai`,
+		baseUrl: `http://127.0.0.1:${port}/v4/ai`,
 		requests,
 		respondWith(responder: Responder) {
 			respond = responder;
@@ -146,7 +146,7 @@ describe("E2E: AI SDK client through the proxy to a fake gateway", () => {
 		expect(upstream.requests).toHaveLength(1);
 		const [received] = upstream.requests;
 		expect(received.method).toBe("POST");
-		expect(received.path).toBe("/v1/ai/language-model");
+		expect(received.path).toBe("/v4/ai/language-model");
 		expect(received.headers.authorization).toBe(`Bearer ${GATEWAY_KEY}`);
 		expect(received.headers["ai-gateway-auth-method"]).toBe("api-key");
 		expect(received.headers["ai-gateway-protocol-version"]).toBe("0.0.1");

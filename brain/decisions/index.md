@@ -2,6 +2,7 @@
 
 Dated records of choices a later change could undo by accident. Each says what was decided, why, and what would reopen it. Newest first.
 
+- [[2026-10-28-default-base-url-v4]]: `baseUrl` defaults to `/v4/ai`, the endpoint `@ai-sdk/gateway` 4.x calls
 - [[2026-10-26-strict-after-response-results]]: an `afterResponse` result with a missing or wrong-typed field is rejected, not forwarded
 - [[2026-10-26-fail-closed-path-matching]]: the hooks run on every path except an exact list of other-call paths, whatever the headers
 - [[2026-10-21-fail-closed-redirects-and-hook-results]]: the upstream call never follows a redirect, and a non-object `afterResponse` result is an error

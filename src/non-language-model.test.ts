@@ -40,7 +40,7 @@ async function startFakeGateway(reply: Reply) {
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const { port } = server.address() as AddressInfo;
 	return {
-		baseUrl: `http://127.0.0.1:${port}/v1/ai`,
+		baseUrl: `http://127.0.0.1:${port}/v4/ai`,
 		requests,
 		close() {
 			server.closeAllConnections();
@@ -113,7 +113,7 @@ describe("non-language-model calls through the proxy to a fake gateway", () => {
 		expect(result.usage).toEqual({ tokens: 2 });
 		expect(upstream.requests).toHaveLength(1);
 		const [received] = upstream.requests;
-		expectAuthApplied(received, "/v1/ai/embedding-model");
+		expectAuthApplied(received, "/v4/ai/embedding-model");
 		expect(received.headers["ai-model-id"]).toBe("openai/text-embedding-3-small");
 		expect(received.body).toEqual({ values: ["hello"] });
 		expectNoHookRan(hooks);
@@ -139,7 +139,7 @@ describe("non-language-model calls through the proxy to a fake gateway", () => {
 		expect(result.images).toEqual(["AAAA"]);
 		expect(upstream.requests).toHaveLength(1);
 		const [received] = upstream.requests;
-		expectAuthApplied(received, "/v1/ai/image-model");
+		expectAuthApplied(received, "/v4/ai/image-model");
 		expect(received.headers["ai-model-id"]).toBe("openai/gpt-image-1");
 		expect(received.body).toEqual({ prompt: "a cat", n: 1, providerOptions: {} });
 		expectNoHookRan(hooks);
@@ -174,7 +174,7 @@ describe("non-language-model calls through the proxy to a fake gateway", () => {
 		expect(result.videos).toEqual([video]);
 		expect(upstream.requests).toHaveLength(1);
 		const [received] = upstream.requests;
-		expectAuthApplied(received, "/v1/ai/video-model");
+		expectAuthApplied(received, "/v4/ai/video-model");
 		expect(received.headers["ai-model-id"]).toBe("google/veo-3.0-generate-001");
 		expect(received.headers.accept).toBe("text/event-stream");
 		expect(received.body).toEqual({ prompt: "a cat", n: 1, providerOptions: {} });
@@ -207,7 +207,7 @@ describe("non-language-model calls through the proxy to a fake gateway", () => {
 		expect(result.status).toBe("pending");
 		expect(upstream.requests).toHaveLength(1);
 		const [received] = upstream.requests;
-		expectAuthApplied(received, "/v1/ai/batch/start");
+		expectAuthApplied(received, "/v4/ai/batch/start");
 		expect(received.headers["ai-model-id"]).toBe("openai/gpt-5");
 		expect(received.headers["idempotency-key"]).toBe("batch-42");
 		expect(received.body).toEqual({ requests });

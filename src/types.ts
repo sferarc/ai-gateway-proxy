@@ -84,7 +84,7 @@ export type CreateGatewayProxyOptions = {
 	/**
 	 * Base URL for the AI Gateway. A trailing slash is accepted.
 	 * Request paths are resolved under it and cannot leave it; one that would returns 400 Invalid path.
-	 * @default "https://ai-gateway.vercel.sh/v1/ai"
+	 * @default "https://ai-gateway.vercel.sh/v4/ai"
 	 */
 	baseUrl?: string;
 	/**

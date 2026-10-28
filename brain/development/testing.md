@@ -17,7 +17,7 @@
 
 ## Keyless end-to-end tests
 
-`src/e2e.test.ts` runs in CI. It stubs `AI_GATEWAY_API_KEY` with a dummy through `vi.stubEnv`, starts a node:http fake gateway on `127.0.0.1` that records each request and answers `POST /v1/ai/language-model` with a canned JSON result or SSE stream (the `LanguageModelV4` generate result and stream parts that `@ai-sdk/gateway` 4.x parses in `doGenerate` and `doStream`), and points the proxy's `baseUrl` at it. No outbound network and no real key.
+`src/e2e.test.ts` runs in CI. It stubs `AI_GATEWAY_API_KEY` with a dummy through `vi.stubEnv`, starts a node:http fake gateway on `127.0.0.1` that records each request and answers `POST /v4/ai/language-model` with a canned JSON result or SSE stream (the `LanguageModelV4` generate result and stream parts that `@ai-sdk/gateway` 4.x parses in `doGenerate` and `doStream`), and points the proxy's `baseUrl` at it. No outbound network and no real key.
 
 `startProxyServer` aborts `request.signal` when the client disconnects and cancels the response body, as a framework route handler does. The two abort tests separate the paths: an abort before the gateway answers can only reach upstream through the signal passed to `fetch` (#10), and the mid-stream abort runs with `forwardAbortSignal: false`, so only the stream cancellation in `createStreamTransformer` (#11) can close upstream. Removing either one fails its test.
 
