@@ -1336,6 +1336,114 @@ describe("createGatewayProxy", () => {
 		});
 	});
 
+	describe("model id in the language model hooks", () => {
+		beforeEach(() => {
+			process.env.AI_GATEWAY_API_KEY = "test-key";
+		});
+
+		function languageModelRequest(headers: Record<string, string> = {}): Request {
+			return createMockRequest("http://localhost/api/language-model", {
+				body: { prompt: [] },
+				headers,
+			});
+		}
+
+		it("gives beforeRequest and afterResponse the ai-language-model-id header", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const seen: Array<string | undefined> = [];
+			const proxy = createGatewayProxy({
+				beforeRequest: ({ request, modelId }) => {
+					seen.push(modelId);
+					return request;
+				},
+				afterResponse: ({ response, modelId }) => {
+					seen.push(modelId);
+					return response;
+				},
+			});
+
+			const response = await proxy(
+				languageModelRequest({ "ai-language-model-id": "openai/gpt-5" }),
+				createMockContext(["language-model"]),
+			);
+
+			expect(response.status).toBe(200);
+			expect(seen).toEqual(["openai/gpt-5", "openai/gpt-5"]);
+		});
+
+		it("gives afterResponse the model id on a streamed response", async () => {
+			const finish = {
+				type: "finish",
+				finishReason: { unified: "stop", raw: "stop" },
+				usage: createMockGatewayResponse().usage,
+			};
+			mockFetch.mockResolvedValueOnce(
+				new Response(`data: ${JSON.stringify(finish)}\n\n`, {
+					headers: { "content-type": "text/event-stream" },
+				}),
+			);
+			const seen: Array<string | undefined> = [];
+			const proxy = createGatewayProxy({
+				afterResponse: ({ response, modelId }) => {
+					seen.push(modelId);
+					return response;
+				},
+			});
+
+			const response = await proxy(
+				languageModelRequest({
+					"ai-language-model-id": "anthropic/claude-sonnet-4.5",
+					"ai-language-model-streaming": "true",
+				}),
+				createMockContext(["language-model"]),
+			);
+			await response.text();
+
+			expect(seen).toEqual(["anthropic/claude-sonnet-4.5"]);
+		});
+
+		it("gives onError the model id", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse(
+					{ error: { message: "Model not found", type: "model_not_found" } },
+					{ status: 404 },
+				),
+			);
+			const onError = vi.fn(({ error }: { error: GatewayError; modelId?: string }) => error);
+			const proxy = createGatewayProxy({ onError });
+
+			await proxy(
+				languageModelRequest({ "ai-language-model-id": "openai/gpt-5" }),
+				createMockContext(["language-model"]),
+			);
+
+			expect(onError).toHaveBeenCalledOnce();
+			expect(onError.mock.calls[0]?.[0].modelId).toBe("openai/gpt-5");
+		});
+
+		it("gives the hooks an undefined model id when the header is missing", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const seen: Array<[string, boolean, string | undefined]> = [];
+			const proxy = createGatewayProxy({
+				beforeRequest: (context) => {
+					seen.push(["beforeRequest", "modelId" in context, context.modelId]);
+					return context.request;
+				},
+				afterResponse: (context) => {
+					seen.push(["afterResponse", "modelId" in context, context.modelId]);
+					return context.response;
+				},
+			});
+
+			await proxy(languageModelRequest(), createMockContext(["language-model"]));
+
+			expect(seen).toEqual([
+				["beforeRequest", true, undefined],
+				["afterResponse", true, undefined],
+			]);
+		});
+	});
+
 	describe("request header forwarding", () => {
 		beforeEach(() => {
 			process.env.AI_GATEWAY_API_KEY = "test-api-key";

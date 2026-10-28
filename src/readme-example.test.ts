@@ -11,6 +11,7 @@ const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
 type Metered = {
+	modelId: string | undefined;
 	inputTokens: number | undefined;
 	outputTokens: number | undefined;
 	maxOutputTokens: number | undefined;
@@ -24,8 +25,9 @@ function readmeProxy(meter: (usage: Metered) => Promise<void>) {
 			...request,
 			maxOutputTokens: Math.min(request.maxOutputTokens ?? 1024, 1024),
 		}),
-		afterResponse: async ({ request, response, incomplete }) => {
+		afterResponse: async ({ request, modelId, response, incomplete }) => {
 			await meter({
+				modelId,
 				inputTokens: response.usage?.inputTokens.total,
 				outputTokens: response.usage?.outputTokens.total,
 				maxOutputTokens: request.maxOutputTokens,
@@ -70,6 +72,7 @@ function languageModelRequest(body: Record<string, unknown>, streaming = false):
 		body: JSON.stringify({ prompt: [], ...body }),
 		headers: {
 			"content-type": "application/json",
+			"ai-language-model-id": "openai/gpt-5",
 			"ai-language-model-streaming": String(streaming),
 		},
 	});
@@ -120,6 +123,7 @@ describe("README example: cap, meter and mask", () => {
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual(generateResult);
 		expect(meter).toHaveBeenCalledExactlyOnceWith({
+			modelId: "openai/gpt-5",
 			inputTokens: 7,
 			outputTokens: 5,
 			maxOutputTokens: 1024,
@@ -148,6 +152,7 @@ describe("README example: cap, meter and mask", () => {
 
 		expect(output).toContain(`data: ${JSON.stringify(finish)}`);
 		expect(meter).toHaveBeenCalledExactlyOnceWith({
+			modelId: "openai/gpt-5",
 			inputTokens: 7,
 			outputTokens: 5,
 			maxOutputTokens: 1024,
@@ -168,6 +173,7 @@ describe("README example: cap, meter and mask", () => {
 		await response.text();
 
 		expect(meter).toHaveBeenCalledExactlyOnceWith({
+			modelId: "openai/gpt-5",
 			inputTokens: undefined,
 			outputTokens: undefined,
 			maxOutputTokens: 1024,

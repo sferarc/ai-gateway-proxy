@@ -197,6 +197,33 @@ describe("E2E: AI SDK client through the proxy to a fake gateway", () => {
 			expect(seen[0].usage).toEqual(usage);
 			expect(result.providerMetadata?.custom).toEqual({ modified: true });
 		});
+
+		it("names the client's model to every language model hook", async () => {
+			upstream.respondWith((res) => {
+				res.writeHead(404, { "content-type": "application/json" });
+				res.end(JSON.stringify({ error: { message: "Model not found", type: "model_not_found" } }));
+			});
+			const seen: Array<[string, string | undefined]> = [];
+			const gateway = await startProxy({
+				beforeRequest: ({ request, modelId }) => {
+					seen.push(["beforeRequest", modelId]);
+					return request;
+				},
+				onError: ({ error, modelId }) => {
+					seen.push(["onError", modelId]);
+					return error;
+				},
+			});
+
+			await expect(generateText({ model: gateway(MODEL), prompt: "Hi" })).rejects.toThrow(
+				"Model not found",
+			);
+
+			expect(seen).toEqual([
+				["beforeRequest", MODEL],
+				["onError", MODEL],
+			]);
+		});
 	});
 
 	describe("streamText", () => {
@@ -241,6 +268,20 @@ describe("E2E: AI SDK client through the proxy to a fake gateway", () => {
 			expect(seen[0].content).toEqual([{ type: "text", text: "Hello stream" }]);
 			expect(seen[0].usage).toEqual(usage);
 			expect((await result.providerMetadata)?.custom).toEqual({ streamModified: true });
+		});
+
+		it("names the client's model to afterResponse on a stream", async () => {
+			const seen: Array<string | undefined> = [];
+			const gateway = await startProxy({
+				afterResponse: ({ response, modelId }) => {
+					seen.push(modelId);
+					return response;
+				},
+			});
+
+			await streamText({ model: gateway(MODEL), prompt: "Hi" }).consumeStream();
+
+			expect(seen).toEqual([MODEL]);
 		});
 	});
 
