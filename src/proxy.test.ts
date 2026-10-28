@@ -515,6 +515,59 @@ describe("createGatewayProxy", () => {
 			expect(beforeRequest).not.toHaveBeenCalled();
 			expect(beforeRawRequest).toHaveBeenCalledWith(expect.objectContaining({ request: [1] }));
 		});
+
+		// JSON.parse rounds an integer past 2^53, and the round trip drops whitespace and escapes.
+		const sentBody = '{ "prompt": [], "seed": 12345678901234567890, "text": "caf\\u00e9" }';
+
+		it.each([
+			["no hook is set", {}, ["language-model"]],
+			[
+				"only afterResponse and onError are set",
+				{ afterResponse: vi.fn(), onError: vi.fn() },
+				["language-model"],
+			],
+			["beforeRequest is set on a listed path", { beforeRequest: vi.fn() }, ["embedding-model"]],
+			[
+				"beforeRawRequest is set on a language model path",
+				{ beforeRawRequest: vi.fn() },
+				["language-model"],
+			],
+		])("forwards the body as sent when %s", async (_name, hooks, segments) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const proxy = createGatewayProxy(hooks);
+
+			const response = await proxy(createRawBodyRequest(sentBody), createMockContext(segments));
+
+			expect(response.status).toBe(200);
+			expect(mockFetch.mock.calls[0][1].body).toBe(sentBody);
+		});
+
+		it("sends a body beforeRequest mutated in place and returned", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const proxy = createGatewayProxy({
+				beforeRequest: ({ request }) => {
+					request.maxOutputTokens = 10;
+					return request;
+				},
+			});
+
+			await proxy(createRawBodyRequest(sentBody), createMockContext(["language-model"]));
+
+			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toMatchObject({ maxOutputTokens: 10 });
+		});
+
+		it("sends a body beforeRawRequest mutated in place without returning it", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ embeddings: [] }));
+			const proxy = createGatewayProxy({
+				beforeRawRequest: ({ request }) => {
+					(request as Record<string, unknown>).dimensions = 2;
+				},
+			});
+
+			await proxy(createRawBodyRequest(sentBody), createMockContext(["embedding-model"]));
+
+			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toMatchObject({ dimensions: 2 });
+		});
 	});
 
 	describe("HTTP method exports", () => {
