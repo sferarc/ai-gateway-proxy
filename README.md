@@ -126,7 +126,9 @@ const { text } = await generateText({
 Some gateway client calls do not go through the proxy:
 
 - Streaming speech and transcription (the gateway models' `doStream`) open a WebSocket to `speech-model` or `transcription-model` under `baseURL`. The proxy handles HTTP requests only, so it cannot carry those connections. Generating speech or a transcription without streaming does go through the proxy.
+- Realtime (`experimental_realtime`) opens a WebSocket to `realtime-model` under `baseURL`, which the proxy cannot carry for the same reason.
 - `getCredits()`, `getSpendReport()` and `getGenerationInfo()` request `/v1/credits`, `/v1/report` and `/v1/generation` at the origin of `baseURL`, which is your app's host and not the proxy route.
+- `getToken()` on `experimental_realtime`, `experimental_transcription` and `experimental_speech` posts to `/v1/realtime/client-secrets` at the same origin, and the WebSocket URL it returns is under `baseURL`, so neither reaches the proxy.
 
 ## Authentication
 

@@ -27,11 +27,13 @@ The hook gets the response itself rather than a clone, because an unread `clone(
 
 ## Calls that do not reach the handler
 
-Read in `@ai-sdk/gateway` 4.0.126 `dist/index.js`; not pinned by a test, and not observed against the real gateway.
+Read in `@ai-sdk/gateway` 4.0.126 `dist/index.js`, and not observed against the real gateway.
 
 - `GatewayTranscriptionModel.doStream` and `GatewaySpeechModel.doStream` open a WebSocket through `connectToWebSocket` at `toGatewayTranscriptionUrl` or `toGatewaySpeechUrl`: `baseURL` with `http` swapped for `ws`, plus `/transcription-model` or `/speech-model` and `?ai-model-id=`, with the client's bearer token in `Sec-WebSocket-Protocol`. The handler takes a `Request` and returns a `Response`, so it cannot answer an upgrade. Their `doGenerate` posts JSON to the same paths and is handled as in step 6.
+- `GatewayRealtimeModel` (`experimental_realtime`) has no HTTP call: `doCreateClientSecret` returns `toGatewayRealtimeUrl`, `baseURL` with `http` swapped for `ws` plus `/realtime-model?ai-model-id=`, for the client to open as a WebSocket.
 - `getCredits`, `getSpendReport` and `getGenerationInfo` build their URL from `new URL(baseURL).origin` (`/v1/credits`, `/v1/report`, `/v1/generation`), so through a proxy they go to the proxy's host outside its route.
+- `getToken` on `experimental_realtime`, `experimental_transcription` and `experimental_speech` calls `mintClientSecret`, which posts to `new URL("/v1/realtime/client-secrets", baseURL)`, the same origin outside the route, and returns the WebSocket URL above or its transcription or speech twin.
 
-Both are listed under Client in `README.md`. Carrying either is a contract choice for the owner ([[plans/roadmap]]).
+All are listed under Client in `README.md`. The URLs the client builds for the HTTP calls, and the WebSocket URLs `getToken` returns, are pinned by `src/client-bypass.test.ts` with a recording `fetch`; no WebSocket is opened. Carrying any of them is a contract choice for the owner ([[plans/roadmap]]).
 
 Tests: `src/proxy.test.ts` mocks `fetch` and `@vercel/oidc` and covers each step, the hooks and the HTTP method exports.
