@@ -130,6 +130,92 @@ describe("StreamContentAggregator", () => {
 		});
 	});
 
+	describe("part providerMetadata", () => {
+		it("keeps the providerMetadata of text-start on the text block", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({ type: "text-start", id: "t", providerMetadata: { acme: { id: "m1" } } });
+			aggregator.process({ type: "text-delta", id: "t", delta: "Hi" });
+			aggregator.process({ type: "text-end", id: "t" });
+
+			expect(aggregator.getResponse().content).toStrictEqual([
+				{ type: "text", text: "Hi", providerMetadata: { acme: { id: "m1" } } },
+			]);
+		});
+
+		it("takes the latest providerMetadata a text part carries", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({ type: "text-start", id: "t", providerMetadata: { acme: { n: 1 } } });
+			aggregator.process({ type: "text-delta", id: "t", delta: "Hi" });
+			aggregator.process({
+				type: "text-delta",
+				id: "t",
+				delta: "!",
+				providerMetadata: { acme: { n: 2 } },
+			});
+			aggregator.process({ type: "text-end", id: "t", providerMetadata: { acme: { n: 3 } } });
+
+			expect(aggregator.getResponse().content).toStrictEqual([
+				{ type: "text", text: "Hi!", providerMetadata: { acme: { n: 3 } } },
+			]);
+		});
+
+		it("keeps a reasoning signature sent on a delta when the end carries none", () => {
+			const aggregator = new StreamContentAggregator();
+			const signature = { anthropic: { signature: "sig" } };
+
+			aggregator.process({ type: "reasoning-start", id: "r" });
+			aggregator.process({ type: "reasoning-delta", id: "r", delta: "Thinking" });
+			aggregator.process({
+				type: "reasoning-delta",
+				id: "r",
+				delta: "",
+				providerMetadata: signature,
+			});
+			aggregator.process({ type: "reasoning-end", id: "r" });
+
+			expect(aggregator.getResponse().content).toStrictEqual([
+				{ type: "reasoning", text: "Thinking", providerMetadata: signature },
+			]);
+		});
+
+		it("takes the providerMetadata of reasoning-end", () => {
+			const aggregator = new StreamContentAggregator();
+			const redacted = { anthropic: { redactedData: "abc" } };
+
+			aggregator.process({ type: "reasoning-start", id: "r" });
+			aggregator.process({ type: "reasoning-end", id: "r", providerMetadata: redacted });
+
+			expect(aggregator.getResponse().content).toStrictEqual([
+				{ type: "reasoning", text: "", providerMetadata: redacted },
+			]);
+		});
+
+		it("leaves out providerMetadata when no part carries it", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({ type: "text-start", id: "t" });
+			aggregator.process({ type: "text-delta", id: "t", delta: "Hi" });
+			aggregator.process({ type: "text-end", id: "t" });
+			aggregator.process({ type: "reasoning-delta", id: "r", delta: "Hm" });
+
+			expect(aggregator.getResponse().content).toStrictEqual([
+				{ type: "text", text: "Hi" },
+				{ type: "reasoning", text: "Hm" },
+			]);
+		});
+
+		it("ignores providerMetadata on an end with no open block", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process({ type: "text-end", id: "ghost", providerMetadata: { acme: {} } });
+			aggregator.process({ type: "reasoning-end", id: "ghost", providerMetadata: { acme: {} } });
+
+			expect(aggregator.getResponse().content).toStrictEqual([]);
+		});
+	});
+
 	describe("reasoning content", () => {
 		it("aggregates reasoning deltas into complete reasoning content", () => {
 			const aggregator = new StreamContentAggregator();
@@ -1015,6 +1101,30 @@ describe("createStreamTransformer", () => {
 			events[5],
 		]);
 		expect(output).toContain(sse(events[2]));
+		expect(output).toContain(sse(events[3]));
+	});
+
+	it("passes the providerMetadata of text and reasoning parts to the hook", async () => {
+		const signature = { anthropic: { signature: "sig" } };
+		const events = [
+			{ type: "reasoning-start", id: "r1" },
+			{ type: "reasoning-delta", id: "r1", delta: "Hm", providerMetadata: signature },
+			{ type: "reasoning-end", id: "r1" },
+			{ type: "text-start", id: "t1", providerMetadata: { acme: { id: "m1" } } },
+			{ type: "text-delta", id: "t1", delta: "Hi" },
+			{ type: "text-end", id: "t1" },
+			finishEvent,
+		];
+		const hook = vi.fn(passThroughHook);
+		const output = await readAll(
+			createStreamTransformer(sourceOf(events.map(sse)), requestBody, hook),
+		);
+
+		expect(hook.mock.calls[0]?.[0].response.content).toStrictEqual([
+			{ type: "reasoning", text: "Hm", providerMetadata: signature },
+			{ type: "text", text: "Hi", providerMetadata: { acme: { id: "m1" } } },
+		]);
+		expect(output).toContain(sse(events[1]));
 		expect(output).toContain(sse(events[3]));
 	});
 
