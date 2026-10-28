@@ -213,11 +213,7 @@ async function forwardBodylessRequest(
 			return redirectRefusedResponse(res);
 		}
 
-		return new Response(res.body, {
-			status: res.status,
-			statusText: res.statusText,
-			headers: responseHeaders(res, res.headers.get("content-type") ?? "application/json"),
-		});
+		return passThroughResponse(res);
 	} catch (error) {
 		return proxyFailureResponse(request, error);
 	}
@@ -271,6 +267,17 @@ function responseHeaders(res: Response, contentType?: string): Headers {
 		}
 	}
 	return headers;
+}
+
+/**
+ * Sends the upstream body unread, with its `content-type` and the allowlisted upstream headers.
+ */
+function passThroughResponse(res: Response): Response {
+	return new Response(res.body, {
+		status: res.status,
+		statusText: res.statusText,
+		headers: responseHeaders(res, res.headers.get("content-type") ?? "application/json"),
+	});
 }
 
 /**
@@ -351,32 +358,30 @@ function handleStreamingResponse(
 }
 
 /**
- * Handles a non-streaming JSON response from the gateway.
+ * Runs afterResponse on a non-streaming JSON response from the gateway.
  */
 async function handleJsonResponse(
 	res: Response,
 	requestBody: LanguageModelV4CallOptions,
-	afterResponse: CreateGatewayProxyOptions["afterResponse"],
+	afterResponse: NonNullable<CreateGatewayProxyOptions["afterResponse"]>,
 ): Promise<Response> {
 	let responseBody: GatewayResponse = await res.json();
 
-	if (afterResponse) {
-		const modified = await afterResponse({
-			request: requestBody,
-			response: responseBody,
-		});
-		// A JavaScript caller can return nothing.
-		if (modified === undefined || modified === null) {
-			console.error("afterResponse hook returned no response, forwarding the upstream body");
-		} else {
-			const problem = gatewayResponseProblem(modified);
-			if (problem) {
-				const message = `afterResponse hook returned an invalid response: ${problem}`;
-				console.error(message);
-				return proxyErrorResponse(500, "proxy_error", message);
-			}
-			responseBody = modified;
+	const modified = await afterResponse({
+		request: requestBody,
+		response: responseBody,
+	});
+	// A JavaScript caller can return nothing.
+	if (modified === undefined || modified === null) {
+		console.error("afterResponse hook returned no response, forwarding the upstream body");
+	} else {
+		const problem = gatewayResponseProblem(modified);
+		if (problem) {
+			const message = `afterResponse hook returned an invalid response: ${problem}`;
+			console.error(message);
+			return proxyErrorResponse(500, "proxy_error", message);
 		}
+		responseBody = modified;
 	}
 
 	return new Response(JSON.stringify(responseBody), {
@@ -416,11 +421,9 @@ async function forwardUpstreamResponse(
 		return handleStreamingResponse(res, requestBody, afterResponse, signal);
 	}
 
-	// Other calls can answer with a body that is not one JSON value, such as the video model's
-	// event stream or the batch results' JSON Lines. It is not a language model response, so it
-	// passes through without afterResponse.
-	if (STREAM_CONTENT_TYPE.test(res.headers.get("content-type") ?? "")) {
-		return handleStreamingResponse(res, requestBody, undefined);
+	// Only afterResponse reads a success body; without it, or for an event stream or JSON Lines, it streams through.
+	if (!afterResponse || STREAM_CONTENT_TYPE.test(res.headers.get("content-type") ?? "")) {
+		return passThroughResponse(res);
 	}
 
 	return await handleJsonResponse(res, requestBody, afterResponse);
