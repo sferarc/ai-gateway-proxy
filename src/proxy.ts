@@ -11,7 +11,7 @@ import type {
 	RawResponseContext,
 } from "./types";
 
-const DEFAULT_BASE_URL = "https://ai-gateway.vercel.sh/v1/ai";
+const DEFAULT_BASE_URL = "https://ai-gateway.vercel.sh/v4/ai";
 const PROTOCOL_VERSION = "0.0.1";
 const MAX_ERROR_EXCERPT_LENGTH = 200;
 // Request ids for matching gateway-side logs, and the rate limit headers the AI SDK backs off on.

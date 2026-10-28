@@ -213,7 +213,7 @@ describe("createGatewayProxy", () => {
 			await proxy(request, createMockContext(["v1", "chat"]));
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				"https://ai-gateway.vercel.sh/v1/ai/v1/chat",
+				"https://ai-gateway.vercel.sh/v4/ai/v1/chat",
 				expect.any(Object),
 			);
 		});
@@ -281,9 +281,38 @@ describe("createGatewayProxy", () => {
 			await proxy(request, createMockContext(["language-model"]));
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				"https://ai-gateway.vercel.sh/v1/ai/language-model",
+				"https://ai-gateway.vercel.sh/v4/ai/language-model",
 				expect.any(Object),
 			);
+		});
+
+		it("defaults to the baseUrl @ai-sdk/gateway calls without a proxy", async () => {
+			// The gateway versions its endpoint by specification version, so the bodies the client builds belong there.
+			const clientUrls: string[] = [];
+			const direct = createGatewayProvider({
+				apiKey: "client-key",
+				fetch: async (input) => {
+					clientUrls.push(String(input));
+					return createMockHttpResponse(createMockGatewayResponse());
+				},
+			});
+			const prompt: LanguageModelV4CallOptions["prompt"] = [
+				{ role: "user", content: [{ type: "text", text: "hi" }] },
+			];
+			await direct("openai/gpt-5").doGenerate({ prompt });
+
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const proxy = createGatewayProxy();
+			const proxied = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: (input, init) =>
+					proxy(new Request(input, init), createMockContext(["language-model"])),
+			});
+			await proxied("openai/gpt-5").doGenerate({ prompt });
+
+			expect(clientUrls).toEqual(["https://ai-gateway.vercel.sh/v4/ai/language-model"]);
+			expect(mockFetch.mock.calls[0][0]).toBe(clientUrls[0]);
 		});
 
 		it.each([
@@ -1336,7 +1365,7 @@ describe("createGatewayProxy", () => {
 
 			expect(result.embeddings).toEqual([[0.1, 0.2]]);
 			const [url, init] = mockFetch.mock.calls[0];
-			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/embedding-model");
+			expect(url).toBe("https://ai-gateway.vercel.sh/v4/ai/embedding-model");
 			const sent = new Headers(init.headers);
 			expect(sent.get("ai-model-id")).toBe("openai/text-embedding-3-small");
 			expect(sent.get("ai-embedding-model-specification-version")).toBe("4");
@@ -1576,8 +1605,8 @@ describe("createGatewayProxy", () => {
 
 			expect(status.status).toBe("pending");
 			expect(mockFetch.mock.calls.map(([url]) => url)).toEqual([
-				"https://ai-gateway.vercel.sh/v1/ai/batch/status",
-				"https://ai-gateway.vercel.sh/v1/ai/batch/cancel",
+				"https://ai-gateway.vercel.sh/v4/ai/batch/status",
+				"https://ai-gateway.vercel.sh/v4/ai/batch/cancel",
 			]);
 			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ batchId: "batch_1" });
 			expect(beforeRequest).not.toHaveBeenCalled();
@@ -1635,7 +1664,7 @@ describe("createGatewayProxy", () => {
 					);
 
 				expect((await send()).status).toBe(200);
-				expect(new URL(mockFetch.mock.calls[0][0]).pathname).toBe("/v1/ai/language-model");
+				expect(new URL(mockFetch.mock.calls[0][0]).pathname).toBe("/v4/ai/language-model");
 				expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
 					prompt: [],
 					maxOutputTokens: 10,
@@ -2280,7 +2309,7 @@ describe("createGatewayProxy", () => {
 
 			expect(result.videos).toEqual([video]);
 			const [url, init] = mockFetch.mock.calls[0];
-			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/video-model");
+			expect(url).toBe("https://ai-gateway.vercel.sh/v4/ai/video-model");
 			expect(new Headers(init.headers).get("accept")).toBe("text/event-stream");
 		});
 
@@ -2336,7 +2365,7 @@ describe("createGatewayProxy", () => {
 
 			expect(results).toEqual(items);
 			const [url] = mockFetch.mock.calls[0];
-			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/batch/results");
+			expect(url).toBe("https://ai-gateway.vercel.sh/v4/ai/batch/results");
 		});
 	});
 
@@ -2428,7 +2457,7 @@ describe("createGatewayProxy", () => {
 			expect(response.status).toBe(200);
 			expect(await response.json()).toEqual(models);
 			const [url, init] = mockFetch.mock.calls[0];
-			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/config");
+			expect(url).toBe("https://ai-gateway.vercel.sh/v4/ai/config");
 			expect(init.method).toBe("GET");
 			expect(init.body).toBeUndefined();
 			expect(init.headers).toEqual({
@@ -2505,7 +2534,7 @@ describe("createGatewayProxy", () => {
 			expect(response.status).toBe(200);
 			expect(await response.json()).toEqual({ ok: true });
 			const [url, init] = mockFetch.mock.calls[0];
-			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/config");
+			expect(url).toBe("https://ai-gateway.vercel.sh/v4/ai/config");
 			expect(init.method).toBe("DELETE");
 			expect(init.body).toBeUndefined();
 			expect(beforeRequest).not.toHaveBeenCalled();
@@ -2529,7 +2558,7 @@ describe("createGatewayProxy", () => {
 			expect(response.status).toBe(200);
 			expect(await response.json()).toEqual({ ok: true });
 			const [url, init] = mockFetch.mock.calls[0];
-			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/config");
+			expect(url).toBe("https://ai-gateway.vercel.sh/v4/ai/config");
 			expect(init.method).toBe("DELETE");
 			expect(init.body).toBeUndefined();
 			expect(beforeRequest).not.toHaveBeenCalled();
@@ -2563,7 +2592,7 @@ describe("createGatewayProxy", () => {
 
 			expect(result.models.map((model) => model.id)).toEqual(["openai/gpt-5"]);
 			const [url, init] = mockFetch.mock.calls[0];
-			expect(url).toBe("https://ai-gateway.vercel.sh/v1/ai/config");
+			expect(url).toBe("https://ai-gateway.vercel.sh/v4/ai/config");
 			expect(init.method).toBe("GET");
 			expect(init.headers.authorization).toBe("Bearer test-api-key");
 		});
@@ -2725,7 +2754,7 @@ describe("createGatewayProxy", () => {
 			await proxy(request, createMockContext([]));
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				"https://ai-gateway.vercel.sh/v1/ai/",
+				"https://ai-gateway.vercel.sh/v4/ai/",
 				expect.any(Object),
 			);
 		});
