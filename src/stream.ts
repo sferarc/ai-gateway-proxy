@@ -123,6 +123,11 @@ export class StreamContentAggregator {
 				this.content.push(part);
 				break;
 
+			case "error":
+				// A later finish part still sets its own reason; this one stands only if none comes.
+				this.finishReason = { unified: "error", raw: undefined };
+				break;
+
 			case "finish":
 				this.textContent.clear();
 				this.reasoningContent.clear();
@@ -149,7 +154,7 @@ export class StreamContentAggregator {
 
 	/**
 	 * Get the aggregated response. Before a `finish` part, `usage` is undefined and
-	 * `finishReason` is `other`.
+	 * `finishReason` is `error` after an `error` part and `other` otherwise.
 	 */
 	getResponse(): GatewayResponse {
 		return {

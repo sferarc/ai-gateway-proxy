@@ -158,7 +158,8 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * A stream that ends, fails or is cancelled before its finish event calls the hook once
 	 * with the content received so far, `incomplete` set, `response.usage` undefined and
-	 * `response.finishReason` `error` or `other`. Nothing can be rewritten then, so the
+	 * `response.finishReason` `error` when the read failed or the stream sent an `error` part,
+	 * `other` otherwise. Nothing can be rewritten then, so the
 	 * returned value is ignored and a throw is logged.
 	 *
 	 * Not called for an event stream or JSON Lines body answering a request not marked
