@@ -2340,6 +2340,67 @@ describe("createGatewayProxy", () => {
 		});
 	});
 
+	describe("successful responses without a body", () => {
+		beforeEach(() => {
+			process.env.AI_GATEWAY_API_KEY = "test-key";
+		});
+
+		it.each([
+			[204, false],
+			[204, true],
+			[205, false],
+			[205, true],
+		])("forwards a %i without a body or afterResponse, streaming %s", async (status, streaming) => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(null, {
+					status,
+					headers: { "x-vercel-id": "iad1::abc", "set-cookie": "session=1" },
+				}),
+			);
+			const afterResponse = vi.fn();
+			const onError = vi.fn();
+
+			const proxy = createGatewayProxy({ afterResponse, onError });
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				body: { prompt: [] },
+				headers: streaming ? { "ai-language-model-streaming": "true" } : {},
+			});
+
+			const response = await proxy(request, createMockContext(["language-model"]));
+
+			expect(response.status).toBe(status);
+			expect(response.body).toBeNull();
+			expect(response.headers.get("content-type")).toBeNull();
+			expect(response.headers.get("x-vercel-id")).toBe("iad1::abc");
+			expect(response.headers.get("set-cookie")).toBeNull();
+			expect(afterResponse).not.toHaveBeenCalled();
+			expect(onError).not.toHaveBeenCalled();
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+
+		it("hands a 204 to afterRawResponse on a listed path", async () => {
+			mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+			let seen: Response | undefined;
+			const afterRawResponse = vi.fn(({ response }: { response: Response }) => {
+				seen = response;
+				return undefined;
+			});
+
+			const proxy = createGatewayProxy({ afterRawResponse });
+			const request = createMockRequest("http://localhost/api/ai/batch/start", {
+				body: { requests: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["batch", "start"]));
+
+			expect(response.status).toBe(204);
+			expect(response.body).toBeNull();
+			expect(afterRawResponse).toHaveBeenCalledOnce();
+			expect(seen).toBe(response);
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+	});
+
 	describe("bodyless requests", () => {
 		const models = {
 			models: [
