@@ -25,4 +25,13 @@
 
 The hook gets the response itself rather than a clone, because an unread `clone()` tees the body and buffers whatever the slower branch has not read, which for a large `batch/start` or video body is the whole of it. Tests: `raw hooks` in `src/proxy.test.ts` and `runs the raw hooks on a batch start ...` in `src/non-language-model.test.ts`.
 
+## Calls that do not reach the handler
+
+Read in `@ai-sdk/gateway` 4.0.126 `dist/index.js`; not pinned by a test, and not observed against the real gateway.
+
+- `GatewayTranscriptionModel.doStream` and `GatewaySpeechModel.doStream` open a WebSocket through `connectToWebSocket` at `toGatewayTranscriptionUrl` or `toGatewaySpeechUrl`: `baseURL` with `http` swapped for `ws`, plus `/transcription-model` or `/speech-model` and `?ai-model-id=`, with the client's bearer token in `Sec-WebSocket-Protocol`. The handler takes a `Request` and returns a `Response`, so it cannot answer an upgrade. Their `doGenerate` posts JSON to the same paths and is handled as in step 6.
+- `getCredits`, `getSpendReport` and `getGenerationInfo` build their URL from `new URL(baseURL).origin` (`/v1/credits`, `/v1/report`, `/v1/generation`), so through a proxy they go to the proxy's host outside its route.
+
+Both are listed under Client in `README.md`. Carrying either is a contract choice for the owner ([[plans/roadmap]]).
+
 Tests: `src/proxy.test.ts` mocks `fetch` and `@vercel/oidc` and covers each step, the hooks and the HTTP method exports.
