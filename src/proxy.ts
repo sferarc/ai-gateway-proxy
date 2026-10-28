@@ -152,7 +152,7 @@ function buildRequestHeaders(
 	});
 }
 
-type ProxyErrorType = "authentication_error" | "invalid_request_error" | "proxy_error";
+type ProxyErrorType = "invalid_request_error" | "proxy_error";
 
 /**
  * Builds a response for an error the proxy raises itself, in the same shape as upstream errors.
@@ -492,9 +492,10 @@ export const createGatewayProxy = ({
 		// Authenticate with the gateway
 		const auth = await getGatewayAuthToken();
 		if (!auth) {
+			// Not authentication_error: @ai-sdk/gateway replaces that message with advice about the client's own key.
 			return proxyErrorResponse(
 				500,
-				"authentication_error",
+				"proxy_error",
 				"AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled",
 			);
 		}
