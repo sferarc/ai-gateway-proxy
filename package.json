@@ -12,9 +12,14 @@
 	"bugs": "https://github.com/sferarc/ai-gateway-proxy/issues",
 	"exports": {
 		".": {
-			"types": "./dist/index.d.ts",
-			"import": "./dist/index.mjs",
-			"require": "./dist/index.cjs"
+			"import": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.mjs"
+			},
+			"require": {
+				"types": "./dist/index.d.cts",
+				"default": "./dist/index.cjs"
+			}
 		}
 	},
 	"main": "./dist/index.cjs",
@@ -30,11 +35,12 @@
 		"test:watch": "vitest",
 		"test:integration": "vitest run src/integration.test.ts",
 		"is-tree-shakable": "is-tree-shakable",
+		"attw": "attw --pack .",
 		"typecheck": "tsc --noEmit",
 		"lint": "biome check .",
 		"fix": "biome check --write .",
 		"knip": "knip",
-		"check": "pnpm lint && pnpm exec lefthook validate && pnpm knip && pnpm typecheck && pnpm test && pnpm build && pnpm is-tree-shakable",
+		"check": "pnpm lint && pnpm exec lefthook validate && pnpm knip && pnpm typecheck && pnpm test && pnpm build && pnpm is-tree-shakable && pnpm attw",
 		"changeset": "changeset",
 		"release": "pnpm build && changeset publish"
 	},
@@ -45,6 +51,7 @@
 	},
 	"devDependencies": {
 		"@ai-sdk/gateway": "catalog:",
+		"@arethetypeswrong/cli": "catalog:",
 		"@biomejs/biome": "catalog:",
 		"@changesets/cli": "catalog:",
 		"@types/node": "catalog:",
