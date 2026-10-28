@@ -66,11 +66,13 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 
 		it("applies afterResponse hook", async () => {
 			let capturedResponse: GatewayResponse | undefined;
+			let capturedModelId: string | undefined;
 
 			const { gateway, close } = await startProxyServer({
 				proxyOptions: {
-					afterResponse: ({ response }) => {
+					afterResponse: ({ response, modelId }) => {
 						capturedResponse = response;
+						capturedModelId = modelId;
 						return {
 							...response,
 							providerMetadata: { custom: { modified: true } },
@@ -88,6 +90,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 
 				expect(capturedResponse).toBeDefined();
 				expect(capturedResponse?.content).toBeDefined();
+				expect(capturedModelId).toBe(TEST_MODEL);
 				expect(result.providerMetadata?.custom).toEqual({ modified: true });
 			} finally {
 				await close();
@@ -155,11 +158,13 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 
 		it("applies afterResponse hook during streaming", async () => {
 			let capturedResponse: GatewayResponse | undefined;
+			let capturedModelId: string | undefined;
 
 			const { gateway, close } = await startProxyServer({
 				proxyOptions: {
-					afterResponse: ({ response }) => {
+					afterResponse: ({ response, modelId }) => {
 						capturedResponse = response;
+						capturedModelId = modelId;
 						// Return modified response
 						return {
 							...response,
@@ -185,6 +190,7 @@ describe.skipIf(!hasApiKey)("Integration: AI SDK with Proxy", () => {
 				expect(capturedResponse).toBeDefined();
 				expect(capturedResponse?.content).toBeDefined();
 				expect(capturedResponse?.content.length).toBeGreaterThan(0);
+				expect(capturedModelId).toBe(TEST_MODEL);
 
 				// The modified metadata should be reflected
 				const metadata = await result.providerMetadata;

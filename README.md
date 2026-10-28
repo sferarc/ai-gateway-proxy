@@ -149,13 +149,13 @@ The proxy gets a credential on every request with `getGatewayAuthToken()`, in th
 | `headers` | none | Extra headers for every upstream request. The proxy's own `authorization`, `ai-gateway-auth-method` and `ai-gateway-protocol-version` override entries with the same name in any casing, as does `content-type` on requests with a body. On requests with a body, the incoming request's `ai-language-model-*`, `ai-model-id` and `ai-*-model-specification-version` headers replace any entries describing the model call, and its `ai-o11y-*`, `idempotency-key` and `accept` headers override entries with the same name. No other incoming header is forwarded, so the client's `authorization` and cookies never reach the gateway. |
 | `segmentsParam` | `"segments"` | Name of the catch-all route param read from `context.params` when `extractPath` is not set, joined with `/`. Use `"path"` for `app/api/ai/[...path]/route.ts`. |
 | `extractPath` | none | `(request) => string \| Promise<string>`. Returns the upstream path relative to `baseUrl`, such as `language-model`. Takes precedence over `segmentsParam`. |
-| `beforeRequest` | none | `({ request }) => LanguageModelV4CallOptions`. Receives the parsed JSON body and returns the body to send upstream. Returning `undefined` or `null` sends the parsed body and logs an error. Any other result that is not an object, such as a string or an array, returns a 500 without calling the gateway. |
-| `afterResponse` | none | `({ request, response }) => GatewayResponse`. Runs on a successful response; see below. |
-| `onError` | none | `({ request, error, status }) => GatewayError \| Response`. Runs when the gateway returns a non-OK status; see below. |
+| `beforeRequest` | none | `({ request, modelId }) => LanguageModelV4CallOptions`. Receives the parsed JSON body and returns the body to send upstream. Returning `undefined` or `null` sends the parsed body and logs an error. Any other result that is not an object, such as a string or an array, returns a 500 without calling the gateway. |
+| `afterResponse` | none | `({ request, modelId, response }) => GatewayResponse`. Runs on a successful response; see below. |
+| `onError` | none | `({ request, modelId, error, status }) => GatewayError \| Response`. Runs when the gateway returns a non-OK status; see below. |
 | `beforeRawRequest` | none | `({ kind, path, modelId, request }) => unknown`. Runs on the calls that are not language model calls; see below. |
 | `afterRawResponse` | none | `({ kind, path, modelId, request, response }) => Response \| undefined`. Runs on the response to those calls; see below. |
 
-Each hook may also return a promise. `beforeRequest`, `afterResponse` and `onError` are typed for language model calls, and every hook runs only for requests with a body. A `GET` or `HEAD` request, such as the provider's `GET /config` model list, and any other request whose body is missing or empty, such as a bodyless `DELETE`, is forwarded without a body and without running any hook, and the upstream status and body come back unchanged, except that a redirect is answered with a 502 as below. A request body that neither `beforeRequest` nor `beforeRawRequest` receives is sent upstream as the client sent it; once either hook runs, the body it returns or leaves in place is serialised again.
+Each hook may also return a promise. `beforeRequest`, `afterResponse` and `onError` are typed for language model calls, and every hook runs only for requests with a body. Their `modelId` is the client's `ai-language-model-id` header, such as `openai/gpt-5`, since the call body does not name the model; it is `undefined` when the request has no such header. A `GET` or `HEAD` request, such as the provider's `GET /config` model list, and any other request whose body is missing or empty, such as a bodyless `DELETE`, is forwarded without a body and without running any hook, and the upstream status and body come back unchanged, except that a redirect is answered with a 502 as below. A request body that neither `beforeRequest` nor `beforeRawRequest` receives is sent upstream as the client sent it; once either hook runs, the body it returns or leaves in place is serialised again.
 
 Path matching fails closed: the language model hooks run on every request with a body except one whose path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway` uses for calls that are not language model calls:
 
@@ -203,9 +203,10 @@ createGatewayProxy({
     ...request,
     maxOutputTokens: Math.min(request.maxOutputTokens ?? 1024, 1024),
   }),
-  afterResponse: async ({ request, response, incomplete }) => {
+  afterResponse: async ({ request, modelId, response, incomplete }) => {
     // usage is undefined when a stream ended before its finish event.
     await meter({
+      modelId,
       inputTokens: response.usage?.inputTokens.total,
       outputTokens: response.usage?.outputTokens.total,
       maxOutputTokens: request.maxOutputTokens,

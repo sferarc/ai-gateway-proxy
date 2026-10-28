@@ -140,6 +140,8 @@ export type CreateGatewayProxyOptions = {
 	 */
 	beforeRequest?: (context: {
 		request: LanguageModelV4CallOptions;
+		/** The `ai-language-model-id` header the client sent, which names the model; the body does not. */
+		modelId?: string;
 	}) => LanguageModelV4CallOptions | Promise<LanguageModelV4CallOptions>;
 	/**
 	 * Called after a successful response is received from the gateway.
@@ -177,6 +179,8 @@ export type CreateGatewayProxyOptions = {
 	 */
 	afterResponse?: (context: {
 		request: LanguageModelV4CallOptions;
+		/** The `ai-language-model-id` header the client sent, which names the model; the body does not. */
+		modelId?: string;
 		response: GatewayResponse;
 		/** Set only for a stream that did not deliver its `finish` event. */
 		incomplete?: IncompleteStream;
@@ -200,6 +204,8 @@ export type CreateGatewayProxyOptions = {
 	 */
 	onError?: (context: {
 		request: LanguageModelV4CallOptions;
+		/** The `ai-language-model-id` header the client sent, which names the model; the body does not. */
+		modelId?: string;
 		error: GatewayError;
 		status: number;
 	}) => GatewayError | Response | Promise<GatewayError | Response>;

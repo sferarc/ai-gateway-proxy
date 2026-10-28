@@ -394,6 +394,19 @@ async function handleJsonResponse(
 type LanguageModelHooks = Pick<CreateGatewayProxyOptions, "afterResponse" | "onError">;
 
 /**
+ * Wraps the hooks so each call also receives the model id, which the stream transformer does not know.
+ */
+function withModelId(
+	{ afterResponse, onError }: LanguageModelHooks,
+	modelId: string | undefined,
+): LanguageModelHooks {
+	return {
+		afterResponse: afterResponse && ((context) => afterResponse({ ...context, modelId })),
+		onError: onError && ((context) => onError({ ...context, modelId })),
+	};
+}
+
+/**
  * Builds the client response for a non-redirect upstream response, running the language model hooks given.
  */
 async function forwardUpstreamResponse(
@@ -550,10 +563,14 @@ export const createGatewayProxy = ({
 			// A hook can replace or mutate the parsed body, so only then is it serialised again.
 			let bodyHandedToHook = false;
 
+			// The body does not name the model; @ai-sdk/gateway sends it in this header.
+			const modelId = request.headers.get("ai-language-model-id") ?? undefined;
+
 			if (beforeRequest && runsHooks) {
 				bodyHandedToHook = true;
 				const replaced = await beforeRequest({
 					request: requestBody as LanguageModelV4CallOptions,
+					modelId,
 				});
 				// A JavaScript caller can return nothing, such as a hook that only logs.
 				if (replaced === undefined || replaced === null) {
@@ -596,7 +613,7 @@ export const createGatewayProxy = ({
 				res,
 				requestBody as LanguageModelV4CallOptions,
 				isStreaming,
-				runsHooks ? { afterResponse, onError } : {},
+				runsHooks ? withModelId({ afterResponse, onError }, modelId) : {},
 				request.signal,
 			);
 

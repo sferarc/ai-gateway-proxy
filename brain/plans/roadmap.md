@@ -13,4 +13,4 @@ None open.
 
 Update this note when a new gap is recorded in the architecture notes.
 
-Landed: hooks on streams that end without `finish` ([[decisions/2026-10-21-hook-on-unfinished-streams]]).
+Landed: hooks on streams that end without `finish` ([[decisions/2026-10-21-hook-on-unfinished-streams]]); `modelId` on the language model hooks, so `afterResponse` can meter per model ([[architecture/proxy]] step 6).
