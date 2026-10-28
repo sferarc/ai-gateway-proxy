@@ -54,3 +54,7 @@ jobs:
       # Consumers rely on unused exports being dropped from their bundles.
       - name: Tree-shakable
         run: pnpm is-tree-shakable
+
+      # CommonJS consumers must resolve the .d.cts declarations, not the ESM ones.
+      - name: Package types
+        run: pnpm attw

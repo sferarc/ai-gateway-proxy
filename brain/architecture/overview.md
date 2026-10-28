@@ -1,6 +1,6 @@
 # Overview
 
-A TypeScript library published to npm as `ai-gateway-proxy`, shipped as ESM and CJS with type declarations (`package.json` `exports`, built by bunchee). The public surface is `src/index.ts`.
+A TypeScript library published to npm as `ai-gateway-proxy`, shipped as ESM and CJS, each with its own type declarations (`dist/index.d.ts` and `dist/index.d.cts`, from the `import` and `require` conditions of `package.json` `exports`, built by bunchee and checked by `pnpm attw`; [[decisions/2025-12-28-bunchee-build]]). The public surface is `src/index.ts`.
 
 ## Modules
 

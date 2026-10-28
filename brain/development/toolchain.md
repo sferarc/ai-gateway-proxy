@@ -17,8 +17,9 @@ pnpm knip             # unused files, exports and dependencies
 pnpm typecheck        # tsc --noEmit
 pnpm test             # vitest run
 pnpm test:integration # only src/integration.test.ts; skipped without AI_GATEWAY_API_KEY
-pnpm build            # bunchee, emits dist/index.{mjs,cjs,d.ts}
+pnpm build            # bunchee, emits dist/index.{mjs,cjs,d.ts,d.cts}
 pnpm is-tree-shakable # after build
+pnpm attw             # after build: declarations match each module format
 pnpm changeset        # describe a change for the next release
 ```
 
