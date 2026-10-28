@@ -547,7 +547,11 @@ export const createGatewayProxy = ({
 				modelId: request.headers.get("ai-model-id") ?? undefined,
 			};
 
+			// A hook can replace or mutate the parsed body, so only then is it serialised again.
+			let bodyHandedToHook = false;
+
 			if (beforeRequest && runsHooks) {
+				bodyHandedToHook = true;
 				const replaced = await beforeRequest({
 					request: requestBody as LanguageModelV4CallOptions,
 				});
@@ -565,6 +569,7 @@ export const createGatewayProxy = ({
 			}
 
 			if (beforeRawRequest && rawContext) {
+				bodyHandedToHook = true;
 				const replaced = await beforeRawRequest({ ...rawContext, request: requestBody });
 				// null, like undefined, keeps the body rather than sending the literal null upstream.
 				if (replaced !== undefined && replaced !== null) {
@@ -576,7 +581,7 @@ export const createGatewayProxy = ({
 
 			const res = await fetch(upstream, {
 				method: request.method,
-				body: JSON.stringify(requestBody),
+				body: bodyHandedToHook ? JSON.stringify(requestBody) : text,
 				duplex: "half",
 				signal: request.signal,
 				headers: buildRequestHeaders(auth, request, headers),
