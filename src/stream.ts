@@ -2,6 +2,7 @@ import type {
 	LanguageModelV4CallOptions,
 	LanguageModelV4Content,
 	LanguageModelV4FinishReason,
+	LanguageModelV4Reasoning,
 	LanguageModelV4StreamPart,
 	LanguageModelV4Text,
 	LanguageModelV4Usage,
@@ -25,7 +26,7 @@ export class StreamContentAggregator {
 
 	// Open text and reasoning blocks by id. Each block already holds its slot in `content`.
 	private textContent = new Map<string, LanguageModelV4Text>();
-	private reasoningContent = new Map<string, { type: "reasoning"; text: string }>();
+	private reasoningContent = new Map<string, LanguageModelV4Reasoning>();
 
 	private finishReason: LanguageModelV4FinishReason = {
 		unified: "other",
@@ -52,33 +53,47 @@ export class StreamContentAggregator {
 				break;
 
 			case "text-start":
-				this.openText(part.id);
+				keepProviderMetadata(this.openText(part.id), part.providerMetadata);
 				break;
 
-			case "text-delta":
-				(this.textContent.get(part.id) ?? this.openText(part.id)).text += part.delta;
+			case "text-delta": {
+				const block = this.textContent.get(part.id) ?? this.openText(part.id);
+				block.text += part.delta;
+				keepProviderMetadata(block, part.providerMetadata);
 				break;
+			}
 
 			case "text-end": {
 				const block = this.textContent.get(part.id);
-				if (block && Array.isArray(part.citations)) {
-					block.citations = part.citations;
+				if (block) {
+					keepProviderMetadata(block, part.providerMetadata);
+					if (Array.isArray(part.citations)) {
+						block.citations = part.citations;
+					}
 				}
 				this.textContent.delete(part.id);
 				break;
 			}
 
 			case "reasoning-start":
-				this.openReasoning(part.id);
+				keepProviderMetadata(this.openReasoning(part.id), part.providerMetadata);
 				break;
 
-			case "reasoning-delta":
-				(this.reasoningContent.get(part.id) ?? this.openReasoning(part.id)).text += part.delta;
+			case "reasoning-delta": {
+				const block = this.reasoningContent.get(part.id) ?? this.openReasoning(part.id);
+				block.text += part.delta;
+				keepProviderMetadata(block, part.providerMetadata);
 				break;
+			}
 
-			case "reasoning-end":
+			case "reasoning-end": {
+				const block = this.reasoningContent.get(part.id);
+				if (block) {
+					keepProviderMetadata(block, part.providerMetadata);
+				}
 				this.reasoningContent.delete(part.id);
 				break;
+			}
 
 			case "tool-input-start":
 			case "tool-input-delta":
@@ -126,7 +141,7 @@ export class StreamContentAggregator {
 	}
 
 	private openReasoning(id: string) {
-		const block = { type: "reasoning" as const, text: "" };
+		const block: LanguageModelV4Reasoning = { type: "reasoning", text: "" };
 		this.reasoningContent.set(id, block);
 		this.content.push(block);
 		return block;
@@ -144,6 +159,16 @@ export class StreamContentAggregator {
 			warnings: this.warnings,
 			providerMetadata: this.providerMetadata,
 		};
+	}
+}
+
+// The latest part with metadata wins, as in `ai`'s streamText.
+function keepProviderMetadata(
+	block: LanguageModelV4Text | LanguageModelV4Reasoning,
+	providerMetadata: SharedV4ProviderMetadata | undefined,
+): void {
+	if (providerMetadata != null) {
+		block.providerMetadata = providerMetadata;
 	}
 }
 
