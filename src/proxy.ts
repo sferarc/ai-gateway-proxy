@@ -35,6 +35,7 @@ const NON_LANGUAGE_MODEL_PATHS = new Map<string, ModelCallKind>([
 ]);
 // @ai-sdk/gateway's calls that read or cancel a job rather than start a model call.
 const READ_PATHS = new Set(["batch/status", "batch/results", "batch/cancel", "video-model/status"]);
+const NULL_BODY_STATUS = new Set([204, 205]);
 // Successful bodies that are a sequence of values rather than one JSON value: event streams and JSON Lines.
 const STREAM_CONTENT_TYPE =
 	/^\s*(?:text\/event-stream|application\/(?:x-ndjson|jsonl|jsonlines|x-jsonlines))\s*(?:;|$)/i;
@@ -260,10 +261,10 @@ async function parseErrorBody(res: Response): Promise<GatewayError> {
 }
 
 /**
- * Builds response headers with the given content type plus the allowlisted upstream headers.
+ * Builds response headers with the given content type, if any, plus the allowlisted upstream headers.
  */
-function responseHeaders(res: Response, contentType: string): Headers {
-	const headers = new Headers({ "content-type": contentType });
+function responseHeaders(res: Response, contentType?: string): Headers {
+	const headers = new Headers(contentType ? { "content-type": contentType } : undefined);
 	for (const [name, value] of res.headers) {
 		if (FORWARDED_RESPONSE_HEADER.test(name)) {
 			headers.set(name, value);
@@ -400,6 +401,15 @@ async function forwardUpstreamResponse(
 	if (!res.ok) {
 		const errorBody = await parseErrorBody(res);
 		return await createErrorResponse(res, errorBody, requestBody, onError);
+	}
+
+	// A 204 or 205 has no body to parse or hand to afterResponse, and a Response with it cannot carry one.
+	if (NULL_BODY_STATUS.has(res.status)) {
+		return new Response(null, {
+			status: res.status,
+			statusText: res.statusText,
+			headers: responseHeaders(res),
+		});
 	}
 
 	if (isStreaming) {

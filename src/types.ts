@@ -165,6 +165,8 @@ export type CreateGatewayProxyOptions = {
 	 * `ai-language-model-streaming: true`, such as a video model call or batch results, which is
 	 * forwarded as is.
 	 *
+	 * Not called for a 204 or 205 response, which is forwarded without a body.
+	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
 	 * Not called when the path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway`
