@@ -32,7 +32,7 @@ As of 2026-10-30 (`gh issue list --state all`), one issue is open: #70 asked the
 - #96 (1b1b42c): the language model hooks get the client's `modelId`, so `afterResponse` can meter per model (listed as landed in [[roadmap]]).
 - #98 (1efd26f): CommonJS type declarations for the `require` export, checked by `pnpm attw` ([[development/ci]] step 10).
 - #74, #88, #89, #93, #97: README and doc comment changes with the tests that pin them ([[development/testing]]).
-- #79, #80: the weekly action pin and dependency updates ([[development/toolchain]], [[development/release]]).
+- #76, #79, #80: the weekly dependency updates (#76, #80) and action pin update (#79); #76 (dc6c3e2) moved the Node pin to `26.12.1` ([[development/toolchain]], [[development/release]]).
 
 ## Release
 
