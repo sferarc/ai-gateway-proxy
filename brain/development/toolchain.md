@@ -2,7 +2,7 @@
 
 ## Node and pnpm
 
-`mise.toml` pins Node `26.11.1` and pnpm `12.11.2`, with `lockfile = true`; `mise.lock` records their checksums per platform. `mise install` in the repository root provides both. After changing a version in `mise.toml`, run `mise lock` and commit both files. `package.json` `packageManager` names the same pnpm. There is no `engines` field, so the supported Node range for consumers is unknown.
+`mise.toml` pins Node and pnpm exactly (Node `26.12.1` from #76, dc6c3e2, and pnpm `12.14.0` from #49, 685973e; the weekly dependency update moves them, so read `mise.toml` for the current pair), with `lockfile = true`; `mise.lock` records their checksums per platform. `mise install` in the repository root provides both. After changing a version in `mise.toml`, run `mise lock` and commit both files. `package.json` `packageManager` names the same pnpm. There is no `engines` field, so the supported Node range for consumers is unknown.
 
 ## Commands
 
