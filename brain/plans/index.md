@@ -4,7 +4,7 @@ There was no milestone as of 2026-10-22 (`gh api repos/sferarc/ai-gateway-proxy/
 
 ## Open issues
 
-As of 2026-10-26 (`gh issue list --state open`), one issue is open: #70 asked the owner to decide the owner-blocked items in [[post-0-2-0-gaps]], and leaves item 3's paid gateway check with the owner. The owner decided on 2026-10-26 to build items 1, 2 and 4: fail-closed path matching, raw hooks for the other calls, and strict `afterResponse` validation.
+As of 2026-10-30 (`gh issue list --state all`), one issue is open: #70 asked the owner to decide the owner-blocked items in [[post-0-2-0-gaps]], and leaves item 3's paid gateway check with the owner. The owner decided on 2026-10-26 to build items 1, 2 and 4: fail-closed path matching, raw hooks for the other calls, and strict `afterResponse` validation, which landed in #73. #70 is still open for item 3. No pull request was open on 2026-10-30.
 
 ## Landed on main
 
@@ -23,6 +23,16 @@ As of 2026-10-26 (`gh issue list --state open`), one issue is open: #70 asked th
 - #67 (2705147): the [[post-0-2-0-gaps]] and plans index refresh after #59 to #66.
 - #68 (5f9f069): `src/non-language-model.test.ts` pins embedding, image, video and batch start passthrough against a fake gateway. Gap 3 in [[post-0-2-0-gaps]] stays open, since the real gateway's responses are still unobserved.
 - #69 (6dedaab): `src/redirect.test.ts` pins the refusal to follow gateway redirects over real HTTP ([[decisions/2026-10-21-fail-closed-redirects-and-hook-results]]).
+- #71 (464ee03): brain hashes that did not resolve replaced, and #67 to #70 logged here.
+- #73 (e1ee662): items 1, 2 and 4 of [[post-0-2-0-gaps]] built on the #70 decision ([[decisions/2026-10-26-fail-closed-path-matching]], [[decisions/2026-10-26-strict-after-response-results]], "Raw hooks" in [[architecture/proxy]]).
+- #72, #75, #77, #78, #81, #82 (81a2f08 to 62527ac): a hook result or request body the proxy cannot use is handled instead of forwarded as is; each is a step of [[architecture/proxy]].
+- #83, #85, #87, #90, #92 (5129346 to 2bd37cb): request and response bodies forwarded without needless reads, bodyless 204 and 205, and the missing credential typed `proxy_error` ([[architecture/proxy]]).
+- #84, #91, #95 (00780f7, fc319d5, ad2e81e): stream fixes for client aborts, `providerMetadata` and error parts ([[architecture/streaming]]).
+- #86 (8148a8f): `baseUrl` defaults to `/v4/ai` ([[decisions/2026-10-28-default-base-url-v4]]).
+- #96 (1b1b42c): the language model hooks get the client's `modelId`, so `afterResponse` can meter per model (listed as landed in [[roadmap]]).
+- #98 (1efd26f): CommonJS type declarations for the `require` export, checked by `pnpm attw` ([[development/ci]] step 10).
+- #74, #88, #89, #93, #97: README and doc comment changes with the tests that pin them ([[development/testing]]).
+- #79, #80: the weekly action pin and dependency updates ([[development/toolchain]], [[development/release]]).
 
 ## Release
 

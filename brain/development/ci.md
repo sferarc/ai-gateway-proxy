@@ -19,6 +19,10 @@ Steps 3 to 10 are the `check` script in `package.json`, kept as separate steps s
 
 Actions are pinned to full commit SHAs with the version in a trailing comment, because the organisation requires it (`ci.yml` header). Update both together.
 
+## HQ approved stack
+
+`.github/workflows/hq-stack.yml` (`HQ approved stack`) runs on pull requests, pushes to `main` and by hand, with two jobs: `Approved stack` and `No Claude attribution`. Its header says it is rendered in sferarc/hq and refreshed by the weekly action pin update (#3, #4, then #12, #48, #79), so do not edit it here. It is not the required check on `main`.
+
 ## Branch rules on `main`
 
 Read from the GitHub API on 2026-10-08 (ruleset `main-default`): changes through pull requests, required check `Check`, linear history, no force pushes, no deletion. Squash or rebase merges only, and merged branches are deleted.
