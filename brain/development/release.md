@@ -8,7 +8,7 @@ Releases use changesets. Publishing is off: `.github/workflows/release.yml` runs
 2. On a push to `main`, `changesets/action` opens or updates a version pull request from the pending changesets.
 3. Merging that pull request runs the workflow again, which publishes through `pnpm release` (`pnpm build && changeset publish`).
 
-The workflow authenticates to npm with trusted publishing: `id-token: write`, `publishConfig.provenance: true`, and no npm token stored. Each package's trusted publisher on npmjs.com must name this repository and `release.yml` (comments in `release.yml`). Whether that is configured for this repository is unknown; the published versions came from the monorepo. The action uses the `GIT_TOKEN` secret rather than `github.token`, because a version pull request merged by the Actions bot would otherwise not trigger the publish run.
+The workflow authenticates to npm with trusted publishing: `id-token: write`, `publishConfig.provenance: true`, and no npm token stored. Each package's trusted publisher on npmjs.com must name this repository and `release.yml` (comments in `release.yml`). Whether that is configured for this repository is unknown; the published versions came from the monorepo. The action uses a sferarc-hq App token minted by `actions/create-github-app-token` from the `HQ_APP_ID` and `HQ_APP_PRIVATE_KEY` organization secrets, rather than `github.token`, because a version pull request merged by the Actions bot would otherwise not trigger the publish run. An App token does trigger workflows, and the version commits and pull requests are authored by `sferarc-hq[bot]` rather than a person, the same setup as `sferarc/openapi`.
 
 `.changeset/config.json`: base branch `main`, public access, the default changelog generator, no auto-commit.
 
@@ -17,13 +17,15 @@ The workflow authenticates to npm with trusted publishing: `id-token: write`, `p
 Checked 2026-10-20 against `main` before #48 landed. The hash recorded then, fd2d0bb, does not resolve in this repository, so the exact commit is unknown; it is one of 685973e (#49) through 5df7d66 (#53), the `main` commits that could have been the tip on 2026-10-20 before a05f9d0 (#48).
 
 - `release.yml` is gated on `vars.RELEASE_ENABLED == 'true'`, runs `changesets/action` (pinned SHA, v2.1.2) with `publish-script: pnpm release`, and grants `id-token: write`, `contents: write` and `pull-requests: write` to the job only. Top-level permissions are `contents: read`.
-- `github-token` is `secrets.GIT_TOKEN`. `gh secret list --org sferarc` shows `GIT_TOKEN` as an organization secret visible to all repositories (created 2026-03-18). The repository has no secret of its own. Its scopes are unknown; it must be able to push branches and open pull requests here.
+- `github-token` was `secrets.GIT_TOKEN` at the time of this check; it is now the sferarc-hq App token (see [[#Current state]]).
 - Publishing relies on npm trusted publishing: no `NPM_TOKEN`, `publishConfig.provenance: true`, npm from the Node in `mise.toml`. Whether npmjs.com lists a trusted publisher for this repository is unknown and cannot be read without the owner's npm login.
 - `.changeset/config.json` is sound: base `main`, `access: public`, no auto-commit, no linked or fixed groups, nothing ignored.
 - #48 (a05f9d0) landed after this check and bumped the `jdx/mise-action` pin in `release.yml` to v5.2.1; the pin was verified against the upstream tag (#50). #79 (bf8546e) moved it to v5.2.3 by the weekly pin update; that pin was not checked by hand. The other claims here still hold.
 - `RELEASE_ENABLED` is not set (`gh variable list` shows only the `HQ_*` variables).
 
 ## Current state
+
+As of 2026-10-31, `release.yml` mints a sferarc-hq App token (`actions/create-github-app-token`, pinned to the same SHA as `sferarc/openapi`) and passes it to `changesets/action` in place of `GIT_TOKEN`, so no commit or pull request comes from a personal account.
 
 As of 2026-10-20:
 
@@ -35,7 +37,7 @@ As of 2026-10-20:
 ## Owner steps to publish
 
 1. On npmjs.com, open `ai-gateway-proxy` settings, Trusted Publisher, add GitHub Actions with owner `sferarc`, repository `ai-gateway-proxy`, workflow `release.yml`, no environment.
-2. Confirm `GIT_TOKEN` can push branches and open pull requests in `sferarc/ai-gateway-proxy` (it is already shared with the repository).
+2. Share the organization secrets `HQ_APP_ID` and `HQ_APP_PRIVATE_KEY` with `sferarc/ai-gateway-proxy`. As of 2026-10-31 both have selected-repository visibility and list only `openapi` (`gh api orgs/sferarc/actions/secrets/HQ_APP_ID/repositories`), so the token step fails until they are shared.
 3. Set the repository variable `RELEASE_ENABLED` to `true`. The next push to `main` opens the version pull request; merging it publishes.
 
 ## Rules for contributors and agents
