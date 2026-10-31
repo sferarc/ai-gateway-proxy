@@ -198,6 +198,18 @@ describe("E2E: AI SDK client through the proxy to a fake gateway", () => {
 			expect(result.providerMetadata?.custom).toEqual({ modified: true });
 		});
 
+		it("keeps the upstream usage when afterResponse returns none", async () => {
+			const gateway = await startProxy({
+				afterResponse: ({ response }) => ({ ...response, usage: undefined }),
+			});
+
+			const result = await generateText({ model: gateway(MODEL), prompt: "Hi" });
+
+			expect(result.text).toBe("Hello from the fake gateway");
+			expect(result.usage.inputTokens).toBe(7);
+			expect(result.usage.outputTokens).toBe(5);
+		});
+
 		it("names the client's model to every language model hook", async () => {
 			upstream.respondWith((res) => {
 				res.writeHead(404, { "content-type": "application/json" });
