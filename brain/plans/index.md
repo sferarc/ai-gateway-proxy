@@ -36,6 +36,6 @@ As of 2026-10-30 (`gh issue list --state all`), one issue is open: #70 asked the
 
 ## Release
 
-The first release is held. Publishing stays off until the owner sets the npm trusted publisher, confirms `GIT_TOKEN` and sets `RELEASE_ENABLED`; the steps are in [[development/release]] (#56) and the reason in [[decisions/2026-10-08-release-off-until-enabled]].
+The first release is held. Publishing stays off until the owner sets the npm trusted publisher, shares the `HQ_APP_*` secrets with the repository and sets `RELEASE_ENABLED`; the steps are in [[development/release]] (#56) and the reason in [[decisions/2026-10-08-release-off-until-enabled]].
 
 Add a note here when a plan is too long for an issue, and link it from the issue.

@@ -27,6 +27,19 @@ jobs:
       # npmjs.com must name this repository and release.yml.
       id-token: write
     steps:
+      # An App token rather than github.token: a version PR merged by the Actions bot
+      # pushes to main without triggering this workflow, so it would never publish.
+      - name: Mint the sferarc-hq App token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.HQ_APP_ID }}
+          private-key: ${{ secrets.HQ_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The npm bundled with the Node in mise.toml is the one that publishes, and
@@ -35,10 +48,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # GIT_TOKEN rather than github.token: a version PR merged by the Actions
-      # bot pushes to main without triggering this workflow, so it would never publish.
       - name: Create version PR or publish
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           publish-script: pnpm release
-          github-token: ${{ secrets.GIT_TOKEN }}
+          github-token: ${{ steps.app.outputs.token }}
