@@ -1184,6 +1184,16 @@ describe("createGatewayProxy", () => {
 				{ error: { message: "Slow down", type: 429 } },
 				"error.type must be a string or undefined",
 			],
+			[
+				"a boolean code",
+				{ error: { message: "Slow down", code: true } },
+				"error.code must be a string, a number or undefined",
+			],
+			[
+				"a numeric generationId",
+				{ error: { message: "Slow down" }, generationId: 7 },
+				"generationId must be a string or undefined",
+			],
 		])(
 			"forwards the upstream error body when the hook returns %s",
 			async (_name, result, problem) => {
@@ -1233,7 +1243,64 @@ describe("createGatewayProxy", () => {
 			expect(consoleError).not.toHaveBeenCalled();
 		});
 
-		it("gives a client built on @ai-sdk/gateway the upstream message when the hook result is invalid", async () => {
+		it.each([
+			["a string code", { error: { message: "Slow down", type: "x", code: "slow_down" } }],
+			["a numeric code", { error: { message: "Slow down", type: "x", code: 429 } }],
+			["a null code", { error: { message: "Slow down", type: "x", code: null } }],
+			["a generationId", { error: { message: "Slow down", type: "x" }, generationId: "gen_1" }],
+			["a null generationId", { error: { message: "Slow down", type: "x" }, generationId: null }],
+		])("sends a hook error with %s", async (_name, result: GatewayError) => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse({ error: { message: "Rate limited", type: "x" } }, { status: 429 }),
+			);
+
+			const proxy = createGatewayProxy({ onError: () => result });
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(429);
+			expect(await response.json()).toEqual(result);
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+
+		it.each([
+			["no error object", { message: "Slow down" }],
+			["a boolean code", { error: { message: "Slow down", code: true } }],
+			["a numeric generationId", { error: { message: "Slow down" }, generationId: 7 }],
+		])(
+			"gives a client built on @ai-sdk/gateway the upstream message when the hook result has %s",
+			async (_name, result) => {
+				mockFetch.mockResolvedValueOnce(
+					createMockHttpResponse(
+						{ error: { message: "Rate limited", type: "rate_limit_exceeded" } },
+						{ status: 429 },
+					),
+				);
+
+				// @ts-expect-error the hook type does not allow these results
+				const proxy = createGatewayProxy({ onError: () => result });
+				const provider = createGatewayProvider({
+					baseURL: "http://localhost/api",
+					apiKey: "client-key",
+					fetch: (input, init) =>
+						proxy(new Request(input, init), createMockContext(["language-model"])),
+				});
+
+				const error = await provider("openai/gpt-5")
+					.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] })
+					.then(
+						() => undefined,
+						(e: unknown) => e as Error,
+					);
+
+				expect(error?.message).toBe("Rate limited");
+			},
+		);
+
+		it("gives a client built on @ai-sdk/gateway the generationId the hook returns", async () => {
 			mockFetch.mockResolvedValueOnce(
 				createMockHttpResponse(
 					{ error: { message: "Rate limited", type: "rate_limit_exceeded" } },
@@ -1241,8 +1308,9 @@ describe("createGatewayProxy", () => {
 				),
 			);
 
-			// @ts-expect-error the hook type requires an error object
-			const proxy = createGatewayProxy({ onError: () => ({ message: "Slow down" }) });
+			const proxy = createGatewayProxy({
+				onError: ({ error }) => ({ ...error, generationId: "gen_1" }),
+			});
 			const provider = createGatewayProvider({
 				baseURL: "http://localhost/api",
 				apiKey: "client-key",
@@ -1254,10 +1322,11 @@ describe("createGatewayProxy", () => {
 				.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] })
 				.then(
 					() => undefined,
-					(e: unknown) => e as Error,
+					(e: unknown) => e as Error & { generationId?: string },
 				);
 
-			expect(error?.message).toBe("Rate limited");
+			expect(error?.message).toBe("Rate limited [gen_1]");
+			expect(error?.generationId).toBe("gen_1");
 		});
 
 		it("handles non-JSON error response from gateway", async () => {

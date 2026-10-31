@@ -88,5 +88,11 @@ export function gatewayErrorProblem(value: unknown): string | undefined {
 	if (!isNullish(error.type) && typeof error.type !== "string") {
 		return "error.type must be a string or undefined";
 	}
+	if (!isNullish(error.code) && typeof error.code !== "string" && typeof error.code !== "number") {
+		return "error.code must be a string, a number or undefined";
+	}
+	if (!isNullish(value.generationId) && typeof value.generationId !== "string") {
+		return "generationId must be a string or undefined";
+	}
 	return undefined;
 }
