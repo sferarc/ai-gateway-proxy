@@ -842,7 +842,6 @@ describe("createGatewayProxy", () => {
 
 		it.each([
 			["no warnings", { ...valid, warnings: undefined }],
-			["no usage", { ...valid, usage: undefined }],
 			["null in place of undefined", { ...valid, finishReason: { unified: "stop", raw: null } }],
 			[
 				"partial token counts",
@@ -864,6 +863,35 @@ describe("createGatewayProxy", () => {
 
 			expect(response.status).toBe(200);
 			expect(await response.json()).toEqual(JSON.parse(JSON.stringify(result)));
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+
+		it.each([
+			["undefined", (response: GatewayResponse) => ({ ...response, usage: undefined })],
+			["null", (response: GatewayResponse) => ({ ...response, usage: null })],
+			[
+				"deleted from the response it received",
+				(response: GatewayResponse) => {
+					delete response.usage;
+					return response;
+				},
+			],
+		])("keeps the upstream usage when the hook's usage is %s", async (_name, hook) => {
+			const upstreamBody = createMockGatewayResponse();
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(upstreamBody));
+
+			const proxy = createGatewayProxy({
+				// @ts-expect-error null stands in for undefined the way JSON does
+				afterResponse: ({ response }) => hook(response),
+			});
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/chat", { body: { prompt: [] } }),
+				createMockContext(["chat"]),
+			);
+
+			expect(response.status).toBe(200);
+			expect(await response.json()).toEqual(JSON.parse(JSON.stringify(upstreamBody)));
 			expect(consoleError).not.toHaveBeenCalled();
 		});
 

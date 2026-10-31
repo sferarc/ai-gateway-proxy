@@ -366,6 +366,8 @@ async function handleJsonResponse(
 	afterResponse: NonNullable<CreateGatewayProxyOptions["afterResponse"]>,
 ): Promise<Response> {
 	let responseBody: GatewayResponse = await res.json();
+	// Read before the hook, which may delete it from the object it receives.
+	const upstreamUsage = responseBody.usage;
 
 	const modified = await afterResponse({
 		request: requestBody,
@@ -381,7 +383,8 @@ async function handleJsonResponse(
 			console.error(message);
 			return proxyErrorResponse(500, "proxy_error", message);
 		}
-		responseBody = modified;
+		// As on a stream's finish event: the AI SDK reads usage from every generate result, so it cannot be stripped.
+		responseBody = { ...modified, usage: modified.usage ?? upstreamUsage };
 	}
 
 	return new Response(JSON.stringify(responseBody), {

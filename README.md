@@ -171,7 +171,7 @@ The path, whether from `extractPath` or the route param, must stay relative: one
 
 ### `afterResponse`
 
-- **Non-streamed responses:** receives the gateway's JSON body as `response`, and the value it returns is sent to the client instead. `undefined` or `null` forwards the upstream body. Any other result is checked against `GatewayResponse` (see "Result validation" below), and one that fails is answered with a 500 naming the problem instead of being sent.
+- **Non-streamed responses:** receives the gateway's JSON body as `response`, and the value it returns is sent to the client instead, with the gateway's `usage` when the result has none, as on a stream, since an AI SDK client reads usage from every result. `undefined` or `null` forwards the upstream body. Any other result is checked against `GatewayResponse` (see "Result validation" below), and one that fails is answered with a 500 naming the problem instead of being sent.
 - **Streamed responses:** every event is forwarded to the client as it arrives. When the `finish` event comes, the hook receives the aggregated response, and the `finishReason`, `usage` and `providerMetadata` it returns replace those in the `finish` event; content changes have no effect because the content has already been sent. If the hook throws, or returns a result that fails the check below, `undefined` or `null`, the error is logged and the original `finish` event is forwarded. If the stream ends, fails or is cancelled before its `finish` event, the hook runs once with the content received so far, `incomplete` set (`{ reason: "ended" }`, `{ reason: "error", error }` or `{ reason: "cancelled", cancelReason }`), `response.usage` `undefined` and `response.finishReason` `error` when the read failed or the stream sent an `error` part, `other` otherwise. A client that leaves counts as `cancelled` whether the framework cancels the response body or aborts `request.signal`, and is not logged. Nothing can be rewritten then, so its return value is ignored and a throw is logged. `response.usage` is typed `LanguageModelV4Usage | undefined`, so a hook that meters usage must handle `undefined`.
 - **Event streams and JSON Lines on other calls:** a successful `text/event-stream` or JSON Lines (`application/x-ndjson`, `application/jsonl`) response to a request without `ai-language-model-streaming: true`, such as the video model's `doGenerate` or the batch API's `doGetBatchResults`, is forwarded as is and the hook does not run, since it is not a language model response.
 - **No content:** a `204` or `205` response is forwarded with no body and no `content-type`, keeping the allowlisted headers, and the hook does not run, since there is no response to pass it.
@@ -183,7 +183,7 @@ A result is rejected when it is not an object or when a field is missing or has 
 
 - `content`: an array of objects, each with a string `type`
 - `finishReason`: an object with a string `unified`, and `raw` a string or absent
-- `usage`: absent, or an object whose `inputTokens` and `outputTokens` are objects with number or absent counts
+- `usage`: absent, or an object whose `inputTokens` and `outputTokens` are objects with number or absent counts; when absent, the gateway's `usage` is sent
 - `warnings`: absent or an array; `@ai-sdk/gateway` reads a missing one as none
 - `providerMetadata`: absent or an object
 
