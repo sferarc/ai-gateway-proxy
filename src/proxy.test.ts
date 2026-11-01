@@ -1,5 +1,6 @@
 import { createGatewayProvider } from "@ai-sdk/gateway";
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
+import { generateText } from "ai";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { createGatewayProxy } from "./proxy";
 import type { GatewayError, GatewayResponse } from "./types";
@@ -1171,6 +1172,80 @@ describe("createGatewayProxy", () => {
 			expect(consoleError).toHaveBeenCalledWith(
 				"onError hook returned no response, forwarding the upstream error body",
 			);
+		});
+
+		it.each([
+			[
+				"a sync",
+				() => {
+					throw new Error("hook failed");
+				},
+			],
+			[
+				"an async",
+				async () => {
+					throw new Error("hook failed");
+				},
+			],
+		])(
+			"forwards the upstream error body and status when %s hook throws",
+			async (_name, onError) => {
+				const errorResponse: GatewayError = {
+					error: { message: "Rate limited", type: "rate_limit_exceeded" },
+				};
+				const upstream = createMockHttpResponse(errorResponse, { status: 429 });
+				upstream.headers.set("retry-after", "3");
+				mockFetch.mockResolvedValueOnce(upstream);
+
+				const proxy = createGatewayProxy({ onError });
+				const request = createMockRequest("http://localhost/api/chat", {
+					body: { prompt: [] },
+				});
+
+				const response = await proxy(request, createMockContext(["chat"]));
+
+				expect(response.status).toBe(429);
+				expect(response.headers.get("content-type")).toBe("application/json");
+				expect(response.headers.get("retry-after")).toBe("3");
+				expect(await response.json()).toEqual(errorResponse);
+				expect(consoleError).toHaveBeenCalledOnce();
+				expect(consoleError.mock.calls[0]?.[0]).toBe(
+					"onError hook failed, forwarding the upstream error body:",
+				);
+				expect(consoleError.mock.calls[0]?.[1]).toHaveProperty("message", "hook failed");
+			},
+		);
+
+		it("gives a client built on @ai-sdk/gateway the upstream error without retrying when the hook throws", async () => {
+			mockFetch.mockImplementation(async () =>
+				createMockHttpResponse(
+					{ error: { message: "Bad prompt", type: "invalid_request_error" } },
+					{ status: 400 },
+				),
+			);
+
+			const proxy = createGatewayProxy({
+				onError: () => {
+					throw new Error("hook failed");
+				},
+			});
+			const provider = createGatewayProvider({
+				baseURL: "http://localhost/api",
+				apiKey: "client-key",
+				fetch: (input, init) =>
+					proxy(new Request(input, init), createMockContext(["language-model"])),
+			});
+
+			const result = await generateText({
+				model: provider("openai/gpt-5"),
+				prompt: "hi",
+			}).then(
+				() => undefined,
+				(e: unknown) => e as Error,
+			);
+
+			expect(result?.message).toBe("Bad prompt");
+			expect(mockFetch).toHaveBeenCalledOnce();
 		});
 
 		it.each([
@@ -3105,28 +3180,6 @@ describe("createGatewayProxy", () => {
 
 			const proxy = createGatewayProxy({
 				afterResponse: async () => {
-					throw new Error("hook failed");
-				},
-			});
-			const request = createMockRequest("http://localhost/api/chat", {
-				body: { prompt: [] },
-			});
-
-			const response = await proxy(request, createMockContext(["chat"]));
-
-			await expectProxyFailure(response);
-		});
-
-		it("returns 500 when onError throws", async () => {
-			mockFetch.mockResolvedValueOnce(
-				createMockHttpResponse(
-					{ error: { message: "Bad", type: "gateway_error" } },
-					{ status: 400 },
-				),
-			);
-
-			const proxy = createGatewayProxy({
-				onError: async () => {
 					throw new Error("hook failed");
 				},
 			});

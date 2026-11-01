@@ -213,7 +213,8 @@ export type CreateGatewayProxyOptions = {
 	 * A returned `Response` is sent as is.
 	 * Returning `undefined`, `null` or a body without a string `error.message` (or with a
 	 * non-string `error.type`, an `error.code` that is neither a string nor a number, or a
-	 * non-string `generationId`) logs an error and sends the upstream error body instead.
+	 * non-string `generationId`) logs an error and sends the upstream error body instead, and so
+	 * does a hook that throws.
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *

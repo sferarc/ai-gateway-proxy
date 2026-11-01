@@ -281,6 +281,42 @@ function passThroughResponse(res: Response): Response {
 }
 
 /**
+ * Runs onError and returns the body or Response to send, falling back to the upstream error body.
+ */
+async function runOnError(
+	onError: NonNullable<CreateGatewayProxyOptions["onError"]>,
+	res: Response,
+	upstreamError: GatewayError,
+	requestBody: LanguageModelV4CallOptions,
+): Promise<GatewayError | Response> {
+	let result: unknown;
+	try {
+		result = await onError({ request: requestBody, error: upstreamError, status: res.status });
+	} catch (error) {
+		// A 500 would hide the upstream status and its retry-after, and make a 400 look retryable.
+		console.error("onError hook failed, forwarding the upstream error body:", error);
+		return upstreamError;
+	}
+
+	if (result instanceof Response) {
+		return result;
+	}
+	// A JavaScript caller can return nothing, such as a hook that only logs.
+	if (result === undefined || result === null) {
+		console.error("onError hook returned no response, forwarding the upstream error body");
+		return upstreamError;
+	}
+	const problem = gatewayErrorProblem(result);
+	if (problem) {
+		console.error(
+			`onError hook returned an invalid error, forwarding the upstream error body: ${problem}`,
+		);
+		return upstreamError;
+	}
+	return result as GatewayError;
+}
+
+/**
  * Creates an error response, optionally applying the onError hook.
  */
 async function createErrorResponse(
@@ -289,31 +325,11 @@ async function createErrorResponse(
 	requestBody: LanguageModelV4CallOptions,
 	onError: CreateGatewayProxyOptions["onError"],
 ): Promise<Response> {
-	let errorBody = upstreamError;
-	if (onError) {
-		const result = await onError({
-			request: requestBody,
-			error: upstreamError,
-			status: res.status,
-		});
-
-		if (result instanceof Response) {
-			return result;
-		}
-
-		// A JavaScript caller can return nothing, such as a hook that only logs.
-		if (result === undefined || result === null) {
-			console.error("onError hook returned no response, forwarding the upstream error body");
-		} else {
-			const problem = gatewayErrorProblem(result);
-			if (problem) {
-				console.error(
-					`onError hook returned an invalid error, forwarding the upstream error body: ${problem}`,
-				);
-			} else {
-				errorBody = result;
-			}
-		}
+	const errorBody = onError
+		? await runOnError(onError, res, upstreamError, requestBody)
+		: upstreamError;
+	if (errorBody instanceof Response) {
+		return errorBody;
 	}
 
 	return new Response(JSON.stringify(errorBody), {
