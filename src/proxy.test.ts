@@ -3071,6 +3071,35 @@ describe("createGatewayProxy", () => {
 			expect(afterResponse).not.toHaveBeenCalled();
 		});
 
+		it.each([
+			["null", "null"],
+			["an array", "[]"],
+			["a string", '"ok"'],
+			["a number", "42"],
+		])(
+			"returns 500 without running afterResponse when a successful body is %s",
+			async (_, body) => {
+				mockFetch.mockResolvedValueOnce(
+					new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+				);
+				const afterResponse = vi.fn();
+
+				const proxy = createGatewayProxy({ afterResponse });
+				const request = createMockRequest("http://localhost/api/chat", {
+					body: { prompt: [] },
+				});
+
+				const response = await proxy(request, createMockContext(["chat"]));
+
+				await expectProxyFailure(response);
+				expect(afterResponse).not.toHaveBeenCalled();
+				expect(consoleError.mock.calls[0]?.[1]).toHaveProperty(
+					"message",
+					"AI Gateway returned a successful body that is not a JSON object",
+				);
+			},
+		);
+
 		it("returns 500 when afterResponse throws", async () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 

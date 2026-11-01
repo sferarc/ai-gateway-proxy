@@ -365,7 +365,11 @@ async function handleJsonResponse(
 	requestBody: LanguageModelV4CallOptions,
 	afterResponse: NonNullable<CreateGatewayProxyOptions["afterResponse"]>,
 ): Promise<Response> {
-	let responseBody: GatewayResponse = await res.json();
+	const parsed: unknown = await res.json();
+	if (!isRecord(parsed)) {
+		throw new TypeError("AI Gateway returned a successful body that is not a JSON object");
+	}
+	let responseBody = parsed as GatewayResponse;
 	// Read before the hook, which may delete it from the object it receives.
 	const upstreamUsage = responseBody.usage;
 
