@@ -10,7 +10,7 @@ A TypeScript library published to npm as `ai-gateway-proxy`, shipped as ESM and 
 | `src/auth.ts` | `getGatewayAuthToken`, `GatewayAuthToken` | Picks the credential. See [[auth]] |
 | `src/stream.ts` | `createStreamTransformer`, `StreamContentAggregator` | Parses the SSE response and rebuilds the full response for `afterResponse`. See [[streaming]] |
 | `src/hook-result.ts` | `isRecord`, `gatewayResponseProblem`, `gatewayErrorProblem`, internal | Checks hook inputs and results: `isRecord` the request body and a `beforeRequest` result ([[proxy]] steps 5 and 6), `gatewayErrorProblem` an `onError` result (step 8, #77), `gatewayResponseProblem` an `afterResponse` result (step 9) |
-| `src/types.ts` | `CreateGatewayProxyOptions`, `CreateGatewayProxyFn`, `CreateGatewayProxyResult`, `GatewayResponse`, `GatewayError`, `IncompleteStream`, `ModelCallKind`, `RawRequestContext`, `RawResponseContext` | Option, hook context and result types |
+| `src/types.ts` | `CreateGatewayProxyOptions`, `CreateGatewayProxyFn`, `CreateGatewayProxyResult`, `GatewayResponse`, `GatewayResponseMetadata`, `GatewayError`, `IncompleteStream`, `ModelCallKind`, `RawRequestContext`, `RawResponseContext` | Option, hook context and result types |
 
 ## Runtime dependencies
 

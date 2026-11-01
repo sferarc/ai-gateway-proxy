@@ -7,6 +7,7 @@ export type {
 	CreateGatewayProxyResult,
 	GatewayError,
 	GatewayResponse,
+	GatewayResponseMetadata,
 	IncompleteStream,
 	ModelCallKind,
 	RawRequestContext,
