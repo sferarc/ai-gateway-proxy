@@ -3,7 +3,7 @@ import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { generateText } from "ai";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { createGatewayProxy } from "./proxy";
-import type { GatewayError, GatewayResponse } from "./types";
+import type { CreateGatewayProxyOptions, GatewayError, GatewayResponse } from "./types";
 
 vi.mock("@vercel/oidc", () => ({
 	getVercelOidcToken: vi.fn(),
@@ -946,6 +946,62 @@ describe("createGatewayProxy", () => {
 				temperature: 0.5,
 				maxOutputTokens: 500,
 			});
+		});
+
+		// Pins current behavior for the owner decision in brain/plans/roadmap.md, not a contract.
+		describe("a 500 after the gateway answered", () => {
+			beforeEach(() => {
+				vi.useFakeTimers({ toFake: ["setTimeout"] });
+			});
+
+			afterEach(() => {
+				vi.useRealTimers();
+			});
+
+			it.each<[string, () => Response, CreateGatewayProxyOptions["afterResponse"]]>([
+				[
+					"the hook throws",
+					() => createMockHttpResponse(createMockGatewayResponse()),
+					() => {
+						throw new Error("meter down");
+					},
+				],
+				[
+					"the hook returns an invalid result",
+					() => createMockHttpResponse(createMockGatewayResponse()),
+					({ response }) => ({ ...response, content: "Hello!" }) as unknown as GatewayResponse,
+				],
+				[
+					"the success body is not a JSON object",
+					() => createMockHttpResponse(null),
+					({ response }) => response,
+				],
+			])(
+				"makes generateText call the gateway three times when %s",
+				async (_, upstream, afterResponse) => {
+					process.env.AI_GATEWAY_API_KEY = "gateway-key";
+					mockFetch.mockImplementation(async () => upstream());
+
+					const proxy = createGatewayProxy({ afterResponse });
+					const provider = createGatewayProvider({
+						baseURL: "http://localhost/api",
+						apiKey: "client-key",
+						fetch: (input, init) =>
+							proxy(new Request(input, init), createMockContext(["language-model"])),
+					});
+
+					const settled = generateText({ model: provider("openai/gpt-5"), prompt: "hi" }).then(
+						() => undefined,
+						(e: unknown) => e as Error,
+					);
+					// ai's default backoff waits 2s, then 4s, between its two retries.
+					await vi.advanceTimersByTimeAsync(10_000);
+					const error = await settled;
+
+					expect(error?.message).toContain("Failed after 3 attempts");
+					expect(mockFetch).toHaveBeenCalledTimes(3);
+				},
+			);
 		});
 	});
 
