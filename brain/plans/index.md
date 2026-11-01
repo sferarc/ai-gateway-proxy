@@ -1,10 +1,6 @@
 # Plans
 
-There was no milestone as of 2026-10-22 (`gh api repos/sferarc/ai-gateway-proxy/milestones`; not rechecked on 2026-10-24). [[roadmap]] lists the open gaps recorded in the architecture notes. [[post-0-2-0-gaps]] records the unknowns left once those land.
-
-## Open issues
-
-As of 2026-10-30 (`gh issue list --state all`), one issue is open: #70 asked the owner to decide the owner-blocked items in [[post-0-2-0-gaps]], and leaves item 3's paid gateway check with the owner. The owner decided on 2026-10-26 to build items 1, 2 and 4: fail-closed path matching, raw hooks for the other calls, and strict `afterResponse` validation, which landed in #73. #70 is still open for item 3. No pull request was open on 2026-10-30.
+GitHub Issues are the source of truth for pending work: open issues labelled `product:ai-gateway-proxy`, grouped by the `roadmap` tracking issues #113 (first npm release) and #114 (owner questions on gateway errors and call coverage). [[roadmap]] keeps the vision and phases and links those issues. [[post-0-2-0-gaps]] keeps the history of the round after 0.2.0.
 
 ## Landed on main
 
@@ -36,6 +32,6 @@ As of 2026-10-30 (`gh issue list --state all`), one issue is open: #70 asked the
 
 ## Release
 
-The first release is held. Publishing stays off until the owner sets the npm trusted publisher, shares the `HQ_APP_*` secrets with the repository and sets `RELEASE_ENABLED`; the steps are in [[development/release]] (#56) and the reason in [[decisions/2026-10-08-release-off-until-enabled]].
+The first release is held until the owner enables publishing; the steps are in [[development/release]] (#56), the reason in [[decisions/2026-10-08-release-off-until-enabled]], and the owner action in #112 under #113.
 
 Add a note here when a plan is too long for an issue, and link it from the issue.
