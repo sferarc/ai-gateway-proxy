@@ -174,7 +174,8 @@ export type CreateGatewayProxyOptions = {
 	 * the aggregated response. The content has already been streamed, but you
 	 * can modify the finish event metadata (usage, finishReason, providerMetadata).
 	 * If the hook throws while handling a stream, the error is logged and the
-	 * original finish event is forwarded unchanged.
+	 * original finish event is forwarded unchanged. It runs once per stream: a
+	 * later finish event gets the same rewrite, or none if the hook failed.
 	 *
 	 * A stream that ends, fails or is cancelled before its finish event calls the hook once
 	 * with the content received so far, `incomplete` set, `response.usage` undefined and
