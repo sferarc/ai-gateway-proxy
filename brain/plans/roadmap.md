@@ -1,18 +1,16 @@
 # Roadmap
 
-There is no milestone on the repository. This note collects the open gaps recorded in [[architecture/proxy]] and [[architecture/streaming]] so the next shift can pick from one list. Each item names its source and what blocks it. Items under Needs the owner need a decision on the public contract before any code.
+GitHub Issues are the source of truth for pending work, progress and priority: open issues labelled `product:ai-gateway-proxy`, and the `roadmap` tracking issues below. This note keeps the vision and the phases only; file new work as an issue, not here.
 
-## Needs the owner
+## Vision
 
-- **A gateway 401 reaches the client as advice about its own key.** When the gateway rejects the proxy's credential with `authentication_error`, step 8 of [[architecture/proxy]] forwards that body, and `@ai-sdk/gateway` turns the type into `GatewayAuthenticationError.createContextualError` from the client's own auth method, so the client is told its key is invalid. The proxy's missing credential was fixed by typing it `proxy_error` (step 1); rewriting the gateway's own error, or leaving it to `onError`, is a choice about forwarding upstream errors unchanged. Found by reading `createGatewayErrorFromResponse` in `@ai-sdk/gateway` 4.0.126 `dist/index.js`, and pinned by `gives a client built on @ai-sdk/gateway advice about its own API key` under `when the gateway rejects the proxy's credential` in `src/proxy.test.ts`. A caller can already avoid it: an `onError` that retypes the error, such as to `proxy_error`, gives the client the gateway's message (`lets onError retype the error so the client keeps the gateway's message`).
-- **Some client calls never reach the proxy.** Streaming speech and transcription and the realtime model open a WebSocket under `baseURL`, which a `Request` to `Response` handler cannot carry, and credits, spend report, generation info and the `getToken` client secrets go to `/v1/*` at the origin of `baseURL`. Both are documented, not supported ("Calls that do not reach the handler" in [[architecture/proxy]]). Supporting either changes what the proxy is: an upgrade-capable server for the first, routes outside the catch-all for the second. Found by reading `@ai-sdk/gateway` 4.0.126 `dist/index.js`; the URLs the client builds are pinned by `src/client-bypass.test.ts`.
+A small route handler that lets an AI SDK client reach the Vercel AI Gateway through the caller's own server, with the caller's credential and hooks, and that forwards everything else unchanged. Gaps come from [[architecture/proxy]] and [[architecture/streaming]].
 
-- **A proxy 500 after the gateway answered makes the client pay for the call three times.** On a non-streamed language model call, a throwing `afterResponse`, an `afterResponse` result that fails validation and a success body that is not a JSON object each return 500 `proxy_error` after the gateway has answered, and billed, the call (steps 9 and 10 of [[architecture/proxy]]). `@ai-sdk/gateway` 4.0.126 sets `isRetryable` on the error it builds from the status alone (the `GatewayError` constructor in its `dist/index.js`), and `ai` 7.0.153's `generateText` retries a retryable error twice by default (`retryWithExponentialBackoffRespectingRetryHeaders`), so each such request reaches the gateway three times and runs the hook three times. The status is part of [[decisions/2026-10-26-strict-after-response-results]] and of the README's table of responses, and the client has no way to mark a 5xx as final, so stopping the retries means answering with a status it does not retry (a 4xx other than 408, 409 or 429), forwarding the upstream body instead (which sends what a failing hook was meant to change), or leaving it to the caller's `maxRetries`. Pinned by `makes generateText call the gateway three times when ...` under `afterResponse hook` in `src/proxy.test.ts`. A throwing or invalid `beforeRequest` is a 500 retried by the same rule, but before any gateway call. Streams are not affected: a failing hook there forwards the upstream `finish` event ([[architecture/streaming]]).
+## Phases
 
-## Can be done without the owner
+- **First npm release**, #113: the publish path is built and held until the owner enables it ([[development/release]]). Child: #112.
+- **Owner questions on gateway errors and call coverage**, #114: each changes the public contract or needs paid gateway calls. Children: #109 (a proxy 500 after a billed answer makes the client retry), #110 (a gateway 401 blames the client's own key), #70 (non-language-model calls against the real gateway, item 3 of [[post-0-2-0-gaps]]), #111 (client calls that bypass the handler, "Calls that do not reach the handler" in [[architecture/proxy]]).
 
-None open.
-
-Update this note when a new gap is recorded in the architecture notes.
+Close a phase's tracking issue when its children are closed, and update its line here.
 
 Landed: hooks on streams that end without `finish` ([[decisions/2026-10-21-hook-on-unfinished-streams]]); `modelId` on the language model hooks, so `afterResponse` can meter per model ([[architecture/proxy]] step 6).
