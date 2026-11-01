@@ -218,9 +218,9 @@ function sseEvent(data: string): string {
  * Creates a transform stream that:
  * 1. Passes through all SSE events immediately
  * 2. Aggregates content using StreamContentAggregator
- * 3. Calls afterResponse when finish event is received, or once with partial content if the
+ * 3. Calls afterResponse once: on the first finish event, or with partial content if the
  *    stream ends, fails or is cancelled first
- * 4. Modifies the finish event based on afterResponse result
+ * 4. Modifies every finish event based on that afterResponse result
  *
  * Pass the client request's `signal` when it is also the upstream fetch's signal: a read that
  * fails because it aborted is then reported as a cancel rather than an upstream failure.
@@ -245,6 +245,7 @@ export function createStreamTransformer(
 	const reader = eventStream.getReader();
 	let cancelled = false;
 	let finishSeen = false;
+	let hookResult: GatewayResponse | undefined;
 	let incompleteReported = false;
 	let warnedNonJson = false;
 
@@ -280,7 +281,27 @@ export function createStreamTransformer(
 			return data;
 		}
 
-		finishSeen = true;
+		// A later finish reuses the first result, so a metering hook counts the stream once.
+		if (!finishSeen) {
+			finishSeen = true;
+			hookResult = await runAfterResponse();
+		}
+		if (!hookResult) {
+			return data;
+		}
+		const modifiedFinish: LanguageModelV4StreamPart = {
+			type: "finish",
+			finishReason: hookResult.finishReason,
+			usage: hookResult.usage ?? parsed.usage,
+			providerMetadata: hookResult.providerMetadata ?? undefined,
+		};
+		return JSON.stringify(modifiedFinish);
+	}
+
+	/**
+	 * Calls afterResponse on finish and returns its result, or undefined when it threw or is invalid.
+	 */
+	async function runAfterResponse(): Promise<GatewayResponse | undefined> {
 		let modifiedResponse: GatewayResponse;
 		try {
 			modifiedResponse = await afterResponse({
@@ -289,22 +310,16 @@ export function createStreamTransformer(
 			});
 		} catch (error) {
 			console.error("afterResponse hook failed, forwarding original finish event:", error);
-			return data;
+			return undefined;
 		}
 		const problem = gatewayResponseProblem(modifiedResponse);
 		if (problem) {
 			console.error(
 				`afterResponse hook returned an invalid response, forwarding original finish event: ${problem}`,
 			);
-			return data;
+			return undefined;
 		}
-		const modifiedFinish: LanguageModelV4StreamPart = {
-			type: "finish",
-			finishReason: modifiedResponse.finishReason,
-			usage: modifiedResponse.usage ?? parsed.usage,
-			providerMetadata: modifiedResponse.providerMetadata ?? undefined,
-		};
-		return JSON.stringify(modifiedFinish);
+		return modifiedResponse;
 	}
 
 	// No finish event is left to rewrite, so the result is ignored and a throw only logged.

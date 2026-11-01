@@ -890,6 +890,46 @@ describe("createStreamTransformer", () => {
 		},
 	);
 
+	it("calls the hook once and rewrites a second finish event with the same result", async () => {
+		const secondFinish = { ...finishEvent, usage: { ...usage, inputTokens: { total: 20 } } };
+		const hook = vi.fn(({ response }: { response: GatewayResponse }) => ({
+			...response,
+			providerMetadata: { meter: { counted: true } },
+		}));
+		const output = await readAll(
+			createStreamTransformer(
+				sourceOf([sse(finishEvent), sse(secondFinish), sse("[DONE]")]),
+				requestBody,
+				hook,
+			),
+		);
+
+		expect(hook).toHaveBeenCalledOnce();
+		const finishes = output
+			.trim()
+			.split("\n\n")
+			.slice(0, 2)
+			.map((event) => JSON.parse(event.slice("data: ".length)));
+		expect(finishes).toEqual([
+			{ ...finishEvent, usage, providerMetadata: { meter: { counted: true } } },
+			{ ...finishEvent, usage, providerMetadata: { meter: { counted: true } } },
+		]);
+	});
+
+	it("forwards every finish event unchanged after the hook throws once", async () => {
+		const secondFinish = { ...finishEvent, usage: { ...usage, inputTokens: { total: 20 } } };
+		const hook = vi.fn(async () => {
+			throw new Error("hook failed");
+		});
+		const output = await readAll(
+			createStreamTransformer(sourceOf([sse(finishEvent), sse(secondFinish)]), requestBody, hook),
+		);
+
+		expect(hook).toHaveBeenCalledOnce();
+		expect(output).toBe(sse(finishEvent) + sse(secondFinish));
+		expect(consoleError).toHaveBeenCalledOnce();
+	});
+
 	it("cancels the source when the output stream is cancelled", async () => {
 		const cancel = vi.fn();
 		const source = new ReadableStream<Uint8Array>({
