@@ -469,6 +469,63 @@ describe("StreamContentAggregator", () => {
 		});
 	});
 
+	describe("response metadata", () => {
+		// Off the wire the timestamp is a string, which the part type does not allow.
+		function metadataPart(fields: Record<string, unknown>): LanguageModelV4StreamPart {
+			return { type: "response-metadata", ...fields } as unknown as LanguageModelV4StreamPart;
+		}
+
+		it("records the id, model and timestamp of a response-metadata part", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process(
+				metadataPart({
+					id: "resp_1",
+					modelId: "gpt-5-2025",
+					timestamp: "2026-11-01T10:00:00.000Z",
+				}),
+			);
+
+			expect(aggregator.getResponse().response).toStrictEqual({
+				id: "resp_1",
+				modelId: "gpt-5-2025",
+				timestamp: "2026-11-01T10:00:00.000Z",
+			});
+		});
+
+		it("keeps earlier fields a later part leaves out and takes the later value of a field it repeats", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process(metadataPart({ id: "resp_1", modelId: "gpt-5" }));
+			aggregator.process(
+				metadataPart({ modelId: "gpt-5-2025", timestamp: "2026-11-01T10:00:00.000Z" }),
+			);
+
+			expect(aggregator.getResponse().response).toStrictEqual({
+				id: "resp_1",
+				modelId: "gpt-5-2025",
+				timestamp: "2026-11-01T10:00:00.000Z",
+			});
+		});
+
+		it("ignores fields that are not strings", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process(metadataPart({ id: 7, modelId: null, timestamp: {} }));
+			aggregator.process(metadataPart({ id: "resp_1" }));
+
+			expect(aggregator.getResponse().response).toStrictEqual({ id: "resp_1" });
+		});
+
+		it("leaves out response when no part carries metadata", () => {
+			const aggregator = new StreamContentAggregator();
+
+			aggregator.process(metadataPart({ id: 7 }));
+
+			expect(aggregator.getResponse()).not.toHaveProperty("response");
+		});
+	});
+
 	describe("finish event", () => {
 		it("captures finish reason and usage", () => {
 			const aggregator = new StreamContentAggregator();
@@ -1178,6 +1235,40 @@ describe("createStreamTransformer", () => {
 		]);
 		expect(output).toContain(sse(events[1]));
 		expect(output).toContain(sse(events[3]));
+	});
+
+	it("passes the response metadata to the hook and forwards the part unchanged", async () => {
+		const metadata = {
+			type: "response-metadata",
+			id: "resp_1",
+			modelId: "gpt-5-2025",
+			timestamp: "2026-11-01T10:00:00.000Z",
+		};
+		const hook = vi.fn(passThroughHook);
+		const output = await readAll(
+			createStreamTransformer(sourceOf([sse(metadata), sse(finishEvent)]), requestBody, hook),
+		);
+
+		expect(hook.mock.calls[0]?.[0].response.response).toStrictEqual({
+			id: "resp_1",
+			modelId: "gpt-5-2025",
+			timestamp: "2026-11-01T10:00:00.000Z",
+		});
+		expect(output.startsWith(sse(metadata))).toBe(true);
+	});
+
+	it("passes the response metadata to the hook when the stream ends without finish", async () => {
+		const hook = vi.fn(passThroughHook);
+		await readAll(
+			createStreamTransformer(
+				sourceOf([sse({ type: "response-metadata", id: "resp_1" })]),
+				requestBody,
+				hook,
+			),
+		);
+
+		expect(hook.mock.calls[0]?.[0].incomplete).toEqual({ reason: "ended" });
+		expect(hook.mock.calls[0]?.[0].response.response).toStrictEqual({ id: "resp_1" });
 	});
 
 	it("parses an event split across chunks mid-JSON", async () => {

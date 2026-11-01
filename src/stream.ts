@@ -11,7 +11,12 @@ import type {
 } from "@ai-sdk/provider";
 import { EventSourceParserStream } from "@ai-sdk/provider-utils";
 import { gatewayResponseProblem } from "./hook-result";
-import type { CreateGatewayProxyOptions, GatewayResponse, IncompleteStream } from "./types";
+import type {
+	CreateGatewayProxyOptions,
+	GatewayResponse,
+	GatewayResponseMetadata,
+	IncompleteStream,
+} from "./types";
 
 /**
  * Aggregator for collecting stream content.
@@ -36,6 +41,8 @@ export class StreamContentAggregator {
 	private usage: LanguageModelV4Usage | undefined;
 
 	private providerMetadata: SharedV4ProviderMetadata | undefined;
+
+	private response: GatewayResponseMetadata | undefined;
 
 	/**
 	 * Process a stream part and update aggregated state.
@@ -123,6 +130,10 @@ export class StreamContentAggregator {
 				this.content.push(part);
 				break;
 
+			case "response-metadata":
+				this.recordResponseMetadata(part);
+				break;
+
 			case "error":
 				// A later finish part still sets its own reason; this one stands only if none comes.
 				this.finishReason = { unified: "error", raw: undefined };
@@ -135,6 +146,20 @@ export class StreamContentAggregator {
 				this.usage = part.usage;
 				this.providerMetadata = part.providerMetadata;
 				break;
+		}
+	}
+
+	// Each field keeps its last string value, as in `ai`'s streamText; the timestamp is still the wire string.
+	private recordResponseMetadata(part: {
+		id?: unknown;
+		modelId?: unknown;
+		timestamp?: unknown;
+	}): void {
+		for (const field of ["id", "modelId", "timestamp"] as const) {
+			const value = part[field];
+			if (typeof value === "string") {
+				this.response = { ...this.response, [field]: value };
+			}
 		}
 	}
 
@@ -163,6 +188,7 @@ export class StreamContentAggregator {
 			usage: this.usage,
 			warnings: this.warnings,
 			providerMetadata: this.providerMetadata,
+			...(this.response && { response: this.response }),
 		};
 	}
 }

@@ -18,6 +18,20 @@ export type GatewayResponse = {
 	usage: LanguageModelV4Usage | undefined;
 	warnings: SharedV4Warning[];
 	providerMetadata?: SharedV4ProviderMetadata;
+	/**
+	 * The provider's response id, model and start time, from a stream's `response-metadata` parts.
+	 * `timestamp` is the string sent over the wire, not a `Date`. Neither the proxy nor the client reads it from a result.
+	 */
+	response?: GatewayResponseMetadata;
+};
+
+/**
+ * What a stream's `response-metadata` parts say about the response, the latest value of each field winning.
+ */
+export type GatewayResponseMetadata = {
+	id?: string;
+	modelId?: string;
+	timestamp?: string;
 };
 
 /**
