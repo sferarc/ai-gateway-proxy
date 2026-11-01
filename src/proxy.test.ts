@@ -220,6 +220,50 @@ describe("createGatewayProxy", () => {
 			);
 			expect(mockFetch).not.toHaveBeenCalled();
 		});
+
+		describe("when the gateway rejects the proxy's credential", () => {
+			const rejection = {
+				error: { message: "Invalid API key", type: "authentication_error" },
+			};
+
+			async function generateThroughProxy(options: CreateGatewayProxyOptions = {}) {
+				process.env.AI_GATEWAY_API_KEY = "revoked-gateway-key";
+				mockFetch.mockResolvedValueOnce(
+					createMockHttpResponse(rejection, { status: 401, statusText: "Unauthorized" }),
+				);
+				const proxy = createGatewayProxy(options);
+				const provider = createGatewayProvider({
+					baseURL: "http://localhost/api",
+					apiKey: "client-key",
+					fetch: (input, init) =>
+						proxy(new Request(input, init), createMockContext(["language-model"])),
+				});
+				return provider("openai/gpt-5")
+					.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] })
+					.then(
+						() => undefined,
+						(e: unknown) => e as Error,
+					);
+			}
+
+			// Pins the roadmap's owner item: the client blames its own key for the proxy's.
+			it("gives a client built on @ai-sdk/gateway advice about its own API key", async () => {
+				const error = await generateThroughProxy();
+
+				expect(error?.message).toMatch(
+					/^AI Gateway authentication failed: Invalid API key or token\.\n\nCreate a new API key/,
+				);
+				expect(mockFetch).toHaveBeenCalledTimes(1);
+			});
+
+			it("lets onError retype the error so the client keeps the gateway's message", async () => {
+				const error = await generateThroughProxy({
+					onError: ({ error }) => ({ error: { ...error.error, type: "proxy_error" } }),
+				});
+
+				expect(error?.message).toBe("Invalid API key");
+			});
+		});
 	});
 
 	describe("request handling", () => {
