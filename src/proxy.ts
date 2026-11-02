@@ -41,6 +41,7 @@ const ANSWERED_CALL_FAILURE_STATUS = 424;
 // Successful bodies that are a sequence of values rather than one JSON value: event streams and JSON Lines.
 const STREAM_CONTENT_TYPE =
 	/^\s*(?:text\/event-stream|application\/(?:x-ndjson|jsonl|jsonlines|x-jsonlines))\s*(?:;|$)/i;
+const JSON_CONTENT_TYPE = /^\s*application\/(?:[\w.+-]+\+)?json\s*(?:;|$)/i;
 
 /**
  * Extracts the path from the request using either a custom extractor or route params.
@@ -215,9 +216,40 @@ async function forwardBodylessRequest(
 			return redirectRefusedResponse(res);
 		}
 
-		return passThroughResponse(res);
+		return await bodylessUpstreamResponse(res);
 	} catch (error) {
 		return proxyFailureResponse(request, error);
+	}
+}
+
+/**
+ * Passes a bodyless request's response through, except that a JSON error typed
+ * `authentication_error` is retyped as for a call with a body. Only JSON error bodies are read.
+ */
+async function bodylessUpstreamResponse(res: Response): Promise<Response> {
+	const contentType = res.headers.get("content-type") ?? "application/json";
+	if (res.ok || !res.body || !JSON_CONTENT_TYPE.test(contentType)) {
+		return passThroughResponse(res);
+	}
+
+	const text = await res.text();
+	const parsed = parseJsonOrUndefined(text);
+	const body =
+		isGatewayError(parsed) && parsed.error.type === "authentication_error"
+			? JSON.stringify(retypeProxyCredentialError(parsed))
+			: text;
+	return new Response(body, {
+		status: res.status,
+		statusText: res.statusText,
+		headers: responseHeaders(res, contentType),
+	});
+}
+
+function parseJsonOrUndefined(text: string): unknown {
+	try {
+		return JSON.parse(text);
+	} catch {
+		return undefined;
 	}
 }
 

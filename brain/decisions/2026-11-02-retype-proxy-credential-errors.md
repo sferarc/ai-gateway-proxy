@@ -4,7 +4,7 @@ Decided by the owner on 2026-11-01 in #110; the message wording was picked by th
 
 ## Decision
 
-When the gateway answers a call that carries a body with an error typed `authentication_error`, the proxy retypes it as `proxy_error` and prefixes the message with `AI Gateway rejected the proxy's credential: `, keeping the status, `code`, `param`, `generationId` and the allowlisted headers (`retypeProxyCredentialError` in `src/proxy.ts`, step 8 of [[architecture/proxy]]). It happens before `onError`, so the hook and a hook that falls back both see the retyped error.
+When the gateway answers with an error typed `authentication_error`, the proxy retypes it as `proxy_error` and prefixes the message with `AI Gateway rejected the proxy's credential: `, keeping the status, `code`, `param`, `generationId` and the allowlisted headers (`retypeProxyCredentialError` in `src/proxy.ts`, step 8 of [[architecture/proxy]]). It happens before `onError`, so the hook and a hook that falls back both see the retyped error.
 
 ## Why
 
@@ -14,9 +14,9 @@ The proxy authenticates upstream with its own `AI_GATEWAY_API_KEY` or Vercel OID
 
 `proxy_error` is not a type the client maps, so it builds a `GatewayInternalServerError` that keeps the message and the upstream status; 401 is not retryable, so `generateText` does not resend the call. The prefix says whose credential failed, which the type alone does not tell a person reading the error. Keeping the 401 leaves `onError` and logs able to tell the case apart.
 
-## Not covered
+## Bodyless requests
 
-A bodyless request, such as `@ai-sdk/gateway`'s `GET /config` model list, is passed through unread, so its 401 still carries `authentication_error`. Changing that means reading bodyless error bodies, tracked in #120.
+A bodyless request, such as `@ai-sdk/gateway`'s `GET /config` model list, was passed through unread at first, so its 401 still carried `authentication_error`. Since #120 its error body is read when the `content-type` is JSON and retyped the same way (`bodylessUpstreamResponse` in `src/proxy.ts`); `getAvailableModels` maps errors through the same `createGatewayErrorFromResponse`. Other bodyless error bodies still go back as received.
 
 ## What would reopen it
 
