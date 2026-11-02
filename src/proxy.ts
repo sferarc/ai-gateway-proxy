@@ -36,6 +36,8 @@ const NON_LANGUAGE_MODEL_PATHS = new Map<string, ModelCallKind>([
 // @ai-sdk/gateway's calls that read or cancel a job rather than start a model call.
 const READ_PATHS = new Set(["batch/status", "batch/results", "batch/cancel", "video-model/status"]);
 const NULL_BODY_STATUS = new Set([204, 205]);
+// AI SDK clients retry 408, 409, 429 and any 5xx, which would pay for the answered call again.
+const ANSWERED_CALL_FAILURE_STATUS = 424;
 // Successful bodies that are a sequence of values rather than one JSON value: event streams and JSON Lines.
 const STREAM_CONTENT_TYPE =
 	/^\s*(?:text\/event-stream|application\/(?:x-ndjson|jsonl|jsonlines|x-jsonlines))\s*(?:;|$)/i;
@@ -375,8 +377,31 @@ function handleStreamingResponse(
 
 /**
  * Runs afterResponse on a non-streaming JSON response from the gateway.
+ * The gateway has answered, and billed, the call, so a failure here gets a status clients do not retry.
  */
 async function handleJsonResponse(
+	res: Response,
+	requestBody: LanguageModelV4CallOptions,
+	afterResponse: NonNullable<CreateGatewayProxyOptions["afterResponse"]>,
+	signal: AbortSignal,
+): Promise<Response> {
+	try {
+		return await runAfterResponse(res, requestBody, afterResponse);
+	} catch (error) {
+		// The handler answers a client abort with 499.
+		if (signal.aborted) {
+			throw error;
+		}
+		console.error("AI Gateway proxy failed after the gateway answered:", error);
+		return proxyErrorResponse(
+			ANSWERED_CALL_FAILURE_STATUS,
+			"proxy_error",
+			"Error processing the AI Gateway response",
+		);
+	}
+}
+
+async function runAfterResponse(
 	res: Response,
 	requestBody: LanguageModelV4CallOptions,
 	afterResponse: NonNullable<CreateGatewayProxyOptions["afterResponse"]>,
@@ -401,7 +426,7 @@ async function handleJsonResponse(
 		if (problem) {
 			const message = `afterResponse hook returned an invalid response: ${problem}`;
 			console.error(message);
-			return proxyErrorResponse(500, "proxy_error", message);
+			return proxyErrorResponse(ANSWERED_CALL_FAILURE_STATUS, "proxy_error", message);
 		}
 		// As on a stream's finish event: the AI SDK reads usage from every generate result, so it cannot be stripped.
 		responseBody = { ...modified, usage: modified.usage ?? upstreamUsage };
@@ -462,7 +487,7 @@ async function forwardUpstreamResponse(
 		return passThroughResponse(res);
 	}
 
-	return await handleJsonResponse(res, requestBody, afterResponse);
+	return await handleJsonResponse(res, requestBody, afterResponse, signal);
 }
 
 /**
