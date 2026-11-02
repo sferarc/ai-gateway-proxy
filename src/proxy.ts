@@ -520,8 +520,30 @@ function discardUnreadBody(response: Response): void {
 
 /**
  * Runs afterRawResponse and returns the response to send.
+ * The gateway has answered, and billed, a successful call, so a failure there gets a status clients do not retry.
  */
 async function applyAfterRawResponse(
+	afterRawResponse: NonNullable<CreateGatewayProxyOptions["afterRawResponse"]>,
+	context: RawResponseContext,
+	signal: AbortSignal,
+): Promise<Response> {
+	try {
+		return await runAfterRawResponse(afterRawResponse, context);
+	} catch (error) {
+		// The handler answers a client abort with 499, and a failed call costs nothing to retry.
+		if (signal.aborted || !context.response.ok) {
+			throw error;
+		}
+		console.error("AI Gateway proxy failed after the gateway answered:", error);
+		return proxyErrorResponse(
+			ANSWERED_CALL_FAILURE_STATUS,
+			"proxy_error",
+			"Error processing the AI Gateway response",
+		);
+	}
+}
+
+async function runAfterRawResponse(
 	afterRawResponse: NonNullable<CreateGatewayProxyOptions["afterRawResponse"]>,
 	context: RawResponseContext,
 ): Promise<Response> {
@@ -685,11 +707,11 @@ export const createGatewayProxy = ({
 			);
 
 			if (afterRawResponse && rawContext) {
-				return await applyAfterRawResponse(afterRawResponse, {
-					...rawContext,
-					request: requestBody,
-					response,
-				});
+				return await applyAfterRawResponse(
+					afterRawResponse,
+					{ ...rawContext, request: requestBody, response },
+					request.signal,
+				);
 			}
 			return response;
 		} catch (error) {
