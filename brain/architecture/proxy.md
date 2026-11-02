@@ -34,6 +34,6 @@ Read in `@ai-sdk/gateway` 4.0.126 `dist/index.js`, and not observed against the 
 - `getCredits`, `getSpendReport` and `getGenerationInfo` build their URL from `new URL(baseURL).origin` (`/v1/credits`, `/v1/report`, `/v1/generation`), so through a proxy they go to the proxy's host outside its route.
 - `getToken` on `experimental_realtime`, `experimental_transcription` and `experimental_speech` calls `mintClientSecret`, which posts to `new URL("/v1/realtime/client-secrets", baseURL)`, the same origin outside the route, and returns the WebSocket URL above or its transcription or speech twin.
 
-All are listed under Client in `README.md`. The URLs the client builds for the HTTP calls, and the WebSocket URLs `getToken` returns, are pinned by `src/client-bypass.test.ts` with a recording `fetch`; no WebSocket is opened. Carrying any of them is a contract choice for the owner (#111).
+All are listed under Client in `README.md`. The URLs the client builds for the HTTP calls, and the WebSocket URLs `getToken` returns, are pinned by `src/client-bypass.test.ts` with a recording `fetch`; no WebSocket is opened. They stay unsupported ([[decisions/2026-11-02-client-bypass-calls-unsupported]], #111).
 
 Tests: `src/proxy.test.ts` mocks `fetch` and `@vercel/oidc` and covers each step, the hooks and the HTTP method exports.
