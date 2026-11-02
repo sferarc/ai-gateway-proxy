@@ -205,3 +205,52 @@ describe("README example: cap, meter and mask", () => {
 		expect(await response.json()).toEqual(error);
 	});
 });
+
+// Same hook as "Refusing a call" in README.md; change both together.
+function refusingProxy(hasCredit: (modelId: string | undefined) => Promise<boolean>) {
+	return createGatewayProxy({
+		beforeRequest: async ({ request, modelId }) =>
+			(await hasCredit(modelId))
+				? request
+				: Response.json(
+						{ error: { message: "AI credit exhausted", type: "insufficient_funds" } },
+						{ status: 402 },
+					),
+	});
+}
+
+describe("README example: refusing a call", () => {
+	beforeEach(() => {
+		vi.resetAllMocks();
+		vi.stubEnv("AI_GATEWAY_API_KEY", "test-key");
+	});
+
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
+	it("answers 402 without calling the gateway when the model has no credit", async () => {
+		const hasCredit = vi.fn(async () => false);
+
+		const response = await refusingProxy(hasCredit)(languageModelRequest({}), context);
+
+		expect(response.status).toBe(402);
+		expect(await response.json()).toEqual({
+			error: { message: "AI credit exhausted", type: "insufficient_funds" },
+		});
+		expect(hasCredit).toHaveBeenCalledExactlyOnceWith("openai/gpt-5");
+		expect(mockFetch).not.toHaveBeenCalled();
+	});
+
+	it("sends the call upstream when the model has credit", async () => {
+		mockFetch.mockResolvedValueOnce(jsonResponse(generateResult));
+
+		const response = await refusingProxy(async () => true)(
+			languageModelRequest({ temperature: 0.3 }),
+			context,
+		);
+
+		expect(response.status).toBe(200);
+		expect(upstreamBody()).toEqual({ prompt: [], temperature: 0.3 });
+	});
+});

@@ -185,7 +185,7 @@ const proxy = createGatewayProxy({
 | `headers` | none | Extra headers for every upstream request. The proxy's own `authorization`, `ai-gateway-auth-method` and `ai-gateway-protocol-version` override entries with the same name in any casing, as does `content-type` on requests with a body. On requests with a body, the incoming request's `ai-language-model-*`, `ai-model-id` and `ai-*-model-specification-version` headers replace any entries describing the model call, and its `ai-o11y-*`, `idempotency-key` and `accept` headers override entries with the same name. No other incoming header is forwarded, so the client's `authorization` and cookies never reach the gateway. |
 | `segmentsParam` | `"segments"` | Name of the catch-all route param read from `context.params` when `extractPath` is not set, joined with `/`. Use `"path"` for `app/api/ai/[...path]/route.ts`. |
 | `extractPath` | none | `(request) => string \| Promise<string>`. Returns the upstream path relative to `baseUrl`, such as `language-model`. Takes precedence over `segmentsParam`. |
-| `beforeRequest` | none | `({ request, modelId }) => LanguageModelV4CallOptions`. Receives the parsed JSON body and returns the body to send upstream. Returning `undefined` or `null` sends the parsed body and logs an error. Any other result that is not an object, such as a string or an array, returns a 500 without calling the gateway. |
+| `beforeRequest` | none | `({ request, modelId }) => LanguageModelV4CallOptions \| Response`. Receives the parsed JSON body and returns the body to send upstream. Returning `undefined` or `null` sends the parsed body and logs an error. Any other result that is not an object, such as a string or an array, returns a 500 without calling the gateway. A returned `Response` is sent to the client as is, without calling the gateway or running `afterResponse` or `onError`; see below. |
 | `afterResponse` | none | `({ request, modelId, response }) => GatewayResponse`. Runs on a successful response; see below. |
 | `onError` | none | `({ request, modelId, error, status }) => GatewayError \| Response`. Runs when the gateway returns a non-OK status; see below. |
 | `beforeRawRequest` | none | `({ kind, path, modelId, request }) => unknown`. Runs on the calls that are not language model calls; see below. |
@@ -259,13 +259,29 @@ createGatewayProxy({
 
 `afterResponse` returns `response` unchanged, so the client gets the gateway's body on a non-streamed call and the upstream `finish` event on a stream. `request` is the body after `beforeRequest`, so `maxOutputTokens` is the capped value.
 
+### Refusing a call
+
+To turn a call away before it reaches the gateway, such as when a quota is spent, return a `Response` from `beforeRequest` or `beforeRawRequest`. A hook that throws gets a 500, which an AI SDK client retries, running the hook again each time; a 402 or 403 in the `GatewayError` shape is not retried, and its `message` becomes the client's error message. `hasCredit` stands for your own check.
+
+```typescript
+createGatewayProxy({
+  beforeRequest: async ({ request, modelId }) =>
+    (await hasCredit(modelId))
+      ? request
+      : Response.json(
+          { error: { message: "AI credit exhausted", type: "insufficient_funds" } },
+          { status: 402 },
+        ),
+});
+```
+
 ### Raw hooks
 
 `beforeRawRequest` and `afterRawResponse` run where the language model hooks do not: on a request with a body whose path is exactly one of the model call paths in the table above or `batch/start`. They are untyped, since each kind has its own body. They do not run on the job reads (`video-model/status`, `batch/status`, `batch/results`, `batch/cancel`) or on bodyless requests.
 
 Both receive `kind` (`"embedding"`, `"image"`, `"video"`, `"speech"`, `"transcription"`, `"reranking"`, `"decision"` or `"batch"`), `path` (such as `video-model/start`), `modelId` (the client's `ai-model-id` header, which is the only place an embedding or image call names its model) and `request`, the parsed JSON body.
 
-- **`beforeRawRequest`:** a returned value replaces the body sent upstream; `undefined` or `null` sends it as is.
+- **`beforeRawRequest`:** a returned value replaces the body sent upstream; `undefined` or `null` sends it as is. A returned `Response` is sent to the client as is, without calling the gateway or running `afterRawResponse`.
 - **`afterRawResponse`:** also receives `response`, the `Response` the proxy would send: the upstream status, `content-type` and the allowlisted headers below, with the upstream body on success (a video call's event stream included) and the `GatewayError` body described under `onError` on a failure. Return a `Response` to send that instead, or nothing to send `response`. The body can be read once, so read `response.clone()` when returning nothing; a hook that reads `response` itself and returns nothing, or returns anything but a `Response`, is a failure like a throw. A failure on a successful `response` is a 424, since the gateway has already answered, and billed, the call and an AI SDK client retries a 5xx but not a 424; on an error `response` it is a 500. When the hook sends another `Response`, throws or returns an invalid result, the proxy cancels `response`'s body unless the hook read it, piped it or built the returned `Response` on it, so the upstream request ends. It does not run on a redirect or when the upstream request fails.
 
 ```typescript
@@ -292,7 +308,7 @@ Apart from forwarding the gateway's own responses, the handler can answer with a
 | 400 | `invalid_request_error` | `Invalid JSON body` | A request other than `GET` or `HEAD` has a non-empty body that is not JSON. |
 | 400 | `invalid_request_error` | `Invalid request body: a language model call must be a JSON object` | The body is JSON but not an object, such as an array or `null`, on a path that runs `beforeRequest`, `afterResponse` or `onError`, and one of them is set. No hook runs and the gateway is not called. |
 | 499 | none | none | The client aborted the request (`request.signal`) before the handler returned. The signal is passed to the upstream `fetch`, so the abort also cancels the upstream request. |
-| 500 | `proxy_error` | `Error proxying request to AI Gateway` | Anything else that throws: `extractPath`, `beforeRequest`, `beforeRawRequest`, the upstream `fetch`, or an `afterRawResponse` failure on an error response. |
+| 500 | `proxy_error` | `Error proxying request to AI Gateway` | Anything else that throws: `extractPath`, `beforeRequest`, `beforeRawRequest`, the upstream `fetch`, or an `afterRawResponse` failure on an error response. To refuse a call without a retryable 500, return a `Response` from the request hook instead (see "Refusing a call"). |
 | 500 | `proxy_error` | `beforeRequest hook returned an invalid request: the result must be an object` | `beforeRequest` returned a value other than an object, `undefined` or `null`. The gateway is not called. |
 | 424 | `proxy_error` | `Error processing the AI Gateway response` | After the gateway answered a non-streamed call with `afterResponse` set: `afterResponse` threw, or the success body was not a JSON object. After a successful call with `afterRawResponse` set: the hook threw, returned anything but a `Response` or nothing, or read the body and returned no `Response`. The status is one AI SDK clients do not retry, since the gateway has billed the call. |
 | 424 | `proxy_error` | `afterResponse hook returned an invalid response: <problem>` | `afterResponse` on a non-streamed request returned a result that fails the result validation above. |
