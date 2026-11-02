@@ -9,7 +9,7 @@ A small route handler that lets an AI SDK client reach the Vercel AI Gateway thr
 ## Phases
 
 - **First npm release**, #113: the publish path is built and held until the owner enables it ([[development/release]]). Child: #112.
-- **Owner questions on gateway errors and call coverage**, #114: each changes the public contract or needs paid gateway calls. Children: #109 (a proxy 500 after a billed answer makes the client retry; decided, [[decisions/2026-11-01-no-retry-after-answered-call]]), #110 (a gateway 401 blames the client's own key), #70 (non-language-model calls against the real gateway, item 3 of [[post-0-2-0-gaps]]), #111 (client calls that bypass the handler, "Calls that do not reach the handler" in [[architecture/proxy]]).
+- **Owner questions on gateway errors and call coverage**, #114: each changes the public contract or needs paid gateway calls. Children: #109 (a proxy 500 after a billed answer makes the client retry; decided, [[decisions/2026-11-01-no-retry-after-answered-call]]), #110 (a gateway 401 blamed the client's own key; decided, [[decisions/2026-11-02-retype-proxy-credential-errors]]), #70 (non-language-model calls against the real gateway, item 3 of [[post-0-2-0-gaps]]), #111 (client calls that bypass the handler, "Calls that do not reach the handler" in [[architecture/proxy]]).
 
 Close a phase's tracking issue when its children are closed, and update its line here.
 
