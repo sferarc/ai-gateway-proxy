@@ -1,6 +1,6 @@
 # Plans
 
-GitHub Issues are the source of truth for pending work: open issues labelled `product:ai-gateway-proxy`, grouped by the `roadmap` tracking issues #113 (first npm release) and #114 (owner questions on gateway errors and call coverage). [[roadmap]] keeps the vision and phases and links those issues. [[post-0-2-0-gaps]] keeps the history of the round after 0.2.0.
+GitHub Issues are the source of truth for pending work: open issues labelled `product:ai-gateway-proxy`, grouped by the `roadmap` tracking issue #114 (owner questions on gateway errors and call coverage); #113 (first npm release) is done. [[roadmap]] keeps the vision and phases and links those issues. [[post-0-2-0-gaps]] keeps the history of the round after 0.2.0.
 
 ## Landed on main
 
@@ -32,6 +32,6 @@ GitHub Issues are the source of truth for pending work: open issues labelled `pr
 
 ## Release
 
-The first release is held until the owner enables publishing; the steps are in [[development/release]] (#56), the reason in [[decisions/2026-10-08-release-off-until-enabled]], and the owner action in #112 under #113.
+The owner enabled publishing on 2026-11-01 (#112 under #113), and 0.2.0 was the first version published from this repository. The flow and current state are in [[development/release]] (#56), the gate in [[decisions/2026-10-08-release-off-until-enabled]].
 
 Add a note here when a plan is too long for an issue, and link it from the issue.

@@ -36,4 +36,4 @@ The `brain/` directory is an Obsidian vault: persistent notes on how the library
 - Never add an `AI_GATEWAY_API_KEY` to CI or spend money on the gateway: the integration tests skip without it on purpose.
 - Add a changeset (`pnpm changeset`) for a change that should ship.
 - No em or en dashes in prose. Commit subjects are imperative with a conventional prefix.
-- Never publish, tag, bump the version or set `RELEASE_ENABLED`: releases are the owner's step (`brain/development/release.md`).
+- Never publish by hand, tag, bump the version or change `RELEASE_ENABLED`: a release is a changeset, then the version pull request (`brain/development/release.md`).
