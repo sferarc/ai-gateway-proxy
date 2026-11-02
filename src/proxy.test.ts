@@ -3173,9 +3173,75 @@ describe("createGatewayProxy", () => {
 		});
 
 		it("returns the upstream status and body when GET fails", async () => {
-			const errorBody = { error: { message: "Unauthorized", type: "authentication_error" } };
+			const errorBody = { error: { message: "Rate limited", type: "rate_limit_exceeded" } };
 			mockFetch.mockResolvedValueOnce(
-				createMockHttpResponse(errorBody, { status: 401, statusText: "Unauthorized" }),
+				createMockHttpResponse(errorBody, { status: 429, statusText: "Too Many Requests" }),
+			);
+			const onError = vi.fn();
+
+			const proxy = createGatewayProxy({ onError });
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+
+			const response = await proxy.GET(request, createMockContext(["config"]));
+
+			expect(response.status).toBe(429);
+			expect(await response.json()).toEqual(errorBody);
+			expect(onError).not.toHaveBeenCalled();
+		});
+
+		it("returns a JSON error body as received when it is not valid JSON", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response("{not json", {
+					status: 401,
+					headers: { "content-type": "application/json; charset=utf-8" },
+				}),
+			);
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+
+			const response = await proxy.GET(request, createMockContext(["config"]));
+
+			expect(response.status).toBe(401);
+			expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+			expect(await response.text()).toBe("{not json");
+		});
+
+		it("streams a non-JSON error body through unread", async () => {
+			const upstream = new Response("<html>Bad gateway</html>", {
+				status: 502,
+				headers: { "content-type": "text/html" },
+			});
+			mockFetch.mockResolvedValueOnce(upstream);
+
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+
+			const response = await proxy.GET(request, createMockContext(["config"]));
+
+			expect(upstream.bodyUsed).toBe(false);
+			expect(response.status).toBe(502);
+			expect(response.headers.get("content-type")).toBe("text/html");
+			expect(await response.text()).toBe("<html>Bad gateway</html>");
+		});
+
+		it("retypes a gateway authentication_error on GET as proxy_error and keeps its fields and headers", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						error: {
+							message: "Invalid API key",
+							type: "authentication_error",
+							code: "invalid_key",
+						},
+						generationId: "gen_1",
+					}),
+					{
+						status: 401,
+						statusText: "Unauthorized",
+						headers: { "content-type": "application/json", "x-vercel-id": "req_1" },
+					},
+				),
 			);
 			const onError = vi.fn();
 
@@ -3185,7 +3251,15 @@ describe("createGatewayProxy", () => {
 			const response = await proxy.GET(request, createMockContext(["config"]));
 
 			expect(response.status).toBe(401);
-			expect(await response.json()).toEqual(errorBody);
+			expect(response.headers.get("x-vercel-id")).toBe("req_1");
+			expect(await response.json()).toEqual({
+				error: {
+					message: "AI Gateway rejected the proxy's credential: Invalid API key",
+					type: "proxy_error",
+					code: "invalid_key",
+				},
+				generationId: "gen_1",
+			});
 			expect(onError).not.toHaveBeenCalled();
 		});
 
@@ -3262,6 +3336,32 @@ describe("createGatewayProxy", () => {
 			expect(url).toBe("https://ai-gateway.vercel.sh/v4/ai/config");
 			expect(init.method).toBe("GET");
 			expect(init.headers.authorization).toBe("Bearer test-api-key");
+		});
+
+		it("gives getAvailableModels the gateway's message naming the proxy's credential", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse(
+					{ error: { message: "Invalid API key", type: "authentication_error" } },
+					{ status: 401, statusText: "Unauthorized" },
+				),
+			);
+			const proxy = createGatewayProxy();
+			const gateway = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				fetch: (input, init) => proxy(new Request(input, init), createMockContext(["config"])),
+			});
+
+			const error = await gateway.getAvailableModels().then(
+				() => undefined,
+				(e: unknown) => e as Error,
+			);
+
+			expect(error).toBeInstanceOf(GatewayInternalServerError);
+			expect(error).toMatchObject({
+				message: "AI Gateway rejected the proxy's credential: Invalid API key",
+				statusCode: 401,
+			});
 		});
 	});
 
