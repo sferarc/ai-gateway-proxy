@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.7.1
+
+### Patch Changes
+
+- 1b35d23: Add a README section on protecting the proxy route: the proxy does not check who calls it, so check the caller's token, sent as the client's `apiKey`, before handing the request to the proxy.
+
 ## 0.7.0
 
 ### Minor Changes
