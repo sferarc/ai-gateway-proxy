@@ -1,6 +1,8 @@
 # Authentication
 
-`getGatewayAuthToken()` in `src/auth.ts` returns `{ token, authMethod }` or `null`:
+When `createGatewayProxy` gets the `apiKey` option, `resolveApiKeyOption(apiKey, request)` in `src/auth.ts` replaces the chain below: a string, or the result of calling it with the incoming `Request` (awaited), becomes `{ token, authMethod: "api-key" }`. An empty or non-string result logs `AI Gateway auth: the apiKey option gave no key`, and a throw or rejection logs `AI Gateway auth: the apiKey option failed:` with the message only; both return `null`, and the proxy answers 500 `proxy_error` `AI Gateway authentication not configured: the apiKey option gave no key` without calling the gateway or OIDC. It never falls back to the environment, so a tenant without a key is not billed to the operator's credential ([[decisions/2026-11-02-api-key-option-fails-closed]]; "the apiKey option" in `src/proxy.test.ts`). It runs before the body is read, so a function that reads the body would make the proxy's own read fail.
+
+Without the option, `getGatewayAuthToken()` in `src/auth.ts` returns `{ token, authMethod }` or `null`:
 
 1. `AI_GATEWAY_API_KEY` from the environment, as `authMethod: "api-key"`.
 2. Otherwise `getVercelOidcToken()` from `@vercel/oidc`, as `authMethod: "oidc"`. This works when deployed on Vercel (`README.md`, "Authentication").
