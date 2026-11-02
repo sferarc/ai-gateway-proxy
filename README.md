@@ -113,7 +113,7 @@ import { generateText } from "ai";
 
 const gateway = createGateway({
   baseURL: "https://your-app.example.com/api/ai",
-  // The proxy adds the real credentials upstream.
+  // Reaches your route only: the proxy sends its own credential upstream. See Protecting the route.
   apiKey: "unused",
 });
 
@@ -122,6 +122,33 @@ const { text } = await generateText({
   prompt: "Hello",
 });
 ```
+
+### Protecting the route
+
+The proxy authenticates itself to the gateway but does not check who calls it, so a route set up as above answers anyone who can reach it, on your gateway credit. Check the caller before handing the request to the proxy. The client's `apiKey` reaches your route as `authorization: Bearer <apiKey>`, and the proxy replaces that header upstream, so it can carry the caller's own token:
+
+```typescript
+import { createGatewayProxy } from "ai-gateway-proxy";
+
+const proxy = createGatewayProxy();
+
+async function handler(request: Request, context: { params: Promise<{ segments: string[] }> }) {
+  const authorization = request.headers.get("authorization");
+  const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
+  if (!token || !(await isValidSession(token))) {
+    // Not authentication_error: @ai-sdk/gateway replaces that message with advice about gateway keys.
+    return Response.json(
+      { error: { message: "Sign in to use the AI route", type: "invalid_request_error" } },
+      { status: 401 },
+    );
+  }
+  return proxy(request, context);
+}
+
+export { handler as GET, handler as POST, handler as PUT, handler as DELETE, handler as PATCH };
+```
+
+`isValidSession` stands for your own session or token check. On the client, pass the caller's token as `apiKey`, as in `createGateway({ baseURL, apiKey: sessionToken })`. A rejected call throws a `GatewayInvalidRequestError` with `statusCode` 401 and your message, and the AI SDK does not retry it. Do not reject callers through the `apiKey` option instead: a missing key answers `500`, which clients retry.
 
 Some gateway client calls do not go through the proxy:
 
