@@ -1,6 +1,6 @@
 import { createGatewayProvider, GatewayInternalServerError } from "@ai-sdk/gateway";
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
-import { generateText } from "ai";
+import { embed, generateText } from "ai";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { createGatewayProxy } from "./proxy";
 import type { CreateGatewayProxyOptions, GatewayError, GatewayResponse } from "./types";
@@ -2376,7 +2376,7 @@ describe("createGatewayProxy", () => {
 			// @ts-expect-error the second case breaks the hook's return type on purpose
 			const proxy = createGatewayProxy({ afterRawResponse });
 
-			await expectProxyFailure(await videoRequest(proxy));
+			await expectAnsweredCallFailure(await videoRequest(proxy));
 			expect(upstream.cancel).toHaveBeenCalledOnce();
 		});
 
@@ -2488,7 +2488,13 @@ describe("createGatewayProxy", () => {
 			expect(afterRawResponse).not.toHaveBeenCalled();
 		});
 
-		it.each([
+		const failingAfterRawResponses = [
+			[
+				"throws",
+				() => {
+					throw new Error("meter down");
+				},
+			],
 			[
 				"reads the body without returning a Response",
 				async ({ response }: { response: Response }) => {
@@ -2497,17 +2503,80 @@ describe("createGatewayProxy", () => {
 				},
 			],
 			["returns an object that is not a Response", () => ({ embeddings: [] })],
-		])("returns 500 when afterRawResponse %s", async (_name, afterRawResponse) => {
-			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ embeddings: [[0.1]] }));
-			// @ts-expect-error the second case breaks the hook's return type on purpose
-			const proxy = createGatewayProxy({ afterRawResponse });
+		] as const;
 
-			const response = await proxy(
-				createMockRequest("http://localhost/api/embedding-model", { body: { values: ["a"] } }),
-				createMockContext(["embedding-model"]),
+		it.each(failingAfterRawResponses)(
+			"returns 424 when afterRawResponse %s after a successful call",
+			async (_name, afterRawResponse) => {
+				mockFetch.mockResolvedValueOnce(createMockHttpResponse({ embeddings: [[0.1]] }));
+				// @ts-expect-error the last case breaks the hook's return type on purpose
+				const proxy = createGatewayProxy({ afterRawResponse });
+
+				const response = await proxy(
+					createMockRequest("http://localhost/api/embedding-model", { body: { values: ["a"] } }),
+					createMockContext(["embedding-model"]),
+				);
+
+				await expectAnsweredCallFailure(response);
+			},
+		);
+
+		it.each(failingAfterRawResponses)(
+			"returns 500 when afterRawResponse %s after a failed call",
+			async (_name, afterRawResponse) => {
+				mockFetch.mockResolvedValueOnce(
+					createMockHttpResponse(
+						{ error: { message: "busy", type: "rate_limit_exceeded" } },
+						{ status: 429 },
+					),
+				);
+				// @ts-expect-error the last case breaks the hook's return type on purpose
+				const proxy = createGatewayProxy({ afterRawResponse });
+
+				const response = await proxy(
+					createMockRequest("http://localhost/api/embedding-model", { body: { values: ["a"] } }),
+					createMockContext(["embedding-model"]),
+				);
+
+				await expectProxyFailure(response);
+			},
+		);
+
+		describe("a failure after the gateway answered", () => {
+			beforeEach(() => {
+				vi.useFakeTimers({ toFake: ["setTimeout"] });
+			});
+
+			afterEach(() => {
+				vi.useRealTimers();
+			});
+
+			it.each(failingAfterRawResponses)(
+				"makes embed call the gateway once when afterRawResponse %s",
+				async (_name, afterRawResponse) => {
+					mockFetch.mockImplementation(async () =>
+						createMockHttpResponse({ embeddings: [[0.1]], usage: { tokens: 1 } }),
+					);
+					// @ts-expect-error the last case breaks the hook's return type on purpose
+					const proxy = createGatewayProxy({ afterRawResponse });
+
+					const settled = embed({
+						model: viaGateway(proxy).embeddingModel("openai/text-embedding-3-small"),
+						value: "hello",
+					}).then(
+						() => undefined,
+						(e: unknown) => e as GatewayInternalServerError,
+					);
+					// ai's default backoff would wait 2s, then 4s, between two retries.
+					await vi.advanceTimersByTimeAsync(10_000);
+					const error = await settled;
+
+					expect(GatewayInternalServerError.isInstance(error)).toBe(true);
+					expect(error?.statusCode).toBe(424);
+					expect(error?.isRetryable).toBe(false);
+					expect(mockFetch).toHaveBeenCalledOnce();
+				},
 			);
-
-			await expectProxyFailure(response);
 		});
 
 		it.each([
