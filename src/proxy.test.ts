@@ -260,22 +260,68 @@ describe("createGatewayProxy", () => {
 					);
 			}
 
-			// Pins the roadmap's owner item: the client blames its own key for the proxy's.
-			it("gives a client built on @ai-sdk/gateway advice about its own API key", async () => {
+			it("gives a client built on @ai-sdk/gateway the gateway's message naming the proxy's credential", async () => {
 				const error = await generateThroughProxy();
 
-				expect(error?.message).toMatch(
-					/^AI Gateway authentication failed: Invalid API key or token\.\n\nCreate a new API key/,
-				);
+				expect(error).toBeInstanceOf(GatewayInternalServerError);
+				expect(error).toMatchObject({
+					message: "AI Gateway rejected the proxy's credential: Invalid API key",
+					statusCode: 401,
+					isRetryable: false,
+				});
 				expect(mockFetch).toHaveBeenCalledTimes(1);
 			});
 
-			it("lets onError retype the error so the client keeps the gateway's message", async () => {
-				const error = await generateThroughProxy({
-					onError: ({ error }) => ({ error: { ...error.error, type: "proxy_error" } }),
-				});
+			it("retypes the error as proxy_error and keeps its status and other fields", async () => {
+				process.env.AI_GATEWAY_API_KEY = "revoked-gateway-key";
+				mockFetch.mockResolvedValueOnce(
+					createMockHttpResponse(
+						{
+							error: {
+								message: "Invalid API key",
+								type: "authentication_error",
+								code: "invalid_key",
+							},
+							generationId: "gen_1",
+						},
+						{ status: 401, statusText: "Unauthorized" },
+					),
+				);
 
-				expect(error?.message).toBe("Invalid API key");
+				const proxy = createGatewayProxy();
+				const request = createMockRequest("http://localhost/api/language-model", {
+					body: { prompt: [] },
+				});
+				const response = await proxy(request, createMockContext(["language-model"]));
+
+				expect(response.status).toBe(401);
+				expect(await response.json()).toEqual({
+					error: {
+						message: "AI Gateway rejected the proxy's credential: Invalid API key",
+						type: "proxy_error",
+						code: "invalid_key",
+					},
+					generationId: "gen_1",
+				});
+			});
+
+			it("hands onError the retyped error with the gateway's 401", async () => {
+				const onError = vi.fn(({ error }: { error: GatewayError }) => error);
+
+				const error = await generateThroughProxy({ onError });
+
+				expect(onError).toHaveBeenCalledWith(
+					expect.objectContaining({
+						status: 401,
+						error: {
+							error: {
+								message: "AI Gateway rejected the proxy's credential: Invalid API key",
+								type: "proxy_error",
+							},
+						},
+					}),
+				);
+				expect(error?.message).toBe("AI Gateway rejected the proxy's credential: Invalid API key");
 			});
 		});
 	});

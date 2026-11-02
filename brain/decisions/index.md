@@ -2,6 +2,7 @@
 
 Dated records of choices a later change could undo by accident. Each says what was decided, why, and what would reopen it. Newest first.
 
+- [[2026-11-02-retype-proxy-credential-errors]]: a gateway `authentication_error` reaches the client as `proxy_error`, since only the proxy's credential reaches the gateway
 - [[2026-11-01-no-retry-after-answered-call]]: a failure after the gateway answered a non-streamed call is a 424, which AI SDK clients do not retry
 - [[2026-10-28-default-base-url-v4]]: `baseUrl` defaults to `/v4/ai`, the endpoint `@ai-sdk/gateway` 4.x calls
 - [[2026-10-26-strict-after-response-results]]: an `afterResponse` result with a missing or wrong-typed field is rejected, not forwarded

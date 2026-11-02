@@ -259,6 +259,25 @@ async function parseErrorBody(res: Response): Promise<GatewayError> {
 }
 
 /**
+ * Retypes a gateway `authentication_error` as a `proxy_error` naming the proxy's credential, since
+ * the client's own credential never reaches the gateway and `@ai-sdk/gateway` would replace the
+ * message with advice about it.
+ */
+function retypeProxyCredentialError(upstreamError: GatewayError): GatewayError {
+	if (upstreamError.error.type !== "authentication_error") {
+		return upstreamError;
+	}
+	return {
+		...upstreamError,
+		error: {
+			...upstreamError.error,
+			message: `AI Gateway rejected the proxy's credential: ${upstreamError.error.message}`,
+			type: "proxy_error",
+		},
+	};
+}
+
+/**
  * Builds response headers with the given content type, if any, plus the allowlisted upstream headers.
  */
 function responseHeaders(res: Response, contentType?: string): Headers {
@@ -465,7 +484,7 @@ async function forwardUpstreamResponse(
 	signal: AbortSignal,
 ): Promise<Response> {
 	if (!res.ok) {
-		const errorBody = await parseErrorBody(res);
+		const errorBody = retypeProxyCredentialError(await parseErrorBody(res));
 		return await createErrorResponse(res, errorBody, requestBody, onError);
 	}
 

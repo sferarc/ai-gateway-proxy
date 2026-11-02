@@ -216,6 +216,9 @@ export type CreateGatewayProxyOptions = {
 	 * non-string `generationId`) logs an error and sends the upstream error body instead, and so
 	 * does a hook that throws.
 	 *
+	 * An `authentication_error` arrives retyped as `proxy_error`, its message prefixed with
+	 * `AI Gateway rejected the proxy's credential: `, since only the proxy's credential reaches the gateway.
+	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *
 	 * Not called when the path relative to `baseUrl` is exactly one of the paths `@ai-sdk/gateway`
