@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.8.0
+
+### Minor Changes
+
+- c544b4f: `beforeRequest` and `beforeRawRequest` may return a `Response`, which is sent to the client without calling the gateway, so a hook can refuse a call with a status AI SDK clients do not retry instead of throwing into a retried 500.
+
 ## 0.7.1
 
 ### Patch Changes
