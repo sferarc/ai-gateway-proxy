@@ -4,11 +4,11 @@ Decided by the owner on 2026-10-26 in #70, extending [[2026-10-21-fail-closed-re
 
 ## Decision
 
-An `afterResponse` result is checked by `gatewayResponseProblem` (`src/hook-result.ts`). On a non-streamed request a result with a missing or wrong-typed field returns 500 `proxy_error` with a message naming the field; on a stream the original `finish` event is forwarded and the problem logged. `undefined` and `null` keep the earlier fallback to the upstream body on a non-streamed request.
+An `afterResponse` result is checked by `gatewayResponseProblem` (`src/hook-result.ts`). On a non-streamed request a result with a missing or wrong-typed field returns `proxy_error` with a message naming the field, as a 424 since [[2026-11-01-no-retry-after-answered-call]] (500 before); on a stream the original `finish` event is forwarded and the problem logged. `undefined` and `null` keep the earlier fallback to the upstream body on a non-streamed request.
 
 ## Why
 
-A malformed result was serialised as returned, so the client got a body its parser rejects, or a `finish` event missing fields, with nothing pointing at the hook. A 500 that names the field puts the error where the bug is.
+A malformed result was serialised as returned, so the client got a body its parser rejects, or a `finish` event missing fields, with nothing pointing at the hook. An error that names the field puts the error where the bug is.
 
 ## Where it is lenient
 

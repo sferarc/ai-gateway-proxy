@@ -1,4 +1,4 @@
-import { createGatewayProvider } from "@ai-sdk/gateway";
+import { createGatewayProvider, GatewayInternalServerError } from "@ai-sdk/gateway";
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { generateText } from "ai";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
@@ -90,6 +90,20 @@ describe("createGatewayProxy", () => {
 		delete process.env.AI_GATEWAY_API_KEY;
 		consoleError.mockRestore();
 	});
+
+	async function expectAnsweredCallFailure(response: Response): Promise<void> {
+		await expectGatewayError(
+			response,
+			424,
+			"proxy_error",
+			"Error processing the AI Gateway response",
+		);
+		expect(consoleError).toHaveBeenCalledOnce();
+		expect(consoleError).toHaveBeenCalledWith(
+			"AI Gateway proxy failed after the gateway answered:",
+			expect.any(Error),
+		);
+	}
 
 	async function expectProxyFailure(response: Response): Promise<void> {
 		await expectGatewayError(response, 500, "proxy_error", "Error proxying request to AI Gateway");
@@ -864,7 +878,7 @@ describe("createGatewayProxy", () => {
 				"providerMetadata must be an object or undefined",
 			],
 		])(
-			"returns 500 naming the problem when the hook returns %s",
+			"returns 424 naming the problem when the hook returns %s",
 			async (_name, result, problem) => {
 				mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 
@@ -879,7 +893,7 @@ describe("createGatewayProxy", () => {
 				const response = await proxy(request, createMockContext(["chat"]));
 
 				const message = `afterResponse hook returned an invalid response: ${problem}`;
-				await expectGatewayError(response, 500, "proxy_error", message);
+				await expectGatewayError(response, 424, "proxy_error", message);
 				expect(consoleError).toHaveBeenCalledOnce();
 				expect(consoleError).toHaveBeenCalledWith(message);
 			},
@@ -992,8 +1006,7 @@ describe("createGatewayProxy", () => {
 			});
 		});
 
-		// Pins current behavior for the owner decision in brain/plans/roadmap.md, not a contract.
-		describe("a 500 after the gateway answered", () => {
+		describe("a failure after the gateway answered", () => {
 			beforeEach(() => {
 				vi.useFakeTimers({ toFake: ["setTimeout"] });
 			});
@@ -1020,32 +1033,31 @@ describe("createGatewayProxy", () => {
 					() => createMockHttpResponse(null),
 					({ response }) => response,
 				],
-			])(
-				"makes generateText call the gateway three times when %s",
-				async (_, upstream, afterResponse) => {
-					process.env.AI_GATEWAY_API_KEY = "gateway-key";
-					mockFetch.mockImplementation(async () => upstream());
+			])("makes generateText call the gateway once when %s", async (_, upstream, afterResponse) => {
+				process.env.AI_GATEWAY_API_KEY = "gateway-key";
+				mockFetch.mockImplementation(async () => upstream());
 
-					const proxy = createGatewayProxy({ afterResponse });
-					const provider = createGatewayProvider({
-						baseURL: "http://localhost/api",
-						apiKey: "client-key",
-						fetch: (input, init) =>
-							proxy(new Request(input, init), createMockContext(["language-model"])),
-					});
+				const proxy = createGatewayProxy({ afterResponse });
+				const provider = createGatewayProvider({
+					baseURL: "http://localhost/api",
+					apiKey: "client-key",
+					fetch: (input, init) =>
+						proxy(new Request(input, init), createMockContext(["language-model"])),
+				});
 
-					const settled = generateText({ model: provider("openai/gpt-5"), prompt: "hi" }).then(
-						() => undefined,
-						(e: unknown) => e as Error,
-					);
-					// ai's default backoff waits 2s, then 4s, between its two retries.
-					await vi.advanceTimersByTimeAsync(10_000);
-					const error = await settled;
+				const settled = generateText({ model: provider("openai/gpt-5"), prompt: "hi" }).then(
+					() => undefined,
+					(e: unknown) => e as GatewayInternalServerError,
+				);
+				// ai's default backoff would wait 2s, then 4s, between two retries.
+				await vi.advanceTimersByTimeAsync(10_000);
+				const error = await settled;
 
-					expect(error?.message).toContain("Failed after 3 attempts");
-					expect(mockFetch).toHaveBeenCalledTimes(3);
-				},
-			);
+				expect(GatewayInternalServerError.isInstance(error)).toBe(true);
+				expect(error?.statusCode).toBe(424);
+				expect(error?.isRetryable).toBe(false);
+				expect(mockFetch).toHaveBeenCalledOnce();
+			});
 		});
 	});
 
@@ -3231,7 +3243,7 @@ describe("createGatewayProxy", () => {
 			expect(consoleError).not.toHaveBeenCalled();
 		});
 
-		it("returns 500 when a successful response body for afterResponse is not JSON", async () => {
+		it("returns 424 when a successful response body for afterResponse is not JSON", async () => {
 			mockFetch.mockResolvedValueOnce(new Response("not json", { status: 200 }));
 			const afterResponse = vi.fn();
 
@@ -3242,7 +3254,7 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			await expectProxyFailure(response);
+			await expectAnsweredCallFailure(response);
 			expect(afterResponse).not.toHaveBeenCalled();
 		});
 
@@ -3252,7 +3264,7 @@ describe("createGatewayProxy", () => {
 			["a string", '"ok"'],
 			["a number", "42"],
 		])(
-			"returns 500 without running afterResponse when a successful body is %s",
+			"returns 424 without running afterResponse when a successful body is %s",
 			async (_, body) => {
 				mockFetch.mockResolvedValueOnce(
 					new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
@@ -3266,7 +3278,7 @@ describe("createGatewayProxy", () => {
 
 				const response = await proxy(request, createMockContext(["chat"]));
 
-				await expectProxyFailure(response);
+				await expectAnsweredCallFailure(response);
 				expect(afterResponse).not.toHaveBeenCalled();
 				expect(consoleError.mock.calls[0]?.[1]).toHaveProperty(
 					"message",
@@ -3275,7 +3287,7 @@ describe("createGatewayProxy", () => {
 			},
 		);
 
-		it("returns 500 when afterResponse throws", async () => {
+		it("returns 424 when afterResponse throws", async () => {
 			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
 
 			const proxy = createGatewayProxy({
@@ -3289,7 +3301,28 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			await expectProxyFailure(response);
+			await expectAnsweredCallFailure(response);
+		});
+
+		it("returns 499 when the client aborts while afterResponse runs", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+
+			const controller = new AbortController();
+			const proxy = createGatewayProxy({
+				afterResponse: async () => {
+					controller.abort();
+					throw new Error("aborted");
+				},
+			});
+			const request = createMockRequest("http://localhost/api/chat", {
+				body: { prompt: [] },
+				signal: controller.signal,
+			});
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(499);
+			expect(consoleError).not.toHaveBeenCalled();
 		});
 
 		it("handles empty segments", async () => {
