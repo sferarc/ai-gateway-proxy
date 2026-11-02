@@ -235,6 +235,103 @@ describe("createGatewayProxy", () => {
 			expect(mockFetch).not.toHaveBeenCalled();
 		});
 
+		describe("the apiKey option", () => {
+			const noKeyMessage =
+				"AI Gateway authentication not configured: the apiKey option gave no key";
+
+			async function sentHeaders(options: CreateGatewayProxyOptions): Promise<Headers> {
+				mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+				const proxy = createGatewayProxy(options);
+				const response = await proxy(
+					createMockRequest("http://localhost/api/chat", {
+						body: { prompt: [] },
+						headers: { "x-tenant": "acme" },
+					}),
+					createMockContext(["chat"]),
+				);
+				expect(response.status).toBe(200);
+				return new Headers(mockFetch.mock.calls[0][1].headers);
+			}
+
+			async function expectNoKey(options: CreateGatewayProxyOptions): Promise<void> {
+				const proxy = createGatewayProxy(options);
+				const response = await proxy(
+					createMockRequest("http://localhost/api/chat", { body: { prompt: [] } }),
+					createMockContext(["chat"]),
+				);
+				await expectGatewayError(response, 500, "proxy_error", noKeyMessage);
+				expect(mockFetch).not.toHaveBeenCalled();
+				expect(getVercelOidcToken).not.toHaveBeenCalled();
+			}
+
+			it("sends a string key over AI_GATEWAY_API_KEY and OIDC", async () => {
+				process.env.AI_GATEWAY_API_KEY = "env-key";
+
+				const sent = await sentHeaders({ apiKey: "option-key" });
+
+				expect(sent.get("authorization")).toBe("Bearer option-key");
+				expect(sent.get("ai-gateway-auth-method")).toBe("api-key");
+				expect(getVercelOidcToken).not.toHaveBeenCalled();
+			});
+
+			it("calls a function with the incoming request on every request", async () => {
+				const apiKey = vi.fn((request: Request) => `key-for-${request.headers.get("x-tenant")}`);
+
+				const first = await sentHeaders({ apiKey });
+				mockFetch.mockClear();
+				const second = await sentHeaders({ apiKey });
+
+				expect(first.get("authorization")).toBe("Bearer key-for-acme");
+				expect(second.get("authorization")).toBe("Bearer key-for-acme");
+				expect(apiKey).toHaveBeenCalledTimes(2);
+			});
+
+			it("awaits an async function", async () => {
+				const sent = await sentHeaders({ apiKey: async () => "async-key" });
+
+				expect(sent.get("authorization")).toBe("Bearer async-key");
+				expect(sent.get("ai-gateway-auth-method")).toBe("api-key");
+			});
+
+			it.each([
+				["an empty string", ""],
+				["a function returning undefined", () => undefined],
+				["a function returning null", () => null],
+				["an async function returning an empty string", async () => ""],
+			])("answers 500 without falling back to the environment for %s", async (_name, apiKey) => {
+				process.env.AI_GATEWAY_API_KEY = "env-key";
+
+				await expectNoKey({ apiKey });
+
+				expect(consoleError).toHaveBeenCalledWith("AI Gateway auth: the apiKey option gave no key");
+			});
+
+			it("answers 500 and logs only the message when the function throws", async () => {
+				const error = Object.assign(new Error("secret store unavailable"), { token: "leaked" });
+
+				await expectNoKey({
+					apiKey: () => {
+						throw error;
+					},
+				});
+
+				expect(consoleError).toHaveBeenCalledWith(
+					"AI Gateway auth: the apiKey option failed:",
+					"secret store unavailable",
+				);
+				expect(JSON.stringify(consoleError.mock.calls)).not.toContain("leaked");
+			});
+
+			it("answers 500 when the async function rejects", async () => {
+				await expectNoKey({ apiKey: () => Promise.reject(new Error("timeout")) });
+
+				expect(consoleError).toHaveBeenCalledWith(
+					"AI Gateway auth: the apiKey option failed:",
+					"timeout",
+				);
+			});
+		});
+
 		describe("when the gateway rejects the proxy's credential", () => {
 			const rejection = {
 				error: { message: "Invalid API key", type: "authentication_error" },

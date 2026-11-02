@@ -132,12 +132,20 @@ Some gateway client calls do not go through the proxy:
 
 ## Authentication
 
-The proxy gets a credential on every request with `getGatewayAuthToken()`, in this order:
+Without the `apiKey` option, the proxy gets a credential on every request with `getGatewayAuthToken()`, in this order:
 
 1. **API key:** the `AI_GATEWAY_API_KEY` environment variable
 2. **OIDC:** a Vercel OIDC token, available when deployed on Vercel
 
 `getGatewayAuthToken()` is exported. It resolves to `{ token, authMethod: "api-key" | "oidc" }`, or `null` when neither is available, in which case the proxy answers `500` with a `proxy_error` (see below). The proxy sends the token upstream as `authorization: Bearer <token>` with `ai-gateway-auth-method`, so the credential never reaches the client.
+
+To take the key from somewhere else, such as a secret store or a key per tenant, pass `apiKey`: a string, or a function of the incoming `Request` that returns one or a promise of one. It runs on every request, before the body is read, so read the request's headers or URL, not its body. When `apiKey` is set it replaces the environment variable and OIDC: an empty or missing result, or a throw, answers `500` with a `proxy_error` without calling the gateway, and never falls back to the operator's own credential.
+
+```typescript
+const proxy = createGatewayProxy({
+  apiKey: async (request) => keyForTenant(request.headers.get("x-tenant-id")),
+});
+```
 
 ## Options
 
@@ -145,6 +153,7 @@ The proxy gets a credential on every request with `getGatewayAuthToken()`, in th
 
 | Option | Default | Description |
 | --- | --- | --- |
+| `apiKey` | `AI_GATEWAY_API_KEY`, then Vercel OIDC | `string \| (request) => string \| undefined \| Promise<...>`. The gateway API key, resolved on every request; see Authentication. |
 | `baseUrl` | `https://ai-gateway.vercel.sh/v4/ai` | Gateway URL that the extracted path and the incoming query string are appended to. |
 | `headers` | none | Extra headers for every upstream request. The proxy's own `authorization`, `ai-gateway-auth-method` and `ai-gateway-protocol-version` override entries with the same name in any casing, as does `content-type` on requests with a body. On requests with a body, the incoming request's `ai-language-model-*`, `ai-model-id` and `ai-*-model-specification-version` headers replace any entries describing the model call, and its `ai-o11y-*`, `idempotency-key` and `accept` headers override entries with the same name. No other incoming header is forwarded, so the client's `authorization` and cookies never reach the gateway. |
 | `segmentsParam` | `"segments"` | Name of the catch-all route param read from `context.params` when `extractPath` is not set, joined with `/`. Use `"path"` for `app/api/ai/[...path]/route.ts`. |
@@ -250,6 +259,7 @@ Apart from forwarding the gateway's own responses, the handler can answer with a
 | Status | Type | Message | When |
 | --- | --- | --- | --- |
 | 500 | `proxy_error` | `AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled` | `getGatewayAuthToken()` returned `null`. The type is not `authentication_error`, which `@ai-sdk/gateway` replaces with advice about the client's own key. |
+| 500 | `proxy_error` | `AI Gateway authentication not configured: the apiKey option gave no key` | The `apiKey` option resolved to an empty or missing key, or threw; the reason is logged without the key. The gateway is not called. |
 | upstream, such as 401 | `proxy_error` | `AI Gateway rejected the proxy's credential: <message>` | The gateway answered with an error typed `authentication_error`, for a call with a body or a bodyless one such as `GET /config`; see `onError` above. The other fields of the error are kept. |
 | 400 | `invalid_request_error` | `Invalid path` | The path is not a safe relative path under `baseUrl`. |
 | 400 | `invalid_request_error` | `Invalid JSON body` | A request other than `GET` or `HEAD` has a non-empty body that is not JSON. |

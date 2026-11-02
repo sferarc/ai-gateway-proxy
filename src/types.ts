@@ -6,6 +6,7 @@ import type {
 	SharedV4ProviderMetadata,
 	SharedV4Warning,
 } from "@ai-sdk/provider";
+import type { GatewayApiKey } from "./auth";
 
 /**
  * The response body from the AI Gateway for non-streaming requests.
@@ -98,6 +99,13 @@ export type RawResponseContext = RawRequestContext & {
  * Options for creating a gateway proxy.
  */
 export type CreateGatewayProxyOptions = {
+	/**
+	 * The gateway API key, or a function of the incoming request that returns it, resolved on every request.
+	 * When set, it replaces `AI_GATEWAY_API_KEY` and Vercel OIDC: an empty result or a throw answers
+	 * 500 `proxy_error` without calling the gateway. Read the request's headers or URL, not its body.
+	 * @default the `AI_GATEWAY_API_KEY` environment variable, then Vercel OIDC
+	 */
+	apiKey?: GatewayApiKey;
 	/**
 	 * Base URL for the AI Gateway. A trailing slash is accepted.
 	 * Request paths are resolved under it and cannot leave it; one that would returns 400 Invalid path.

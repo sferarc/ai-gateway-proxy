@@ -1,5 +1,5 @@
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
-import { type GatewayAuthToken, getGatewayAuthToken } from "./auth";
+import { type GatewayAuthToken, getGatewayAuthToken, resolveApiKeyOption } from "./auth";
 import { gatewayErrorProblem, gatewayResponseProblem, isRecord } from "./hook-result";
 import { createStreamTransformer } from "./stream";
 import type {
@@ -612,6 +612,7 @@ async function runAfterRawResponse(
  * @see https://github.com/vercel/ai/blob/main/packages/gateway/src/gateway-language-model.ts
  */
 export const createGatewayProxy = ({
+	apiKey,
 	baseUrl = DEFAULT_BASE_URL,
 	headers,
 	segmentsParam = "segments",
@@ -626,14 +627,18 @@ export const createGatewayProxy = ({
 		request: Request,
 		context?: { params: Promise<Record<string, string | string[] | undefined>> },
 	) => {
-		// Authenticate with the gateway
-		const auth = await getGatewayAuthToken();
+		const auth =
+			apiKey === undefined
+				? await getGatewayAuthToken()
+				: await resolveApiKeyOption(apiKey, request);
 		if (!auth) {
 			// Not authentication_error: @ai-sdk/gateway replaces that message with advice about the client's own key.
 			return proxyErrorResponse(
 				500,
 				"proxy_error",
-				"AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled",
+				apiKey === undefined
+					? "AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled"
+					: "AI Gateway authentication not configured: the apiKey option gave no key",
 			);
 		}
 
