@@ -698,6 +698,9 @@ export const createGatewayProxy = ({
 					request: requestBody as LanguageModelV4CallOptions,
 					modelId,
 				});
+				if (replaced instanceof Response) {
+					return replaced;
+				}
 				// A JavaScript caller can return nothing, such as a hook that only logs.
 				if (replaced === undefined || replaced === null) {
 					console.error("beforeRequest hook returned no request, sending the original body");
@@ -714,6 +717,9 @@ export const createGatewayProxy = ({
 			if (beforeRawRequest && rawContext) {
 				bodyHandedToHook = true;
 				const replaced = await beforeRawRequest({ ...rawContext, request: requestBody });
+				if (replaced instanceof Response) {
+					return replaced;
+				}
 				// null, like undefined, keeps the body rather than sending the literal null upstream.
 				if (replaced !== undefined && replaced !== null) {
 					requestBody = replaced;

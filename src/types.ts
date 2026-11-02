@@ -154,6 +154,10 @@ export type CreateGatewayProxyOptions = {
 	 * parsed body unchanged and logs an error. Any other result that is not an object, such as
 	 * a string or an array, is not sent: the client gets a 500 and the gateway is not called.
 	 *
+	 * A returned `Response` is sent to the client as is, without calling the gateway or running
+	 * `afterResponse` or `onError`, so the hook can refuse a call with a status the client does
+	 * not retry, such as a 402 or 403, where throwing would answer a retryable 500.
+	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 * A body that is JSON but not an object gets a 400 before this or any other language model
 	 * hook runs.
@@ -168,7 +172,7 @@ export type CreateGatewayProxyOptions = {
 		request: LanguageModelV4CallOptions;
 		/** The `ai-language-model-id` header the client sent, which names the model; the body does not. */
 		modelId?: string;
-	}) => LanguageModelV4CallOptions | Promise<LanguageModelV4CallOptions>;
+	}) => LanguageModelV4CallOptions | Response | Promise<LanguageModelV4CallOptions | Response>;
 	/**
 	 * Called after a successful response is received from the gateway.
 	 * Allows modification of the response body.
@@ -250,6 +254,8 @@ export type CreateGatewayProxyOptions = {
 	 * `batch/status`, `batch/results`, `batch/cancel`) run no hook.
 	 *
 	 * A returned value replaces the body sent upstream; `undefined` or `null` sends the body as is.
+	 * A returned `Response` is sent to the client as is, without calling the gateway or running
+	 * `afterRawResponse`.
 	 */
 	beforeRawRequest?: (context: RawRequestContext) => unknown;
 	/**

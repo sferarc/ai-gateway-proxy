@@ -888,6 +888,62 @@ describe("createGatewayProxy", () => {
 				expect(consoleError).toHaveBeenCalledWith(message);
 			},
 		);
+
+		it.each([
+			["synchronously", false],
+			["asynchronously", true],
+		])("sends a Response the hook returns %s without calling the gateway", async (_name, async) => {
+			const refusal = () =>
+				new Response(JSON.stringify({ error: { message: "Quota spent", type: "quota" } }), {
+					status: 402,
+					headers: { "content-type": "application/json", "x-quota": "0" },
+				});
+			const afterResponse = vi.fn();
+			const onError = vi.fn();
+			const proxy = createGatewayProxy({
+				beforeRequest: async ? async () => refusal() : () => refusal(),
+				afterResponse,
+				onError,
+			});
+			const request = createMockRequest("http://localhost/api/chat", { body: { prompt: [] } });
+
+			const response = await proxy(request, createMockContext(["chat"]));
+
+			expect(response.status).toBe(402);
+			expect(response.headers.get("x-quota")).toBe("0");
+			expect(await response.json()).toEqual({
+				error: { message: "Quota spent", type: "quota" },
+			});
+			expect(mockFetch).not.toHaveBeenCalled();
+			expect(afterResponse).not.toHaveBeenCalled();
+			expect(onError).not.toHaveBeenCalled();
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+
+		it("makes generateText call the hook once when it refuses with a 402", async () => {
+			const beforeRequest = vi.fn(() =>
+				Response.json(
+					{ error: { message: "AI credit exhausted", type: "insufficient_funds" } },
+					{ status: 402 },
+				),
+			);
+			const proxy = createGatewayProxy({ beforeRequest });
+			const provider = createGatewayProvider({
+				baseURL: "http://localhost/api",
+				apiKey: "client-key",
+				fetch: (input, init) =>
+					proxy(new Request(input, init), createMockContext(["language-model"])),
+			});
+
+			const result = await generateText({ model: provider("openai/gpt-5"), prompt: "hi" }).then(
+				() => undefined,
+				(e: unknown) => e as Error,
+			);
+
+			expect(result?.message).toBe("AI credit exhausted");
+			expect(beforeRequest).toHaveBeenCalledOnce();
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
 	});
 
 	describe("afterResponse hook", () => {
@@ -2692,6 +2748,24 @@ describe("createGatewayProxy", () => {
 			expect(response.status).toBe(200);
 			expect(beforeRawRequest).toHaveBeenCalledOnce();
 			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ values: ["a"] });
+		});
+
+		it("sends a Response beforeRawRequest returns without calling the gateway", async () => {
+			const afterRawResponse = vi.fn();
+			const proxy = createGatewayProxy({
+				beforeRawRequest: async () => new Response("refused", { status: 403 }),
+				afterRawResponse,
+			});
+
+			const response = await proxy(
+				createMockRequest("http://localhost/api/embedding-model", { body: { values: ["a"] } }),
+				createMockContext(["embedding-model"]),
+			);
+
+			expect(response.status).toBe(403);
+			expect(await response.text()).toBe("refused");
+			expect(mockFetch).not.toHaveBeenCalled();
+			expect(afterRawResponse).not.toHaveBeenCalled();
 		});
 
 		it("returns 500 without calling fetch when beforeRawRequest throws", async () => {
