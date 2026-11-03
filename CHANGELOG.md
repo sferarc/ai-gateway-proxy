@@ -1,5 +1,15 @@
 # ai-gateway-proxy
 
+## 0.9.0
+
+### Minor Changes
+
+- 8378504: Every hook receives `incomingRequest`, the `Request` the handler was called with, so a hook can meter or refuse a call per caller from its headers or URL instead of wrapping the handler.
+
+### Patch Changes
+
+- fa944df: The `afterResponse` doc comment says an invalid non-streamed result is answered with a 424 `proxy_error`, the status the proxy has sent since the gateway's billed answer stopped being retried, instead of a 500.
+
 ## 0.8.0
 
 ### Minor Changes
