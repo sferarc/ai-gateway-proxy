@@ -2457,6 +2457,103 @@ describe("createGatewayProxy", () => {
 		);
 	});
 
+	describe("teamIdOrSlug option", () => {
+		beforeEach(() => {
+			process.env.AI_GATEWAY_API_KEY = "test-api-key";
+		});
+
+		it("sends the team on a request with a body", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const proxy = createGatewayProxy({ teamIdOrSlug: "team_abc" });
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				body: { prompt: [] },
+			});
+
+			await proxy(request, createMockContext(["language-model"]));
+
+			const sent = new Headers(mockFetch.mock.calls[0][1].headers);
+			expect(sent.get("x-vercel-ai-gateway-team")).toBe("team_abc");
+		});
+
+		it("sends the team on a bodyless GET", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ models: [] }));
+			const proxy = createGatewayProxy({ teamIdOrSlug: "my-team" });
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+
+			await proxy.GET(request, createMockContext(["config"]));
+
+			const sent = new Headers(mockFetch.mock.calls[0][1].headers);
+			expect(sent.get("x-vercel-ai-gateway-team")).toBe("my-team");
+		});
+
+		it.each([
+			["a request with a body", "POST"],
+			["a bodyless GET", "GET"],
+		])("wins over a headers entry in any casing on %s", async (_label, method) => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const proxy = createGatewayProxy({
+				teamIdOrSlug: "team_abc",
+				headers: { "X-Vercel-AI-Gateway-Team": "other-team" },
+			});
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				method,
+				...(method === "POST" ? { body: { prompt: [] } } : {}),
+			});
+
+			await proxy(request, createMockContext(["language-model"]));
+
+			const sent = new Headers(mockFetch.mock.calls[0][1].headers);
+			expect(sent.get("x-vercel-ai-gateway-team")).toBe("team_abc");
+		});
+
+		it("keeps a headers entry when the option is unset", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const proxy = createGatewayProxy({ headers: { "x-vercel-ai-gateway-team": "from-headers" } });
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				body: { prompt: [] },
+			});
+
+			await proxy(request, createMockContext(["language-model"]));
+
+			const sent = new Headers(mockFetch.mock.calls[0][1].headers);
+			expect(sent.get("x-vercel-ai-gateway-team")).toBe("from-headers");
+		});
+
+		it("sends the proxy's team, not the team of a client built on @ai-sdk/gateway", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const proxy = createGatewayProxy({ teamIdOrSlug: "team_proxy" });
+			const gateway = createGatewayProvider({
+				baseURL: "http://localhost/api/ai",
+				apiKey: "client-key",
+				teamIdOrSlug: "team_client",
+				fetch: async (input, init) => {
+					const request = new Request(input, init);
+					const path = new URL(request.url).pathname.replace(/^\/api\/ai\/?/, "");
+					return proxy(request, createMockContext(path.split("/")));
+				},
+			});
+
+			await gateway("openai/gpt-5").doGenerate({ prompt: [] });
+
+			const sent = new Headers(mockFetch.mock.calls[0][1].headers);
+			expect(sent.get("x-vercel-ai-gateway-team")).toBe("team_proxy");
+			expect(sent.get("authorization")).toBe("Bearer test-api-key");
+		});
+
+		it("sends no team when the option is unset", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const proxy = createGatewayProxy();
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				body: { prompt: [] },
+			});
+
+			await proxy(request, createMockContext(["language-model"]));
+
+			const sent = new Headers(mockFetch.mock.calls[0][1].headers);
+			expect(sent.has("x-vercel-ai-gateway-team")).toBe(false);
+		});
+	});
+
 	describe("raw hooks", () => {
 		beforeEach(() => {
 			process.env.AI_GATEWAY_API_KEY = "test-api-key";
