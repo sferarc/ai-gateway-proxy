@@ -2,6 +2,7 @@
 
 Dated records of choices a later change could undo by accident. Each says what was decided, why, and what would reopen it. Newest first.
 
+- [[2026-11-03-hooks-receive-incoming-request]]: every hook gets `incomingRequest`, the `Request` the handler was called with, so it can meter or refuse per caller
 - [[2026-11-02-request-hooks-may-answer]]: `beforeRequest` and `beforeRawRequest` may return a `Response`, sent to the client without calling the gateway
 - [[2026-11-02-api-key-option-fails-closed]]: the `apiKey` option replaces the environment key and OIDC, and an empty result or a throw answers 500 instead of falling back
 - [[2026-11-02-client-bypass-calls-unsupported]]: the client calls that never reach the handler (WebSockets, `/v1/*` at the origin) stay documented as unsupported

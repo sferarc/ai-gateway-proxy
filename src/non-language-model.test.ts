@@ -251,6 +251,7 @@ describe("non-language-model calls through the proxy to a fake gateway", () => {
 			path: "batch/start",
 			modelId: "openai/gpt-5",
 			request: { requests },
+			incomingRequest: expect.any(Request),
 		});
 		expect(statuses).toEqual([200]);
 		expectNoHookRan(hooks);

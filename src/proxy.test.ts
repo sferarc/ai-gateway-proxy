@@ -1927,6 +1927,117 @@ describe("createGatewayProxy", () => {
 		});
 	});
 
+	describe("incoming request in the hooks", () => {
+		beforeEach(() => {
+			process.env.AI_GATEWAY_API_KEY = "test-key";
+		});
+
+		function callerRequest(path: string, headers: Record<string, string> = {}): Request {
+			return createMockRequest(`http://localhost/api/${path}`, {
+				body: { prompt: [] },
+				headers: { "x-user-id": "user-1", ...headers },
+			});
+		}
+
+		it("gives beforeRequest and afterResponse the request the handler got", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const seen: Array<Request | undefined> = [];
+			const proxy = createGatewayProxy({
+				beforeRequest: ({ request, incomingRequest }) => {
+					seen.push(incomingRequest);
+					return request;
+				},
+				afterResponse: ({ response, incomingRequest }) => {
+					seen.push(incomingRequest);
+					return response;
+				},
+			});
+			const request = callerRequest("language-model");
+
+			const response = await proxy(request, createMockContext(["language-model"]));
+
+			expect(response.status).toBe(200);
+			expect(seen).toHaveLength(2);
+			expect(seen[0]).toBe(request);
+			expect(seen[1]).toBe(request);
+			expect(seen[0]?.headers.get("x-user-id")).toBe("user-1");
+		});
+
+		it("gives afterResponse the request on a streamed response", async () => {
+			const finish = {
+				type: "finish",
+				finishReason: { unified: "stop", raw: "stop" },
+				usage: createMockGatewayResponse().usage,
+			};
+			mockFetch.mockResolvedValueOnce(
+				new Response(`data: ${JSON.stringify(finish)}\n\n`, {
+					headers: { "content-type": "text/event-stream" },
+				}),
+			);
+			const seen: Array<Request | undefined> = [];
+			const proxy = createGatewayProxy({
+				afterResponse: ({ response, incomingRequest }) => {
+					seen.push(incomingRequest);
+					return response;
+				},
+			});
+			const request = callerRequest("language-model", { "ai-language-model-streaming": "true" });
+
+			const response = await proxy(request, createMockContext(["language-model"]));
+			await response.text();
+
+			expect(seen).toHaveLength(1);
+			expect(seen[0]).toBe(request);
+		});
+
+		it("gives onError the request", async () => {
+			mockFetch.mockResolvedValueOnce(
+				createMockHttpResponse(
+					{ error: { message: "Model not found", type: "model_not_found" } },
+					{ status: 404 },
+				),
+			);
+			let seen: Request | undefined;
+			const proxy = createGatewayProxy({
+				onError: ({ error, incomingRequest }) => {
+					seen = incomingRequest;
+					return error;
+				},
+			});
+			const request = callerRequest("language-model");
+
+			const response = await proxy(request, createMockContext(["language-model"]));
+
+			expect(response.status).toBe(404);
+			expect(seen).toBe(request);
+		});
+
+		it("gives beforeRawRequest and afterRawResponse the request", async () => {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse({ embeddings: [[0.1]] }));
+			const seen: Request[] = [];
+			const proxy = createGatewayProxy({
+				beforeRawRequest: ({ incomingRequest }) => {
+					seen.push(incomingRequest);
+					return undefined;
+				},
+				afterRawResponse: ({ incomingRequest }) => {
+					seen.push(incomingRequest);
+					return undefined;
+				},
+			});
+			const request = callerRequest("embedding-model", {
+				"ai-model-id": "openai/text-embedding-3-small",
+			});
+
+			const response = await proxy(request, createMockContext(["embedding-model"]));
+
+			expect(response.status).toBe(200);
+			expect(seen).toHaveLength(2);
+			expect(seen[0]).toBe(request);
+			expect(seen[1]).toBe(request);
+		});
+	});
+
 	describe("request header forwarding", () => {
 		beforeEach(() => {
 			process.env.AI_GATEWAY_API_KEY = "test-api-key";
@@ -2395,6 +2506,7 @@ describe("createGatewayProxy", () => {
 				path: "embedding-model",
 				modelId: "openai/text-embedding-3-small",
 				request: { values: ["hello"] },
+				incomingRequest: expect.any(Request),
 			});
 			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
 				values: ["hello"],
@@ -2428,10 +2540,11 @@ describe("createGatewayProxy", () => {
 			const afterRawResponse = vi.fn();
 			const proxy = createGatewayProxy({ beforeRawRequest, afterRawResponse });
 
-			const response = await proxy(
-				createMockRequest(`http://localhost/api/${path}`, { body: { prompt: "a cat" } }),
-				createMockContext(path.split("/")),
-			);
+			const request = createMockRequest(`http://localhost/api/${path}`, {
+				body: { prompt: "a cat" },
+			});
+
+			const response = await proxy(request, createMockContext(path.split("/")));
 
 			expect(await response.json()).toEqual({ ok: true });
 			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ prompt: "a cat" });
@@ -2440,6 +2553,7 @@ describe("createGatewayProxy", () => {
 				path,
 				modelId: undefined,
 				request: { prompt: "a cat" },
+				incomingRequest: request,
 			});
 			expect(afterRawResponse).toHaveBeenCalledOnce();
 		});
