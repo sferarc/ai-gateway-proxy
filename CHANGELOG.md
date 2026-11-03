@@ -1,5 +1,15 @@
 # ai-gateway-proxy
 
+## 0.11.0
+
+### Minor Changes
+
+- c2c5d00: Add a `fetch` option to `createGatewayProxy`, so the upstream call can go through an instrumented `fetch`, an outbound proxy dispatcher or a test double instead of the global.
+
+### Patch Changes
+
+- ddfba88: Add a package description and keywords, so the npm page and npm search say what the proxy does.
+
 ## 0.10.0
 
 ### Minor Changes
