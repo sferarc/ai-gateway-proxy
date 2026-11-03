@@ -123,6 +123,11 @@ export type CreateGatewayProxyOptions = {
 	 */
 	headers?: Record<string, string>;
 	/**
+	 * Vercel team ID or slug sent as `x-vercel-ai-gateway-team` on every upstream request, for a
+	 * credential that can access several teams, such as a Vercel access token. It wins over `headers`.
+	 */
+	teamIdOrSlug?: string;
+	/**
 	 * The name of the catch-all parameter in the route.
 	 * @default "segments"
 	 * @example

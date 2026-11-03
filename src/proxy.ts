@@ -126,12 +126,25 @@ function withGatewayHeaders(
 	return Object.fromEntries(headers);
 }
 
+function proxyAuthHeaders(
+	auth: GatewayAuthToken,
+	teamIdOrSlug: string | undefined,
+): Record<string, string> {
+	return {
+		authorization: `Bearer ${auth.token}`,
+		"ai-gateway-auth-method": auth.authMethod,
+		"ai-gateway-protocol-version": PROTOCOL_VERSION,
+		...(teamIdOrSlug ? { "x-vercel-ai-gateway-team": teamIdOrSlug } : {}),
+	};
+}
+
 /**
  * Builds the headers for the upstream request: the caller's `headers`, then the model call and
  * request metadata headers from the incoming request, then the proxy's own.
  */
 function buildRequestHeaders(
 	auth: GatewayAuthToken,
+	teamIdOrSlug: string | undefined,
 	request: Request,
 	customHeaders?: Record<string, string>,
 ): Record<string, string> {
@@ -149,9 +162,7 @@ function buildRequestHeaders(
 
 	return withGatewayHeaders(headers, {
 		"content-type": "application/json",
-		authorization: `Bearer ${auth.token}`,
-		"ai-gateway-auth-method": auth.authMethod,
-		"ai-gateway-protocol-version": PROTOCOL_VERSION,
+		...proxyAuthHeaders(auth, teamIdOrSlug),
 	});
 }
 
@@ -198,17 +209,14 @@ async function forwardBodylessRequest(
 	request: Request,
 	upstream: string,
 	auth: GatewayAuthToken,
+	teamIdOrSlug: string | undefined,
 	customHeaders?: Record<string, string>,
 ): Promise<Response> {
 	try {
 		const res = await fetch(upstream, {
 			method: request.method,
 			signal: request.signal,
-			headers: withGatewayHeaders(customHeaders, {
-				authorization: `Bearer ${auth.token}`,
-				"ai-gateway-auth-method": auth.authMethod,
-				"ai-gateway-protocol-version": PROTOCOL_VERSION,
-			}),
+			headers: withGatewayHeaders(customHeaders, proxyAuthHeaders(auth, teamIdOrSlug)),
 			redirect: "manual",
 		});
 
@@ -615,6 +623,7 @@ export const createGatewayProxy = ({
 	apiKey,
 	baseUrl = DEFAULT_BASE_URL,
 	headers,
+	teamIdOrSlug,
 	segmentsParam = "segments",
 	extractPath,
 	beforeRequest,
@@ -652,13 +661,13 @@ export const createGatewayProxy = ({
 			const upstream = resolved.url;
 
 			if (request.method === "GET" || request.method === "HEAD" || request.body === null) {
-				return await forwardBodylessRequest(request, upstream, auth, headers);
+				return await forwardBodylessRequest(request, upstream, auth, teamIdOrSlug, headers);
 			}
 
 			// Node adapters give every method but GET and HEAD a body stream, so an empty one is bodyless too
 			const text = await request.text();
 			if (text === "") {
-				return await forwardBodylessRequest(request, upstream, auth, headers);
+				return await forwardBodylessRequest(request, upstream, auth, teamIdOrSlug, headers);
 			}
 
 			// Parse request body
@@ -735,7 +744,7 @@ export const createGatewayProxy = ({
 				body: bodyHandedToHook ? JSON.stringify(requestBody) : text,
 				duplex: "half",
 				signal: request.signal,
-				headers: buildRequestHeaders(auth, request, headers),
+				headers: buildRequestHeaders(auth, teamIdOrSlug, request, headers),
 				redirect: "manual",
 			} as RequestInit);
 
