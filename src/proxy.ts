@@ -1,4 +1,5 @@
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
+import type { FetchFunction } from "@ai-sdk/provider-utils";
 import { type GatewayAuthToken, getGatewayAuthToken, resolveApiKeyOption } from "./auth";
 import { gatewayErrorProblem, gatewayResponseProblem, isRecord } from "./hook-result";
 import { createStreamTransformer } from "./stream";
@@ -210,10 +211,11 @@ async function forwardBodylessRequest(
 	upstream: string,
 	auth: GatewayAuthToken,
 	teamIdOrSlug: string | undefined,
+	upstreamFetch: FetchFunction,
 	customHeaders?: Record<string, string>,
 ): Promise<Response> {
 	try {
-		const res = await fetch(upstream, {
+		const res = await upstreamFetch(upstream, {
 			method: request.method,
 			signal: request.signal,
 			headers: withGatewayHeaders(customHeaders, proxyAuthHeaders(auth, teamIdOrSlug)),
@@ -624,6 +626,7 @@ export const createGatewayProxy = ({
 	baseUrl = DEFAULT_BASE_URL,
 	headers,
 	teamIdOrSlug,
+	fetch: customFetch,
 	segmentsParam = "segments",
 	extractPath,
 	beforeRequest,
@@ -636,6 +639,8 @@ export const createGatewayProxy = ({
 		request: Request,
 		context?: { params: Promise<Record<string, string | string[] | undefined>> },
 	) => {
+		// Read the global per request, so a fetch replaced after the proxy was created is used.
+		const upstreamFetch = customFetch ?? fetch;
 		const auth =
 			apiKey === undefined
 				? await getGatewayAuthToken()
@@ -661,13 +666,27 @@ export const createGatewayProxy = ({
 			const upstream = resolved.url;
 
 			if (request.method === "GET" || request.method === "HEAD" || request.body === null) {
-				return await forwardBodylessRequest(request, upstream, auth, teamIdOrSlug, headers);
+				return await forwardBodylessRequest(
+					request,
+					upstream,
+					auth,
+					teamIdOrSlug,
+					upstreamFetch,
+					headers,
+				);
 			}
 
 			// Node adapters give every method but GET and HEAD a body stream, so an empty one is bodyless too
 			const text = await request.text();
 			if (text === "") {
-				return await forwardBodylessRequest(request, upstream, auth, teamIdOrSlug, headers);
+				return await forwardBodylessRequest(
+					request,
+					upstream,
+					auth,
+					teamIdOrSlug,
+					upstreamFetch,
+					headers,
+				);
 			}
 
 			// Parse request body
@@ -739,7 +758,7 @@ export const createGatewayProxy = ({
 
 			const isStreaming = request.headers.get("ai-language-model-streaming") === "true";
 
-			const res = await fetch(upstream, {
+			const res = await upstreamFetch(upstream, {
 				method: request.method,
 				body: bodyHandedToHook ? JSON.stringify(requestBody) : text,
 				duplex: "half",
