@@ -274,8 +274,11 @@ export type CreateGatewayProxyOptions = {
 	 *
 	 * A returned `Response` is sent instead. Returning nothing sends `response`, which must then
 	 * be unread; a hook that read it without returning a `Response`, or returned anything else,
-	 * is a 500. When the hook returns another `Response`, throws or returns anything else, an
-	 * unread `response.body` is cancelled unless the returned `Response` is built on it.
+	 * fails as a throw does. A failure after a successful call is a 424 `proxy_error`, a status
+	 * AI SDK clients do not retry since the gateway has already billed the call; after an upstream
+	 * error status it is a 500. When the hook returns another `Response`, throws or returns
+	 * anything else, an unread `response.body` is cancelled unless the returned `Response` is
+	 * built on it.
 	 */
 	afterRawResponse?: (
 		context: RawResponseContext,
