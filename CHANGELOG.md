@@ -1,5 +1,15 @@
 # ai-gateway-proxy
 
+## 0.10.0
+
+### Minor Changes
+
+- cfd3e7d: Add a `teamIdOrSlug` option that sends `x-vercel-ai-gateway-team` on every upstream request, so a credential that can access several teams, such as a Vercel access token, is scoped to one team as `@ai-sdk/gateway` does.
+
+### Patch Changes
+
+- 23346ea: List the `GatewayApiKey` type, the type of the `apiKey` option, in the README's exports.
+
 ## 0.9.1
 
 ### Patch Changes
