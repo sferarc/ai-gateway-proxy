@@ -182,8 +182,9 @@ export type CreateGatewayProxyOptions = {
 	 * Allows modification of the response body.
 	 *
 	 * For non-streaming responses, the returned object replaces the JSON body sent to the client.
-	 * A result with a missing or wrong-typed field is not sent: the client gets a 500 naming the
-	 * field, and on a stream the original finish event is forwarded. `null` stands for an absent
+	 * A result with a missing or wrong-typed field is not sent: the client gets a 424 `proxy_error`
+	 * naming the field, a status AI SDK clients do not retry since the gateway has already billed
+	 * the call, and on a stream the original finish event is forwarded. `null` stands for an absent
 	 * field, and `warnings` may be left out. An absent `usage` keeps the gateway's, on both paths.
 	 *
 	 * For streaming responses, this is called when the stream completes with
