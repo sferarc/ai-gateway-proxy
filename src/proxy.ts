@@ -493,15 +493,15 @@ async function runAfterResponse(
 type LanguageModelHooks = Pick<CreateGatewayProxyOptions, "afterResponse" | "onError">;
 
 /**
- * Wraps the hooks so each call also receives the model id, which the stream transformer does not know.
+ * Wraps the hooks so each call also receives the model id and incoming request, which the stream transformer does not know.
  */
-function withModelId(
+function withCallContext(
 	{ afterResponse, onError }: LanguageModelHooks,
-	modelId: string | undefined,
+	callContext: { modelId: string | undefined; incomingRequest: Request },
 ): LanguageModelHooks {
 	return {
-		afterResponse: afterResponse && ((context) => afterResponse({ ...context, modelId })),
-		onError: onError && ((context) => onError({ ...context, modelId })),
+		afterResponse: afterResponse && ((context) => afterResponse({ ...context, ...callContext })),
+		onError: onError && ((context) => onError({ ...context, ...callContext })),
 	};
 }
 
@@ -684,6 +684,7 @@ export const createGatewayProxy = ({
 				kind,
 				path: resolved.relativePath,
 				modelId: request.headers.get("ai-model-id") ?? undefined,
+				incomingRequest: request,
 			};
 
 			// A hook can replace or mutate the parsed body, so only then is it serialised again.
@@ -697,6 +698,7 @@ export const createGatewayProxy = ({
 				const replaced = await beforeRequest({
 					request: requestBody as LanguageModelV4CallOptions,
 					modelId,
+					incomingRequest: request,
 				});
 				if (replaced instanceof Response) {
 					return replaced;
@@ -745,7 +747,9 @@ export const createGatewayProxy = ({
 				res,
 				requestBody as LanguageModelV4CallOptions,
 				isStreaming,
-				runsHooks ? withModelId({ afterResponse, onError }, modelId) : {},
+				runsHooks
+					? withCallContext({ afterResponse, onError }, { modelId, incomingRequest: request })
+					: {},
 				request.signal,
 			);
 

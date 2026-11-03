@@ -207,10 +207,12 @@ describe("README example: cap, meter and mask", () => {
 });
 
 // Same hook as "Refusing a call" in README.md; change both together.
-function refusingProxy(hasCredit: (modelId: string | undefined) => Promise<boolean>) {
+function refusingProxy(
+	hasCredit: (authorization: string | null, modelId: string | undefined) => Promise<boolean>,
+) {
 	return createGatewayProxy({
-		beforeRequest: async ({ request, modelId }) =>
-			(await hasCredit(modelId))
+		beforeRequest: async ({ request, modelId, incomingRequest }) =>
+			(await hasCredit(incomingRequest.headers.get("authorization"), modelId))
 				? request
 				: Response.json(
 						{ error: { message: "AI credit exhausted", type: "insufficient_funds" } },
@@ -232,13 +234,16 @@ describe("README example: refusing a call", () => {
 	it("answers 402 without calling the gateway when the model has no credit", async () => {
 		const hasCredit = vi.fn(async () => false);
 
-		const response = await refusingProxy(hasCredit)(languageModelRequest({}), context);
+		const request = languageModelRequest({});
+		request.headers.set("authorization", "Bearer session-1");
+
+		const response = await refusingProxy(hasCredit)(request, context);
 
 		expect(response.status).toBe(402);
 		expect(await response.json()).toEqual({
 			error: { message: "AI credit exhausted", type: "insufficient_funds" },
 		});
-		expect(hasCredit).toHaveBeenCalledExactlyOnceWith("openai/gpt-5");
+		expect(hasCredit).toHaveBeenCalledExactlyOnceWith("Bearer session-1", "openai/gpt-5");
 		expect(mockFetch).not.toHaveBeenCalled();
 	});
 

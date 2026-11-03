@@ -81,6 +81,8 @@ export type RawRequestContext = {
 	modelId: string | undefined;
 	/** The parsed JSON body, unchecked. */
 	request: unknown;
+	/** The `Request` the handler was called with, for its headers, URL and `signal`; its body has already been read. */
+	incomingRequest: Request;
 };
 
 /**
@@ -172,6 +174,8 @@ export type CreateGatewayProxyOptions = {
 		request: LanguageModelV4CallOptions;
 		/** The `ai-language-model-id` header the client sent, which names the model; the body does not. */
 		modelId?: string;
+		/** The `Request` the handler was called with, for its headers, URL and `signal`; its body has already been read. */
+		incomingRequest: Request;
 	}) => LanguageModelV4CallOptions | Response | Promise<LanguageModelV4CallOptions | Response>;
 	/**
 	 * Called after a successful response is received from the gateway.
@@ -213,6 +217,8 @@ export type CreateGatewayProxyOptions = {
 		request: LanguageModelV4CallOptions;
 		/** The `ai-language-model-id` header the client sent, which names the model; the body does not. */
 		modelId?: string;
+		/** The `Request` the handler was called with; its body has already been read. Unset when you call `createStreamTransformer` yourself. */
+		incomingRequest?: Request;
 		response: GatewayResponse;
 		/** Set only for a stream that did not deliver its `finish` event. */
 		incomplete?: IncompleteStream;
@@ -243,6 +249,8 @@ export type CreateGatewayProxyOptions = {
 		request: LanguageModelV4CallOptions;
 		/** The `ai-language-model-id` header the client sent, which names the model; the body does not. */
 		modelId?: string;
+		/** The `Request` the handler was called with; its body has already been read. */
+		incomingRequest?: Request;
 		error: GatewayError;
 		status: number;
 	}) => GatewayError | Response | Promise<GatewayError | Response>;
