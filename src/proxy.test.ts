@@ -2554,6 +2554,93 @@ describe("createGatewayProxy", () => {
 		});
 	});
 
+	describe("fetch option", () => {
+		beforeEach(() => {
+			process.env.AI_GATEWAY_API_KEY = "test-api-key";
+		});
+
+		it("sends a request with a body through the given fetch instead of the global", async () => {
+			const customFetch = vi.fn(async () => createMockHttpResponse(createMockGatewayResponse()));
+			const proxy = createGatewayProxy({ fetch: customFetch });
+			const controller = new AbortController();
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				body: { prompt: [] },
+				signal: controller.signal,
+			});
+
+			const response = await proxy(request, createMockContext(["language-model"]));
+
+			expect(response.status).toBe(200);
+			expect(mockFetch).not.toHaveBeenCalled();
+			expect(customFetch).toHaveBeenCalledOnce();
+			const [url, init] = customFetch.mock.calls[0] as unknown as [string, RequestInit];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v4/ai/language-model");
+			expect(init.method).toBe("POST");
+			expect(init.body).toBe(JSON.stringify({ prompt: [] }));
+			expect(init.redirect).toBe("manual");
+			expect(init.signal).toBe(request.signal);
+			expect(new Headers(init.headers).get("authorization")).toBe("Bearer test-api-key");
+		});
+
+		it("sends a bodyless GET through the given fetch instead of the global", async () => {
+			const customFetch = vi.fn(async () => createMockHttpResponse({ models: [] }));
+			const proxy = createGatewayProxy({ fetch: customFetch });
+			const request = createMockRequest("http://localhost/api/ai/config", { method: "GET" });
+
+			const response = await proxy.GET(request, createMockContext(["config"]));
+
+			expect(await response.json()).toEqual({ models: [] });
+			expect(mockFetch).not.toHaveBeenCalled();
+			const [url, init] = customFetch.mock.calls[0] as unknown as [string, RequestInit];
+			expect(url).toBe("https://ai-gateway.vercel.sh/v4/ai/config");
+			expect(init.redirect).toBe("manual");
+			expect(new Headers(init.headers).get("authorization")).toBe("Bearer test-api-key");
+		});
+
+		it("refuses a redirect the given fetch returns", async () => {
+			const customFetch = vi.fn(
+				async () => new Response(null, { status: 302, headers: { location: "https://evil" } }),
+			);
+			const proxy = createGatewayProxy({ fetch: customFetch });
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["language-model"]));
+
+			await expectGatewayError(
+				response,
+				502,
+				"proxy_error",
+				"Upstream redirected, the proxy does not follow redirects",
+			);
+		});
+
+		it("answers 500 when the given fetch throws", async () => {
+			const proxy = createGatewayProxy({
+				fetch: async () => {
+					throw new TypeError("fetch failed");
+				},
+			});
+			const request = createMockRequest("http://localhost/api/ai/language-model", {
+				body: { prompt: [] },
+			});
+
+			const response = await proxy(request, createMockContext(["language-model"]));
+
+			await expectGatewayError(
+				response,
+				500,
+				"proxy_error",
+				"Error proxying request to AI Gateway",
+			);
+			expect(consoleError).toHaveBeenCalledWith(
+				"AI Gateway proxy request failed:",
+				expect.any(TypeError),
+			);
+		});
+	});
+
 	describe("raw hooks", () => {
 		beforeEach(() => {
 			process.env.AI_GATEWAY_API_KEY = "test-api-key";

@@ -6,6 +6,7 @@ import type {
 	SharedV4ProviderMetadata,
 	SharedV4Warning,
 } from "@ai-sdk/provider";
+import type { FetchFunction } from "@ai-sdk/provider-utils";
 import type { GatewayApiKey } from "./auth";
 
 /**
@@ -127,6 +128,12 @@ export type CreateGatewayProxyOptions = {
 	 * credential that can access several teams, such as a Vercel access token. It wins over `headers`.
 	 */
 	teamIdOrSlug?: string;
+	/**
+	 * The `fetch` used for upstream requests, such as an instrumented one or one with an outbound
+	 * proxy dispatcher. It gets `redirect: "manual"` and the client's `signal`, and should honour both.
+	 * @default the global `fetch`
+	 */
+	fetch?: FetchFunction;
 	/**
 	 * The name of the catch-all parameter in the route.
 	 * @default "segments"
