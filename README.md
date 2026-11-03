@@ -318,7 +318,7 @@ Apart from forwarding the gateway's own responses, the handler can answer with a
 ## Other exports
 
 - `createStreamTransformer(body, request, afterResponse, signal?)` and `StreamContentAggregator`: the pieces the proxy uses to run `afterResponse` on a stream, for building your own streaming handler. Pass `signal` when the upstream `fetch` uses it too, so an abort is reported as `cancelled` rather than as an upstream failure.
-- Types: `CreateGatewayProxyOptions`, `CreateGatewayProxyFn`, `CreateGatewayProxyResult`, `GatewayResponse`, `GatewayResponseMetadata`, `GatewayError`, `IncompleteStream`, `ModelCallKind`, `RawRequestContext`, `RawResponseContext` and `GatewayAuthToken`.
+- Types: `CreateGatewayProxyOptions`, `CreateGatewayProxyFn`, `CreateGatewayProxyResult`, `GatewayResponse`, `GatewayResponseMetadata`, `GatewayError`, `IncompleteStream`, `ModelCallKind`, `RawRequestContext`, `RawResponseContext`, `GatewayAuthToken` and `GatewayApiKey`, the type of the `apiKey` option.
 
 ## Documentation
 
