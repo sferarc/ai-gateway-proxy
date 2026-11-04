@@ -28,4 +28,10 @@ describe("README links", () => {
 		expect(documentation).toContain("CHANGELOG.md");
 		expect(documentation).not.toMatch(/\]\([a-z]+:/);
 	});
+
+	it("sends readers who do not need the proxy to the AI SDK gateway provider", () => {
+		const whenNotNeeded = section("When you do not need it");
+		expect(whenNotNeeded).toContain("](https://ai-sdk.dev/providers/ai-sdk-providers/ai-gateway)");
+		expect(whenNotNeeded).toContain("](#protecting-the-route)");
+	});
 });

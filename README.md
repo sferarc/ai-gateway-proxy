@@ -9,6 +9,14 @@ For apps whose [AI SDK](https://ai-sdk.dev) code runs where a [Vercel AI Gateway
 
 The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js and Hono directly and into Express or `node:http` through a small adapter ([Quick Start](#quick-start)).
 
+## When you do not need it
+
+If every model call already runs on your own server, such as in a route handler, a server action or a background job, call the gateway there with the AI SDK's [AI Gateway provider](https://ai-sdk.dev/providers/ai-sdk-providers/ai-gateway) and skip the proxy. That provider reads `AI_GATEWAY_API_KEY` or the Vercel OIDC token on the server itself, so the key never leaves it, and any check or metering is your own code around `generateText` or `streamText`.
+
+The proxy is for the other cases: a client that must not hold the key, or calls from several clients that you want to check, cap or meter in one place.
+
+It does not carry every gateway call either. Streaming speech, streaming transcription and realtime open WebSockets, which the HTTP-only handler cannot carry, and the credits, spend report, generation info and `getToken` calls go to your app's origin instead of the route ([Protecting the route](#protecting-the-route) lists each one).
+
 ## Installation
 
 ```bash
