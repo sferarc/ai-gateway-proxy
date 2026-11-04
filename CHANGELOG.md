@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.13.3
+
+### Patch Changes
+
+- 9474f40: Point the README "Documentation" section at the README sections and the changelog instead of an outside docs page that described an older protocol.
+
 ## 0.13.2
 
 ### Patch Changes
