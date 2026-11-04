@@ -38,4 +38,9 @@ describe("README anchors", () => {
 	it.each(anchors)("links #%s to a heading", (anchor) => {
 		expect(headingSlugs(readme)).toContain(anchor);
 	});
+
+	// The sferadev.com page describes an older API (#177). Re-add a docs link only once one matches the code.
+	it("links no stale documentation site", () => {
+		expect(readme).not.toContain("sferadev.com/docs");
+	});
 });
