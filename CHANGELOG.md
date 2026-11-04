@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.13.4
+
+### Patch Changes
+
+- 0b8e8a9: Say in the README when the proxy is not needed: server-only model calls can use the AI SDK gateway provider directly, and some gateway calls never reach the proxy.
+
 ## 0.13.3
 
 ### Patch Changes
