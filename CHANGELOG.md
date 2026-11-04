@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.13.2
+
+### Patch Changes
+
+- 778761d: Open the README with who the proxy is for and what it does for them, each linked to the section that shows it.
+
 ## 0.13.1
 
 ### Patch Changes
