@@ -1,12 +1,13 @@
 # ai-gateway-proxy
 
-A lightweight proxy handler for [Vercel AI Gateway](https://vercel.com/docs/ai-gateway).
+For apps whose [AI SDK](https://ai-sdk.dev) code runs where a [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) key must not live: a browser, a mobile or desktop app, or code a third party runs. The client calls a route in your app, and ai-gateway-proxy forwards the call to the gateway from your server.
 
-## Features
+- **The gateway credential stays on the server:** the proxy authenticates with an API key or Vercel OIDC and never sends it to the client ([Authentication](#authentication)).
+- **You decide who may call:** your route can check the caller's session or token before handing the call to the proxy ([Protecting the route](#protecting-the-route)).
+- **Each call can be capped, metered, rewritten or refused:** `beforeRequest`, `afterResponse` and `onError` handle language model calls, and `beforeRawRequest` and `afterRawResponse` the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) ([Example: cap, meter and mask](#example-cap-meter-and-mask), [Refusing a call](#refusing-a-call), [Raw hooks](#raw-hooks)).
+- **Streams are forwarded as they arrive:** each SSE event reaches the client as the gateway sends it, and `afterResponse` gets the aggregated result when the stream finishes ([`afterResponse`](#afterresponse)).
 
-- **Request and response hooks:** transform language model requests and responses with `beforeRequest`, `afterResponse` and `onError`, and meter or rewrite the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) with `beforeRawRequest` and `afterRawResponse`
-- **Streaming:** forwards the gateway's SSE stream as it arrives and gives `afterResponse` the aggregated result when the stream finishes (AI SDK V4 protocol)
-- **Fetch handler:** takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js and Hono directly and into Express or `node:http` through a small adapter
+The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js and Hono directly and into Express or `node:http` through a small adapter ([Quick Start](#quick-start)).
 
 ## Installation
 
