@@ -327,7 +327,7 @@ Apart from forwarding the gateway's own responses, the handler can answer with a
 
 ## Documentation
 
-More guides are on the [documentation site](https://sferadev.com/docs/packages/ai-gateway-proxy). Where it differs from this README, this README matches the code.
+This README is the documentation and matches the code: [Options](#options) covers every option, [Responses the proxy generates](#responses-the-proxy-generates) every status and message the proxy answers with itself, and [Raw hooks](#raw-hooks) the calls other than language model calls. [`CHANGELOG.md`](CHANGELOG.md) lists what changed in each release.
 
 ## Development
 
