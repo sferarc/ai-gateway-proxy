@@ -99,6 +99,19 @@ export type RawResponseContext = RawRequestContext & {
 };
 
 /**
+ * Extra upstream headers, or a function of the incoming request that returns them.
+ */
+export type GatewayHeaders =
+	| Record<string, string>
+	| ((
+			request: Request,
+	  ) =>
+			| Record<string, string>
+			| null
+			| undefined
+			| Promise<Record<string, string> | null | undefined>);
+
+/**
  * Options for creating a gateway proxy.
  */
 export type CreateGatewayProxyOptions = {
@@ -121,8 +134,11 @@ export type CreateGatewayProxyOptions = {
 	 * On requests with a body it also sets `content-type`, drops entries naming the model call
 	 * (`ai-language-model-*`, `ai-model-id`, `ai-*-model-specification-version`) in favour of the
 	 * incoming request's, and lets the incoming `ai-o11y-*`, `idempotency-key` and `accept` override these.
+	 * A function of the incoming request is resolved on every request, so the headers can follow the
+	 * caller: a `null` or `undefined` result sends none, and a throw or a result that is not an object
+	 * of strings answers 500 `proxy_error` without calling the gateway.
 	 */
-	headers?: Record<string, string>;
+	headers?: GatewayHeaders;
 	/**
 	 * Vercel team ID or slug sent as `x-vercel-ai-gateway-team` on every upstream request, for a
 	 * credential that can access several teams, such as a Vercel access token. It wins over `headers`.

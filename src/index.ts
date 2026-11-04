@@ -11,6 +11,7 @@ export type {
 	CreateGatewayProxyOptions,
 	CreateGatewayProxyResult,
 	GatewayError,
+	GatewayHeaders,
 	GatewayResponse,
 	GatewayResponseMetadata,
 	IncompleteStream,

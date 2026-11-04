@@ -2657,6 +2657,124 @@ describe("createGatewayProxy", () => {
 		});
 	});
 
+	describe("headers option as a function", () => {
+		const failedMessage = "AI Gateway headers not configured: the headers option failed";
+
+		beforeEach(() => {
+			process.env.AI_GATEWAY_API_KEY = "test-api-key";
+		});
+
+		async function sentHeaders(
+			headers: CreateGatewayProxyOptions["headers"],
+			method = "POST",
+		): Promise<Headers> {
+			mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+			const proxy = createGatewayProxy({ headers });
+			const response = await proxy(
+				createMockRequest("http://localhost/api/ai/language-model", {
+					method,
+					headers: { "x-tenant": "acme" },
+					...(method === "POST" ? { body: { prompt: [] } } : {}),
+				}),
+				createMockContext(["language-model"]),
+			);
+			expect(response.status).toBe(200);
+			return new Headers(mockFetch.mock.calls[0][1].headers);
+		}
+
+		async function expectHeadersFailure(
+			headers: CreateGatewayProxyOptions["headers"],
+		): Promise<void> {
+			const proxy = createGatewayProxy({ headers });
+			const response = await proxy(
+				createMockRequest("http://localhost/api/ai/language-model", { body: { prompt: [] } }),
+				createMockContext(["language-model"]),
+			);
+			await expectGatewayError(response, 500, "proxy_error", failedMessage);
+			expect(mockFetch).not.toHaveBeenCalled();
+		}
+
+		it.each([
+			["a request with a body", "POST"],
+			["a bodyless GET", "GET"],
+		])("sends the headers it returns for the incoming request on %s", async (_label, method) => {
+			const headers = vi.fn((request: Request) => ({
+				"x-upstream-tenant": `tenant_${request.headers.get("x-tenant")}`,
+			}));
+
+			const sent = await sentHeaders(headers, method);
+
+			expect(sent.get("x-upstream-tenant")).toBe("tenant_acme");
+			expect(headers).toHaveBeenCalledTimes(1);
+		});
+
+		it("is called on every request", async () => {
+			const headers = vi.fn(() => ({ "x-upstream-tenant": "acme" }));
+
+			await sentHeaders(headers);
+			mockFetch.mockClear();
+			await sentHeaders(headers);
+
+			expect(headers).toHaveBeenCalledTimes(2);
+		});
+
+		it("awaits an async function and keeps the proxy's own headers authoritative", async () => {
+			const sent = await sentHeaders(async () => ({
+				Authorization: "Bearer from-headers",
+				"x-upstream-tenant": "acme",
+			}));
+
+			expect(sent.get("authorization")).toBe("Bearer test-api-key");
+			expect(sent.get("x-upstream-tenant")).toBe("acme");
+		});
+
+		it.each([
+			["undefined", () => undefined],
+			["null", async () => null],
+		])("sends no extra headers when the function returns %s", async (_name, headers) => {
+			const sent = await sentHeaders(headers);
+
+			expect(sent.get("authorization")).toBe("Bearer test-api-key");
+			expect(sent.has("x-upstream-tenant")).toBe(false);
+			expect(consoleError).not.toHaveBeenCalled();
+		});
+
+		it("answers 500 and logs only the message when the function throws", async () => {
+			const error = Object.assign(new Error("tenant lookup failed"), { token: "leaked" });
+
+			await expectHeadersFailure(() => {
+				throw error;
+			});
+
+			expect(consoleError).toHaveBeenCalledWith(
+				"AI Gateway proxy: the headers option failed:",
+				"tenant lookup failed",
+			);
+			expect(JSON.stringify(consoleError.mock.calls)).not.toContain("leaked");
+		});
+
+		it("answers 500 when the async function rejects", async () => {
+			await expectHeadersFailure(() => Promise.reject(new Error("timeout")));
+
+			expect(consoleError).toHaveBeenCalledWith(
+				"AI Gateway proxy: the headers option failed:",
+				"timeout",
+			);
+		});
+
+		it.each([
+			["a string", "x-tenant: acme"],
+			["an array", [["x-tenant", "acme"]]],
+			["an object with a value that is not a string", { "x-tenant": 42 }],
+		])("answers 500 when the function returns %s", async (_name, value) => {
+			await expectHeadersFailure((() => value) as unknown as () => Record<string, string>);
+
+			expect(consoleError).toHaveBeenCalledWith(
+				"AI Gateway proxy: the headers option gave a value that is not an object of strings",
+			);
+		});
+	});
+
 	describe("fetch option", () => {
 		beforeEach(() => {
 			process.env.AI_GATEWAY_API_KEY = "test-api-key";
