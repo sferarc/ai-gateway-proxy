@@ -305,6 +305,7 @@ Apart from forwarding the gateway's own responses, the handler can answer with a
 | --- | --- | --- | --- |
 | 500 | `proxy_error` | `AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled` | `getGatewayAuthToken()` returned `null`. The type is not `authentication_error`, which `@ai-sdk/gateway` replaces with advice about the client's own key. |
 | 500 | `proxy_error` | `AI Gateway authentication not configured: the apiKey option gave no key` | The `apiKey` option resolved to an empty or missing key, or threw; the reason is logged without the key. The gateway is not called. |
+| 500 | `proxy_error` | `AI Gateway team not configured: the teamIdOrSlug option failed` | The `teamIdOrSlug` function threw or returned something other than a string, `null` or `undefined`; only the error message is logged. The gateway is not called. |
 | 500 | `proxy_error` | `AI Gateway headers not configured: the headers option failed` | The `headers` function threw or returned something other than an object of strings, `null` or `undefined`; only the error message is logged. The gateway is not called. |
 | upstream, such as 401 | `proxy_error` | `AI Gateway rejected the proxy's credential: <message>` | The gateway answered with an error typed `authentication_error`, for a call with a body or a bodyless one such as `GET /config`; see `onError` above. The other fields of the error are kept. |
 | 400 | `invalid_request_error` | `Invalid path` | The path is not a safe relative path under `baseUrl`. |
