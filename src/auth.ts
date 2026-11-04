@@ -60,3 +60,37 @@ export async function resolveApiKeyOption(
 		return null;
 	}
 }
+
+/**
+ * A Vercel team ID or slug, or a function of the incoming request that returns one.
+ */
+export type GatewayTeamIdOrSlug =
+	| string
+	| ((request: Request) => string | null | undefined | Promise<string | null | undefined>);
+
+/**
+ * Resolves the `teamIdOrSlug` option for one request. Unset, empty, `null` or `undefined` is no
+ * team; returns `null` when the function throws or gives something else, after logging why.
+ */
+export async function resolveTeamOption(
+	teamIdOrSlug: GatewayTeamIdOrSlug | undefined,
+	request: Request,
+): Promise<{ team: string | undefined } | null> {
+	try {
+		const team = typeof teamIdOrSlug === "function" ? await teamIdOrSlug(request) : teamIdOrSlug;
+		if (team === null || team === undefined || team === "") {
+			return { team: undefined };
+		}
+		if (typeof team === "string") {
+			return { team };
+		}
+		console.error("AI Gateway auth: the teamIdOrSlug option gave a value that is not a string");
+		return null;
+	} catch (error) {
+		console.error(
+			"AI Gateway auth: the teamIdOrSlug option failed:",
+			error instanceof Error ? error.message : String(error),
+		);
+		return null;
+	}
+}

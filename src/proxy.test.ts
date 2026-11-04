@@ -2552,6 +2552,109 @@ describe("createGatewayProxy", () => {
 			const sent = new Headers(mockFetch.mock.calls[0][1].headers);
 			expect(sent.has("x-vercel-ai-gateway-team")).toBe(false);
 		});
+
+		describe("as a function", () => {
+			const failedMessage = "AI Gateway team not configured: the teamIdOrSlug option failed";
+
+			async function sentTeam(
+				teamIdOrSlug: CreateGatewayProxyOptions["teamIdOrSlug"],
+				options: { method?: string; headers?: Record<string, string> } = {},
+			): Promise<string | null> {
+				mockFetch.mockResolvedValueOnce(createMockHttpResponse(createMockGatewayResponse()));
+				const proxy = createGatewayProxy({ teamIdOrSlug, headers: options.headers });
+				const method = options.method ?? "POST";
+				const response = await proxy(
+					createMockRequest("http://localhost/api/ai/language-model", {
+						method,
+						headers: { "x-tenant": "acme" },
+						...(method === "POST" ? { body: { prompt: [] } } : {}),
+					}),
+					createMockContext(["language-model"]),
+				);
+				expect(response.status).toBe(200);
+				return new Headers(mockFetch.mock.calls[0][1].headers).get("x-vercel-ai-gateway-team");
+			}
+
+			async function expectTeamFailure(
+				teamIdOrSlug: CreateGatewayProxyOptions["teamIdOrSlug"],
+			): Promise<void> {
+				const proxy = createGatewayProxy({ teamIdOrSlug });
+				const response = await proxy(
+					createMockRequest("http://localhost/api/ai/language-model", { body: { prompt: [] } }),
+					createMockContext(["language-model"]),
+				);
+				await expectGatewayError(response, 500, "proxy_error", failedMessage);
+				expect(mockFetch).not.toHaveBeenCalled();
+			}
+
+			it.each([
+				["a request with a body", "POST"],
+				["a bodyless GET", "GET"],
+			])("sends the team it returns for the incoming request on %s", async (_label, method) => {
+				const teamIdOrSlug = vi.fn((request: Request) => `team_${request.headers.get("x-tenant")}`);
+
+				expect(await sentTeam(teamIdOrSlug, { method })).toBe("team_acme");
+				expect(teamIdOrSlug).toHaveBeenCalledTimes(1);
+			});
+
+			it("is called on every request", async () => {
+				const teamIdOrSlug = vi.fn(() => "team_abc");
+
+				await sentTeam(teamIdOrSlug);
+				mockFetch.mockClear();
+				await sentTeam(teamIdOrSlug);
+
+				expect(teamIdOrSlug).toHaveBeenCalledTimes(2);
+			});
+
+			it("awaits an async function and wins over a headers entry", async () => {
+				const team = await sentTeam(async () => "team_async", {
+					headers: { "X-Vercel-AI-Gateway-Team": "other-team" },
+				});
+
+				expect(team).toBe("team_async");
+			});
+
+			it.each([
+				["undefined", () => undefined],
+				["null", () => null],
+				["an empty string", async () => ""],
+			])("sends no team when the function returns %s", async (_name, teamIdOrSlug) => {
+				expect(await sentTeam(teamIdOrSlug)).toBeNull();
+				expect(consoleError).not.toHaveBeenCalled();
+			});
+
+			it("answers 500 and logs only the message when the function throws", async () => {
+				const error = Object.assign(new Error("tenant lookup failed"), { token: "leaked" });
+
+				await expectTeamFailure(() => {
+					throw error;
+				});
+
+				expect(consoleError).toHaveBeenCalledWith(
+					"AI Gateway auth: the teamIdOrSlug option failed:",
+					"tenant lookup failed",
+				);
+				expect(JSON.stringify(consoleError.mock.calls)).not.toContain("leaked");
+			});
+
+			it("answers 500 when the async function rejects", async () => {
+				await expectTeamFailure(() => Promise.reject(new Error("timeout")));
+
+				expect(consoleError).toHaveBeenCalledWith(
+					"AI Gateway auth: the teamIdOrSlug option failed:",
+					"timeout",
+				);
+			});
+
+			it("answers 500 when the function returns something that is not a string", async () => {
+				await expectTeamFailure((() => 42) as unknown as () => string);
+
+				expect(consoleError).toHaveBeenCalledWith(
+					"AI Gateway auth: the teamIdOrSlug option gave a value that is not a string",
+				);
+			});
+		});
 	});
 
 	describe("fetch option", () => {
