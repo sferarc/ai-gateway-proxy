@@ -12,6 +12,7 @@ import type {
 	CreateGatewayProxyOptions,
 	CreateGatewayProxyResult,
 	GatewayError,
+	GatewayHeaders,
 	GatewayResponse,
 	ModelCallKind,
 	RawResponseContext,
@@ -115,6 +116,38 @@ function buildUpstreamUrl(
 		url.search = queryString;
 	}
 	return { url: url.toString(), relativePath: url.pathname.slice(base.pathname.length) };
+}
+
+/**
+ * Resolves the `headers` option for one request. Unset, `null` or `undefined` is none; returns
+ * `null` when the function throws or gives something other than an object of strings, after logging why.
+ */
+async function resolveHeadersOption(
+	headers: GatewayHeaders | undefined,
+	request: Request,
+): Promise<{ headers: Record<string, string> | undefined } | null> {
+	if (typeof headers !== "function") {
+		return { headers };
+	}
+	try {
+		const resolved = await headers(request);
+		if (resolved === null || resolved === undefined) {
+			return { headers: undefined };
+		}
+		if (isRecord(resolved) && Object.values(resolved).every((value) => typeof value === "string")) {
+			return { headers: resolved as Record<string, string> };
+		}
+		console.error(
+			"AI Gateway proxy: the headers option gave a value that is not an object of strings",
+		);
+		return null;
+	} catch (error) {
+		console.error(
+			"AI Gateway proxy: the headers option failed:",
+			error instanceof Error ? error.message : String(error),
+		);
+		return null;
+	}
 }
 
 /**
@@ -670,6 +703,16 @@ export const createGatewayProxy = ({
 			);
 		}
 		const team = resolvedTeam.team;
+		const resolvedHeaders = await resolveHeadersOption(headers, request);
+		if (!resolvedHeaders) {
+			// Fail closed: the headers may carry what the caller relies on upstream, such as a tenant tag.
+			return proxyErrorResponse(
+				500,
+				"proxy_error",
+				"AI Gateway headers not configured: the headers option failed",
+			);
+		}
+		const customHeaders = resolvedHeaders.headers;
 
 		try {
 			// Build upstream URL
@@ -681,13 +724,27 @@ export const createGatewayProxy = ({
 			const upstream = resolved.url;
 
 			if (request.method === "GET" || request.method === "HEAD" || request.body === null) {
-				return await forwardBodylessRequest(request, upstream, auth, team, upstreamFetch, headers);
+				return await forwardBodylessRequest(
+					request,
+					upstream,
+					auth,
+					team,
+					upstreamFetch,
+					customHeaders,
+				);
 			}
 
 			// Node adapters give every method but GET and HEAD a body stream, so an empty one is bodyless too
 			const text = await request.text();
 			if (text === "") {
-				return await forwardBodylessRequest(request, upstream, auth, team, upstreamFetch, headers);
+				return await forwardBodylessRequest(
+					request,
+					upstream,
+					auth,
+					team,
+					upstreamFetch,
+					customHeaders,
+				);
 			}
 
 			// Parse request body
@@ -764,7 +821,7 @@ export const createGatewayProxy = ({
 				body: bodyHandedToHook ? JSON.stringify(requestBody) : text,
 				duplex: "half",
 				signal: request.signal,
-				headers: buildRequestHeaders(auth, team, request, headers),
+				headers: buildRequestHeaders(auth, team, request, customHeaders),
 				redirect: "manual",
 			} as RequestInit);
 
