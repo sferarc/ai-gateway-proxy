@@ -7,7 +7,7 @@ import type {
 	SharedV4Warning,
 } from "@ai-sdk/provider";
 import type { FetchFunction } from "@ai-sdk/provider-utils";
-import type { GatewayApiKey } from "./auth";
+import type { GatewayApiKey, GatewayTeamIdOrSlug } from "./auth";
 
 /**
  * The response body from the AI Gateway for non-streaming requests.
@@ -126,8 +126,11 @@ export type CreateGatewayProxyOptions = {
 	/**
 	 * Vercel team ID or slug sent as `x-vercel-ai-gateway-team` on every upstream request, for a
 	 * credential that can access several teams, such as a Vercel access token. It wins over `headers`.
+	 * A function of the incoming request is resolved on every request, so the team can follow the
+	 * caller: an empty, `null` or `undefined` result sends no team, and a throw or a non-string
+	 * result answers 500 `proxy_error` without calling the gateway.
 	 */
-	teamIdOrSlug?: string;
+	teamIdOrSlug?: GatewayTeamIdOrSlug;
 	/**
 	 * The `fetch` used for upstream requests, such as an instrumented one or one with an outbound
 	 * proxy dispatcher. It gets `redirect: "manual"` and the client's `signal`, and should honour both.

@@ -1,4 +1,9 @@
-export { type GatewayApiKey, type GatewayAuthToken, getGatewayAuthToken } from "./auth";
+export {
+	type GatewayApiKey,
+	type GatewayAuthToken,
+	type GatewayTeamIdOrSlug,
+	getGatewayAuthToken,
+} from "./auth";
 export { createGatewayProxy } from "./proxy";
 export { createStreamTransformer, StreamContentAggregator } from "./stream";
 export type {

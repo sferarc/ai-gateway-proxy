@@ -1,6 +1,11 @@
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import type { FetchFunction } from "@ai-sdk/provider-utils";
-import { type GatewayAuthToken, getGatewayAuthToken, resolveApiKeyOption } from "./auth";
+import {
+	type GatewayAuthToken,
+	getGatewayAuthToken,
+	resolveApiKeyOption,
+	resolveTeamOption,
+} from "./auth";
 import { gatewayErrorProblem, gatewayResponseProblem, isRecord } from "./hook-result";
 import { createStreamTransformer } from "./stream";
 import type {
@@ -655,6 +660,16 @@ export const createGatewayProxy = ({
 					: "AI Gateway authentication not configured: the apiKey option gave no key",
 			);
 		}
+		const resolvedTeam = await resolveTeamOption(teamIdOrSlug, request);
+		if (!resolvedTeam) {
+			// Fail closed: without the team a multi-team credential would bill its default team.
+			return proxyErrorResponse(
+				500,
+				"proxy_error",
+				"AI Gateway team not configured: the teamIdOrSlug option failed",
+			);
+		}
+		const team = resolvedTeam.team;
 
 		try {
 			// Build upstream URL
@@ -666,27 +681,13 @@ export const createGatewayProxy = ({
 			const upstream = resolved.url;
 
 			if (request.method === "GET" || request.method === "HEAD" || request.body === null) {
-				return await forwardBodylessRequest(
-					request,
-					upstream,
-					auth,
-					teamIdOrSlug,
-					upstreamFetch,
-					headers,
-				);
+				return await forwardBodylessRequest(request, upstream, auth, team, upstreamFetch, headers);
 			}
 
 			// Node adapters give every method but GET and HEAD a body stream, so an empty one is bodyless too
 			const text = await request.text();
 			if (text === "") {
-				return await forwardBodylessRequest(
-					request,
-					upstream,
-					auth,
-					teamIdOrSlug,
-					upstreamFetch,
-					headers,
-				);
+				return await forwardBodylessRequest(request, upstream, auth, team, upstreamFetch, headers);
 			}
 
 			// Parse request body
@@ -763,7 +764,7 @@ export const createGatewayProxy = ({
 				body: bodyHandedToHook ? JSON.stringify(requestBody) : text,
 				duplex: "half",
 				signal: request.signal,
-				headers: buildRequestHeaders(auth, teamIdOrSlug, request, headers),
+				headers: buildRequestHeaders(auth, team, request, headers),
 				redirect: "manual",
 			} as RequestInit);
 
