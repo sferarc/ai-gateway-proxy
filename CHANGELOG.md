@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.13.1
+
+### Patch Changes
+
+- 0e108d6: List the `teamIdOrSlug` failure, 500 `proxy_error` `AI Gateway team not configured: the teamIdOrSlug option failed`, in the README table of responses the proxy generates.
+
 ## 0.13.0
 
 ### Minor Changes
