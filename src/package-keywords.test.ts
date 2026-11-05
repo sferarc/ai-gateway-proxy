@@ -6,11 +6,12 @@ const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url),
 };
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 
-// Server frameworks are the Quick Start subsections other than the client and route protection.
+// Server frameworks are the Quick Start subsections other than the client, route protection and CORS.
+const notFrameworks = new Set(["Client", "Protecting the route", "Calling from another origin"]);
 const quickStart = readme.split(/^## Quick Start$/m)[1]?.split(/^## /m)[0] ?? "";
 const frameworks = [...quickStart.matchAll(/^### (.+)$/gm)]
 	.map(([, heading]) => heading)
-	.filter((heading) => heading !== "Client" && heading !== "Protecting the route")
+	.filter((heading) => !notFrameworks.has(heading))
 	.map((heading) =>
 		heading
 			.split(" ")[0]
