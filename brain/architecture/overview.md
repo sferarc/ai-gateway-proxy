@@ -16,9 +16,13 @@ A TypeScript library published to npm as `ai-gateway-proxy`, shipped as ESM and 
 
 `skills/ai-gateway-proxy/SKILL.md` is an Agent Skills skill (https://agentskills.io) that tells a coding agent when the proxy is needed and how to set it up; `npx skills add sferarc/ai-gateway-proxy` installs it from the repository, not from the npm package, whose `files` hold only `dist` (#183). It restates the README, which stays the authority, so a change to an option or hook rule the skill names updates both. `src/skill.test.ts` type checks its samples ([[development/testing]]).
 
+## Agent instructions
+
+`AGENTS.md` at the root holds the repository rules for coding agents (the `check` command, changesets, no hand releases, prose rules, the `brain/` index), read by the tools that follow https://agents.md. `CLAUDE.md` is the single line `@AGENTS.md`, so Claude Code imports the same file and the rules have one source (#185). Edit `AGENTS.md`, never `CLAUDE.md`.
+
 ## Context7
 
-`context7.json` at the root configures the Context7 docs index (https://context7.com) that agents query through its MCP server (#184). It indexes the Markdown of the README, `CHANGELOG.md`, `examples/` and `skills/`, excludes `brain/`, `.changeset/`, `.github/`, `src/` and `CLAUDE.md`, and gives agents rules that restate the README, starting with the proxy not being OpenAI compatible. Setting `excludeFiles` turns off Context7's default exclusions, which would drop the changelog. Context7 reads the file from `main` when it refreshes the library, so an edit lands on the next refresh. `src/context7.test.ts` holds it to the schema limits ([[development/testing]]).
+`context7.json` at the root configures the Context7 docs index (https://context7.com) that agents query through its MCP server (#184). It indexes the Markdown of the README, `CHANGELOG.md`, `examples/` and `skills/`, excludes `brain/`, `.changeset/`, `.github/`, `src/`, `AGENTS.md` and `CLAUDE.md`, and gives agents rules that restate the README, starting with the proxy not being OpenAI compatible. Setting `excludeFiles` turns off Context7's default exclusions, which would drop the changelog. Context7 reads the file from `main` when it refreshes the library, so an edit lands on the next refresh. `src/context7.test.ts` holds it to the schema limits ([[development/testing]]).
 
 ## Runtime dependencies
 
