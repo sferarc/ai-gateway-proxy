@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.14.1
+
+### Patch Changes
+
+- caf947b: Document how to serve the proxy route to a browser page on another origin: answer the CORS preflight, allow the headers the client sends and expose `retry-after` so the AI SDK backoff still works.
+
 ## 0.14.0
 
 ### Minor Changes
