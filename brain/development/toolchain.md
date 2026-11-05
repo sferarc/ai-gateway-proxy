@@ -18,6 +18,7 @@ pnpm typecheck        # tsc --noEmit
 pnpm test             # vitest run
 pnpm test:integration # only src/integration.test.ts; skipped without AI_GATEWAY_API_KEY
 pnpm build            # bunchee, emits dist/index.{mjs,cjs,d.ts,d.cts}
+pnpm typecheck:example # after build: tsc in examples/nextjs against dist
 pnpm is-tree-shakable # after build
 pnpm attw             # after build: declarations match each module format
 pnpm changeset        # describe a change for the next release
@@ -36,3 +37,7 @@ Biome only (`biome.json`): tabs, 100 columns, double quotes, the recommended pre
 ## Dependencies
 
 Every version lives in the `catalog` of `pnpm-workspace.yaml`, and `package.json` refers to it as `catalog:`. `catalogMode: strict` makes `pnpm add` refuse a version outside the catalog, and `saveExact` keeps entries exact. `overrides` carries security floors for `postcss`, `rollup` and `undici` from the monorepo. `allowBuilds` lets only lefthook run its install script.
+
+## Examples
+
+`pnpm-workspace.yaml` lists `examples/*` as workspace packages. `examples/nextjs` (#180) is a private Next.js App Router app that depends on `ai-gateway-proxy` as `workspace:*`, so it uses the built `dist`, and takes `next`, `react`, `react-dom` and their types from the catalog. The root `tsconfig.json` excludes `examples`, `knip.json` declares the example as its own workspace, and `.changeset/config.json` sets `privatePackages` to neither version nor tag it. Its `dev` and `build` scripts pass `--webpack`: Turbopack uses the workspace root as its root and takes this repository's `src/proxy.ts` for the Next.js proxy (middleware) convention file, failing with "Proxy is missing expected function export name" (seen on Next.js 16.4.5; the build passed with the file moved away). Next.js 16.4 type checks through the `typescript` CLI by default (`experimental.useTypeScriptCli`), so TypeScript 7 works there without the shim.

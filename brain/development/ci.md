@@ -4,7 +4,7 @@
 
 ## Steps
 
-Steps 3 to 10 are the `check` script in `package.json`, kept as separate steps so a failure names its step. Change both together.
+Steps 3 to 11 are the `check` script in `package.json`, kept as separate steps so a failure names its step. Change both together.
 
 1. `jdx/mise-action` installs Node and pnpm from `mise.toml`, checked against `mise.lock`.
 2. `pnpm install --frozen-lockfile`
@@ -14,8 +14,9 @@ Steps 3 to 10 are the `check` script in `package.json`, kept as separate steps s
 6. `pnpm typecheck`
 7. `pnpm test`. The integration tests skip because no `AI_GATEWAY_API_KEY` is stored; `src/e2e.test.ts` covers the client to proxy to gateway path against a local fake gateway instead ([[testing]]).
 8. `pnpm build`
-9. `pnpm is-tree-shakable`
-10. `pnpm attw`: `@arethetypeswrong/cli` packs the package with `npm pack` and checks that every resolution mode (node10, node16 from CommonJS and from ESM, bundler) finds declarations of the matching module format. Added on 2026-10-28, when it reported "Masquerading as ESM" for node16 from CommonJS ([[decisions/2025-12-28-bunchee-build]]).
+9. `pnpm typecheck:example`: `tsc --noEmit` in `examples/nextjs`, which resolves `ai-gateway-proxy` to `dist`, so it runs after the build. The example is never run in CI, since that would call the gateway (#180, [[toolchain]]).
+10. `pnpm is-tree-shakable`
+11. `pnpm attw`: `@arethetypeswrong/cli` packs the package with `npm pack` and checks that every resolution mode (node10, node16 from CommonJS and from ESM, bundler) finds declarations of the matching module format. Added on 2026-10-28, when it reported "Masquerading as ESM" for node16 from CommonJS ([[decisions/2025-12-28-bunchee-build]]).
 
 Actions are pinned to full commit SHAs with the version in a trailing comment, because the organisation requires it (`ci.yml` header). Update both together.
 

@@ -14,5 +14,5 @@
 		"target": "ESNext"
 	},
 	"include": ["."],
-	"exclude": ["dist", "node_modules"]
+	"exclude": ["dist", "node_modules", "examples"]
 }
