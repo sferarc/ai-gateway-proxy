@@ -34,6 +34,10 @@ As of 2026-11-05:
 - The version pull requests ("Version Packages", for example #116 and #127) are opened and merged by `sferarc-hq[bot]`, and the run on the merge commit publishes (run 41283580134 on c16f694 published 0.2.0, run 41395716488 on b0490aa published 0.6.0).
 - `release.yml` mints a sferarc-hq App token (`actions/create-github-app-token`, pinned to the same SHA as `sferarc/openapi`) and passes it to `changesets/action`, so no commit or pull request comes from a personal account (since 2026-10-31).
 
+## Workspace packages
+
+changesets reads the workspace through `@manypkg/tools`, which treats a `pnpm-workspace.yaml` with a `packages` list as a monorepo and returns only the packages that list matches. #194 (00d1f89) added `examples/*` alone, so from that commit to e94411a every `release.yml` run failed with "Found changeset agent-skill for package ai-gateway-proxy which is not in the workspace" and no version pull request opened. #208 lists `.` first; `src/workspace.test.ts` keeps it there and `pnpm changeset status` names `ai-gateway-proxy` again.
+
 ## Rules for contributors and agents
 
 Never publish by hand, tag, bump the version or change `RELEASE_ENABLED`: a release is a changeset in a pull request, then the version pull request. Adding a changeset to a pull request is fine.

@@ -1,4 +1,6 @@
 packages:
+  # changesets lists only these packages, so without "." it cannot find ai-gateway-proxy itself.
+  - .
   - examples/*
 catalog:
   '@ai-sdk/gateway': 4.0.132
