@@ -21,7 +21,7 @@ catalog:
   react: 19.3.1
   react-dom: 19.3.1
   # bunchee emits declarations through the TypeScript 6 JavaScript API, which TypeScript 7
-  # dropped; it looks for this shim by name. Remove it once bunchee builds .d.ts on TS 7 alone.
+  # dropped; it looks for this shim by name. src/skill.test.ts type checks with it too.
   typescript: 7.0.2
   '@typescript/typescript6': 6.0.2
   vitest: 5.0.5

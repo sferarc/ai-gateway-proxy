@@ -3,8 +3,7 @@
 	"workspaces": {
 		".": {
 			"entry": ["src/index.ts"],
-			"project": ["src/**/*.ts"],
-			"ignoreDependencies": ["@typescript/typescript6"]
+			"project": ["src/**/*.ts"]
 		},
 		"examples/nextjs": {}
 	}

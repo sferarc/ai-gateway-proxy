@@ -23,6 +23,8 @@ It does not carry every gateway call either. Streaming speech, streaming transcr
 npm install ai-gateway-proxy
 ```
 
+To have a coding agent set it up, install the [agent skill](skills/ai-gateway-proxy/SKILL.md) with `npx skills add sferarc/ai-gateway-proxy`. It covers when the proxy is needed, the route per framework, the client, protecting the route and metering, without loading this README.
+
 ## Quick Start
 
 ### Next.js App Router
