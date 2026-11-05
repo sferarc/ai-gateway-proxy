@@ -111,6 +111,18 @@ describe("agent skill", () => {
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeExpress));
 	});
 
+	// The README copy runs through browser CORS checks in readme-cors.test.ts.
+	it("carries the README cross-origin wrapper unchanged", () => {
+		expect(skill).toContain("](references/cors.md)");
+		const reference = readFileSync(`${skillDir}references/cors.md`, "utf8");
+		const readmeCors = readme.slice(
+			readme.indexOf("### Calling from another origin"),
+			readme.indexOf("## Authentication"),
+		);
+		expect(typescriptBlocks(readmeCors)).toHaveLength(1);
+		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeCors));
+	});
+
 	it("is linked from the README", () => {
 		expect(readme).toContain("](skills/ai-gateway-proxy/SKILL.md)");
 	});
