@@ -21,10 +21,24 @@ type Metered = {
 // Same hooks as "Example: cap, meter and mask" in README.md; change both together.
 function readmeProxy(meter: (usage: Metered) => Promise<void>) {
 	return createGatewayProxy({
-		beforeRequest: ({ request }) => ({
-			...request,
-			maxOutputTokens: Math.min(request.maxOutputTokens ?? 1024, 1024),
-		}),
+		beforeRequest: ({ request }) => {
+			const requested: unknown = request.maxOutputTokens;
+			if (
+				requested !== undefined &&
+				(!Number.isSafeInteger(requested) || (requested as number) < 1)
+			) {
+				return Response.json(
+					{
+						error: {
+							message: "maxOutputTokens must be a positive integer",
+							type: "invalid_request_error",
+						},
+					},
+					{ status: 400 },
+				);
+			}
+			return { ...request, maxOutputTokens: Math.min(request.maxOutputTokens ?? 1024, 1024) };
+		},
 		afterResponse: async ({ request, modelId, response, incomplete }) => {
 			await meter({
 				modelId,
@@ -66,10 +80,10 @@ function sseResponse(parts: LanguageModelV4StreamPart[]): Response {
 	return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
 }
 
-function languageModelRequest(body: Record<string, unknown>, streaming = false): Request {
+function languageModelRequest(body: Record<string, unknown> | string, streaming = false): Request {
 	return new Request("http://localhost/api/ai/language-model", {
 		method: "POST",
-		body: JSON.stringify({ prompt: [], ...body }),
+		body: typeof body === "string" ? body : JSON.stringify({ prompt: [], ...body }),
 		headers: {
 			"content-type": "application/json",
 			"ai-language-model-id": "openai/gpt-5",
@@ -110,6 +124,30 @@ describe("README example: cap, meter and mask", () => {
 		await readmeProxy(meter)(languageModelRequest({ maxOutputTokens: requested }), context);
 
 		expect(upstreamBody().maxOutputTokens).toBe(sent);
+	});
+
+	// #200 review: Math.min of a string is NaN, which JSON sends upstream as null, lifting the cap.
+	it.each([
+		["a string", '{"prompt":[],"maxOutputTokens":"lots"}'],
+		["an object", '{"prompt":[],"maxOutputTokens":{}}'],
+		["null", '{"prompt":[],"maxOutputTokens":null}'],
+		["a negative number", '{"prompt":[],"maxOutputTokens":-1}'],
+		["zero", '{"prompt":[],"maxOutputTokens":0}'],
+		["a fraction", '{"prompt":[],"maxOutputTokens":1.5}'],
+		["a number past the safe integers", `{"prompt":[],"maxOutputTokens":${2 ** 53}}`],
+		["Infinity", '{"prompt":[],"maxOutputTokens":1e999}'],
+	])("answers 400 to a maxOutputTokens that is %s without calling the gateway", async (_, body) => {
+		const response = await readmeProxy(meter)(languageModelRequest(body), context);
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: {
+				message: "maxOutputTokens must be a positive integer",
+				type: "invalid_request_error",
+			},
+		});
+		expect(mockFetch).not.toHaveBeenCalled();
+		expect(meter).not.toHaveBeenCalled();
 	});
 
 	it("meters a non-streamed call and forwards the gateway body unchanged", async () => {

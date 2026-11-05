@@ -113,6 +113,14 @@ const proxy = createGatewayProxy({
         { status: 402 },
       );
     }
+    // The body is the client's JSON, so the type does not hold until it is checked here.
+    const requested: unknown = request.maxOutputTokens;
+    if (requested !== undefined && (!Number.isSafeInteger(requested) || (requested as number) < 1)) {
+      return Response.json(
+        { error: { message: "maxOutputTokens must be a positive integer", type: "invalid_request_error" } },
+        { status: 400 },
+      );
+    }
     return { ...request, maxOutputTokens: Math.min(request.maxOutputTokens ?? 1024, 1024) };
   },
   afterResponse: async ({ modelId, response, incomingRequest, incomplete }) => {
@@ -128,9 +136,9 @@ const proxy = createGatewayProxy({
 ```
 
 - Refuse by returning a `Response` from `beforeRequest`, with a 400, 402 or 403 in the `{ error: { message, type } }` shape. Throwing gives a 500, and a 429 or 5xx is retried by the AI SDK client.
-- `request` is the client's JSON, so `maxOutputTokens` may be any value; check it before using it as a number.
+- `request` is the client's JSON, so `maxOutputTokens` may be a string, `null`, negative or a fraction. Refuse such a value with a 400 before capping, as the sample does: `Math.min` of a string is `NaN`, which reaches the gateway as `null` and lifts the cap.
 - On a stream, `afterResponse` runs once when the stream finishes, or ends early with `incomplete` set; content it returns is ignored, since the client already has it.
-- Embedding, image, video, speech, transcription, reranking and batch calls skip these hooks and run `beforeRawRequest` and `afterRawResponse` instead. A route that meters only language models should refuse them: `beforeRawRequest: () => Response.json({ error: { message: "Only language model calls are served", type: "invalid_request_error" } }, { status: 403 })`.
+- Embedding, image, video, speech, transcription, reranking, decision and batch calls skip these hooks and run `beforeRawRequest` and `afterRawResponse` instead. A route that meters only language models should refuse them: `beforeRawRequest: () => Response.json({ error: { message: "Only language model calls are served", type: "invalid_request_error" } }, { status: 403 })`.
 
 ## More
 

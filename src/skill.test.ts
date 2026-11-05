@@ -6,7 +6,12 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import ts from "@typescript/typescript6";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createGatewayProxy } from "./index";
+
+vi.mock("@vercel/oidc", () => ({
+	getVercelOidcToken: vi.fn(),
+}));
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const skillDir = `${root}skills/ai-gateway-proxy/`;
@@ -120,4 +125,105 @@ describe("agent skill", () => {
 		expect(samples.size).toBeGreaterThanOrEqual(6);
 		expect(typeErrors(samples)).toEqual([]);
 	}, 60_000);
+});
+
+// Agents copy the sample, so it runs here as written rather than as a hand kept copy.
+function capSampleProxy(hasCredit: () => Promise<boolean>, meter: () => Promise<void>) {
+	const sample = typescriptBlocks(skill).find((code) => code.includes("beforeRequest"));
+	if (!sample) throw new Error("SKILL.md has no beforeRequest sample");
+	const script = ts.transpileModule(sample.replace(/^import .*\n/m, ""), {
+		compilerOptions: { target: ts.ScriptTarget.ES2022 },
+	}).outputText;
+	const build = new Function(
+		"createGatewayProxy",
+		"hasCredit",
+		"meter",
+		`${script}\nreturn proxy;`,
+	);
+	return build(createGatewayProxy, hasCredit, meter) as ReturnType<typeof createGatewayProxy>;
+}
+
+describe("agent skill: cap, meter and refuse sample", () => {
+	const fetchMock = vi.fn();
+	const context = { params: Promise.resolve({ segments: ["language-model"] }) };
+
+	function call(body: string) {
+		const proxy = capSampleProxy(
+			async () => true,
+			async () => {},
+		);
+		return proxy(
+			new Request("http://localhost/api/ai/language-model", {
+				method: "POST",
+				body,
+				headers: {
+					"content-type": "application/json",
+					"ai-language-model-id": "openai/gpt-5",
+					"ai-language-model-streaming": "false",
+				},
+			}),
+			context,
+		);
+	}
+
+	beforeEach(() => {
+		fetchMock.mockReset();
+		vi.stubGlobal("fetch", fetchMock);
+		vi.stubEnv("AI_GATEWAY_API_KEY", "test-key");
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
+	});
+
+	// #200 review: Math.min of a string is NaN, which JSON sends upstream as null, lifting the cap.
+	it.each([
+		["a string", '"lots"'],
+		["an object", "{}"],
+		["null", "null"],
+		["a negative number", "-1"],
+		["zero", "0"],
+		["a fraction", "1.5"],
+		["a number past the safe integers", String(2 ** 53)],
+		["Infinity", "1e999"],
+	])(
+		"answers 400 to a maxOutputTokens that is %s without calling the gateway",
+		async (_, value) => {
+			const response = await call(`{"prompt":[],"maxOutputTokens":${value}}`);
+
+			expect(response.status).toBe(400);
+			expect(await response.json()).toEqual({
+				error: {
+					message: "maxOutputTokens must be a positive integer",
+					type: "invalid_request_error",
+				},
+			});
+			expect(fetchMock).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each([
+		["absent", "", 1024],
+		["4096", ',"maxOutputTokens":4096', 1024],
+		["100", ',"maxOutputTokens":100', 100],
+	])("sends a maxOutputTokens that is %s upstream as %s", async (_, field, sent) => {
+		fetchMock.mockResolvedValueOnce(
+			Response.json({
+				content: [{ type: "text", text: "Hi" }],
+				finishReason: { unified: "stop", raw: "stop" },
+				usage: {
+					inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+					outputTokens: { total: 1, text: 1, reasoning: 0 },
+				},
+				warnings: [],
+			}),
+		);
+
+		const response = await call(`{"prompt":[]${field}}`);
+
+		expect(response.status).toBe(200);
+		const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(JSON.parse(init.body as string).maxOutputTokens).toBe(sent);
+	});
 });
