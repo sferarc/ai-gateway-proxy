@@ -1,0 +1,14 @@
+{
+	"$schema": "https://context7.com/schema/context7.json",
+	"projectTitle": "ai-gateway-proxy",
+	"description": "A Fetch route handler that forwards AI SDK gateway provider calls to the Vercel AI Gateway with an API key or Vercel OIDC, with hooks to check, cap, meter or rewrite each call.",
+	"excludeFolders": ["brain", ".changeset", ".github", "src"],
+	"excludeFiles": ["CLAUDE.md"],
+	"rules": [
+		"Point an @ai-sdk/gateway client at the route with createGateway({ baseURL }); the proxy speaks the AI SDK gateway protocol and is not an OpenAI-compatible endpoint.",
+		"Keep the gateway credential on the server: the proxy reads AI_GATEWAY_API_KEY, Vercel OIDC or its apiKey option, and the client's apiKey only reaches your route.",
+		"Check the caller in your route before calling the handler and answer 401 there; a missing proxy credential answers 500, which AI SDK clients retry.",
+		"Use beforeRequest, afterResponse and onError for language model calls, and beforeRawRequest and afterRawResponse for embedding, image, speech and other calls.",
+		"With Express, register the route before express.json() or any body parser, and convert between the Node request and a Fetch Request as the README adapter does."
+	]
+}
