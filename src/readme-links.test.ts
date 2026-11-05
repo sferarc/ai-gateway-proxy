@@ -29,6 +29,10 @@ describe("README links", () => {
 		expect(documentation).not.toMatch(/\]\([a-z]+:/);
 	});
 
+	it("links the runnable Next.js example from the Quick Start", () => {
+		expect(section("Quick Start")).toContain("](examples/nextjs)");
+	});
+
 	it("sends readers who do not need the proxy to the AI SDK gateway provider", () => {
 		const whenNotNeeded = section("When you do not need it");
 		expect(whenNotNeeded).toContain("](https://ai-sdk.dev/providers/ai-sdk-providers/ai-gateway)");

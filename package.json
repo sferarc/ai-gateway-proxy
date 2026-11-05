@@ -46,10 +46,11 @@
 		"is-tree-shakable": "is-tree-shakable",
 		"attw": "attw --pack .",
 		"typecheck": "tsc --noEmit",
+		"typecheck:example": "pnpm --filter ./examples/nextjs typecheck",
 		"lint": "biome check .",
 		"fix": "biome check --write .",
 		"knip": "knip",
-		"check": "pnpm lint && pnpm exec lefthook validate && pnpm knip && pnpm typecheck && pnpm test && pnpm build && pnpm is-tree-shakable && pnpm attw",
+		"check": "pnpm lint && pnpm exec lefthook validate && pnpm knip && pnpm typecheck && pnpm test && pnpm build && pnpm typecheck:example && pnpm is-tree-shakable && pnpm attw",
 		"changeset": "changeset",
 		"release": "pnpm build && changeset publish"
 	},

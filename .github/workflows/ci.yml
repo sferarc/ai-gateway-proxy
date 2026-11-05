@@ -51,6 +51,11 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # The example resolves ai-gateway-proxy to dist, so it runs after the build.
+      # Typecheck only: running it would call the gateway, and CI has no key.
+      - name: Typecheck example
+        run: pnpm typecheck:example
+
       # Consumers rely on unused exports being dropped from their bundles.
       - name: Tree-shakable
         run: pnpm is-tree-shakable

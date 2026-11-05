@@ -1,6 +1,11 @@
 {
 	"$schema": "https://unpkg.com/knip@6/schema.json",
-	"entry": ["src/index.ts"],
-	"project": ["src/**/*.ts"],
-	"ignoreDependencies": ["@typescript/typescript6"]
+	"workspaces": {
+		".": {
+			"entry": ["src/index.ts"],
+			"project": ["src/**/*.ts"],
+			"ignoreDependencies": ["@typescript/typescript6"]
+		},
+		"examples/nextjs": {}
+	}
 }
