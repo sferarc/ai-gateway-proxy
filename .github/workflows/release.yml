@@ -19,7 +19,7 @@ jobs:
     name: Release
     # A dispatch from any other branch would publish an unreviewed build.
     if: github.ref == 'refs/heads/main' && vars.RELEASE_ENABLED == 'true'
-    # Its deployment branch policy allows main only.
+    # Created on first run with no branch policy; main-only waits on sferarc/hq#888.
     environment: release
     runs-on: ubuntu-latest
     permissions:
