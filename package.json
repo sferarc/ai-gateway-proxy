@@ -12,6 +12,8 @@
 		"vercel-ai-gateway",
 		"nextjs",
 		"hono",
+		"sveltekit",
+		"astro",
 		"express",
 		"route-handler",
 		"streaming",

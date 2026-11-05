@@ -7,7 +7,7 @@ For apps whose [AI SDK](https://ai-sdk.dev) code runs where a [Vercel AI Gateway
 - **Each call can be capped, metered, rewritten or refused:** `beforeRequest`, `afterResponse` and `onError` handle language model calls, and `beforeRawRequest` and `afterRawResponse` the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) ([Example: cap, meter and mask](#example-cap-meter-and-mask), [Refusing a call](#refusing-a-call), [Raw hooks](#raw-hooks)).
 - **Streams are forwarded as they arrive:** each SSE event reaches the client as the gateway sends it, and `afterResponse` gets the aggregated result when the stream finishes ([`afterResponse`](#afterresponse)).
 
-The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js and Hono directly and into Express or `node:http` through a small adapter ([Quick Start](#quick-start)).
+The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit and Astro directly and into Express or `node:http` through a small adapter ([Quick Start](#quick-start)).
 
 ## When you do not need it
 
@@ -60,6 +60,40 @@ const proxy = createGatewayProxy({
 
 app.all("/api/ai/*", (c) => proxy(c.req.raw));
 ```
+
+### SvelteKit
+
+Create a rest route at `src/routes/api/ai/[...path]/+server.ts`. SvelteKit passes `params.path` as one string such as `language-model`, which `segmentsParam` reads once the params are wrapped in a promise:
+
+```typescript
+import { createGatewayProxy } from "ai-gateway-proxy";
+import type { RequestHandler } from "./$types";
+
+const proxy = createGatewayProxy({ segmentsParam: "path" });
+
+export const fallback: RequestHandler = ({ request, params }) =>
+  proxy(request, { params: Promise.resolve(params) });
+```
+
+`fallback` answers every method the file does not export a handler for, so the `POST` model calls and the `GET` reads such as `getAvailableModels` both reach the proxy.
+
+### Astro
+
+Create a rest route at `src/pages/api/ai/[...path].ts`. Astro also passes `params.path` as one string:
+
+```typescript
+import type { APIRoute } from "astro";
+import { createGatewayProxy } from "ai-gateway-proxy";
+
+export const prerender = false;
+
+const proxy = createGatewayProxy({ segmentsParam: "path" });
+
+export const ALL: APIRoute = ({ request, params }) =>
+  proxy(request, { params: Promise.resolve(params) });
+```
+
+The route runs on demand, so the project needs a server adapter. `prerender = false` keeps it from being built as a static file under the default `static` output; with `output: "server"` it can go.
 
 ### Express
 
