@@ -59,6 +59,26 @@ export type GatewayError = {
 };
 
 /**
+ * The `error.code` of an error body the proxy generates itself; the README's "Responses the proxy
+ * generates" table says when each is sent. The `message` may change between releases, the code does not.
+ */
+export type ProxyErrorCode =
+	| "auth_not_configured"
+	| "api_key_missing"
+	| "team_option_failed"
+	| "headers_option_failed"
+	| "credential_rejected"
+	| "invalid_path"
+	| "invalid_json_body"
+	| "invalid_request_body"
+	| "proxy_failed"
+	| "before_request_invalid"
+	| "after_response_failed"
+	| "after_response_invalid"
+	| "no_response_body"
+	| "upstream_redirect";
+
+/**
  * The kind of a call that is not a language model call, named after the `@ai-sdk/gateway` model it comes from.
  */
 export type ModelCallKind =
@@ -266,8 +286,9 @@ export type CreateGatewayProxyOptions = {
 	 * non-string `generationId`) logs an error and sends the upstream error body instead, and so
 	 * does a hook that throws.
 	 *
-	 * An `authentication_error` arrives retyped as `proxy_error`, its message prefixed with
-	 * `AI Gateway rejected the proxy's credential: `, since only the proxy's credential reaches the gateway.
+	 * An `authentication_error` arrives retyped as `proxy_error` with code `credential_rejected`, its
+	 * message prefixed with `AI Gateway rejected the proxy's credential: `, since only the proxy's
+	 * credential reaches the gateway.
 	 *
 	 * Not called for GET, HEAD or other requests without a body, which are forwarded as is.
 	 *

@@ -15,6 +15,7 @@ import type {
 	GatewayHeaders,
 	GatewayResponse,
 	ModelCallKind,
+	ProxyErrorCode,
 	RawResponseContext,
 } from "./types";
 
@@ -210,8 +211,13 @@ type ProxyErrorType = "invalid_request_error" | "proxy_error";
 /**
  * Builds a response for an error the proxy raises itself, in the same shape as upstream errors.
  */
-function proxyErrorResponse(status: number, type: ProxyErrorType, message: string): Response {
-	const body: GatewayError = { error: { message, type } };
+function proxyErrorResponse(
+	status: number,
+	type: ProxyErrorType,
+	code: ProxyErrorCode,
+	message: string,
+): Response {
+	const body: GatewayError = { error: { message, type, code } };
 	return new Response(JSON.stringify(body), {
 		status,
 		headers: { "content-type": "application/json" },
@@ -227,6 +233,7 @@ function redirectRefusedResponse(res: Response): Response {
 	return proxyErrorResponse(
 		502,
 		"proxy_error",
+		"upstream_redirect",
 		"Upstream redirected, the proxy does not follow redirects",
 	);
 }
@@ -236,7 +243,12 @@ function proxyFailureResponse(request: Request, error: unknown): Response {
 		return new Response(null, { status: 499 });
 	}
 	console.error("AI Gateway proxy request failed:", error);
-	return proxyErrorResponse(500, "proxy_error", "Error proxying request to AI Gateway");
+	return proxyErrorResponse(
+		500,
+		"proxy_error",
+		"proxy_failed",
+		"Error proxying request to AI Gateway",
+	);
 }
 
 /**
@@ -353,6 +365,7 @@ function retypeProxyCredentialError(upstreamError: GatewayError): GatewayError {
 			...upstreamError.error,
 			message: `AI Gateway rejected the proxy's credential: ${upstreamError.error.message}`,
 			type: "proxy_error",
+			code: "credential_rejected" satisfies ProxyErrorCode,
 		},
 	};
 }
@@ -450,7 +463,7 @@ function handleStreamingResponse(
 	signal?: AbortSignal,
 ): Response {
 	if (!res.body) {
-		return proxyErrorResponse(500, "proxy_error", "No response body");
+		return proxyErrorResponse(500, "proxy_error", "no_response_body", "No response body");
 	}
 
 	const contentType = res.headers.get("content-type") || "text/event-stream";
@@ -495,6 +508,7 @@ async function handleJsonResponse(
 		return proxyErrorResponse(
 			ANSWERED_CALL_FAILURE_STATUS,
 			"proxy_error",
+			"after_response_failed",
 			"Error processing the AI Gateway response",
 		);
 	}
@@ -525,7 +539,12 @@ async function runAfterResponse(
 		if (problem) {
 			const message = `afterResponse hook returned an invalid response: ${problem}`;
 			console.error(message);
-			return proxyErrorResponse(ANSWERED_CALL_FAILURE_STATUS, "proxy_error", message);
+			return proxyErrorResponse(
+				ANSWERED_CALL_FAILURE_STATUS,
+				"proxy_error",
+				"after_response_invalid",
+				message,
+			);
 		}
 		// As on a stream's finish event: the AI SDK reads usage from every generate result, so it cannot be stripped.
 		responseBody = { ...modified, usage: modified.usage ?? upstreamUsage };
@@ -618,6 +637,7 @@ async function applyAfterRawResponse(
 		return proxyErrorResponse(
 			ANSWERED_CALL_FAILURE_STATUS,
 			"proxy_error",
+			"after_response_failed",
 			"Error processing the AI Gateway response",
 		);
 	}
@@ -688,6 +708,7 @@ export const createGatewayProxy = ({
 			return proxyErrorResponse(
 				500,
 				"proxy_error",
+				apiKey === undefined ? "auth_not_configured" : "api_key_missing",
 				apiKey === undefined
 					? "AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled"
 					: "AI Gateway authentication not configured: the apiKey option gave no key",
@@ -699,6 +720,7 @@ export const createGatewayProxy = ({
 			return proxyErrorResponse(
 				500,
 				"proxy_error",
+				"team_option_failed",
 				"AI Gateway team not configured: the teamIdOrSlug option failed",
 			);
 		}
@@ -709,6 +731,7 @@ export const createGatewayProxy = ({
 			return proxyErrorResponse(
 				500,
 				"proxy_error",
+				"headers_option_failed",
 				"AI Gateway headers not configured: the headers option failed",
 			);
 		}
@@ -719,7 +742,7 @@ export const createGatewayProxy = ({
 			const path = await extractPathFromRequest(request, context, { extractPath, segmentsParam });
 			const resolved = buildUpstreamUrl(baseUrl, path, request.url);
 			if (!resolved) {
-				return proxyErrorResponse(400, "invalid_request_error", "Invalid path");
+				return proxyErrorResponse(400, "invalid_request_error", "invalid_path", "Invalid path");
 			}
 			const upstream = resolved.url;
 
@@ -752,7 +775,12 @@ export const createGatewayProxy = ({
 			try {
 				requestBody = JSON.parse(text);
 			} catch {
-				return proxyErrorResponse(400, "invalid_request_error", "Invalid JSON body");
+				return proxyErrorResponse(
+					400,
+					"invalid_request_error",
+					"invalid_json_body",
+					"Invalid JSON body",
+				);
 			}
 
 			// Fail closed: only an exact listed path, after "?" and "#" are resolved away, skips the hooks.
@@ -763,6 +791,7 @@ export const createGatewayProxy = ({
 				return proxyErrorResponse(
 					400,
 					"invalid_request_error",
+					"invalid_request_body",
 					"Invalid request body: a language model call must be a JSON object",
 				);
 			}
@@ -796,7 +825,7 @@ export const createGatewayProxy = ({
 					const message =
 						"beforeRequest hook returned an invalid request: the result must be an object";
 					console.error(message);
-					return proxyErrorResponse(500, "proxy_error", message);
+					return proxyErrorResponse(500, "proxy_error", "before_request_invalid", message);
 				} else {
 					requestBody = replaced;
 				}

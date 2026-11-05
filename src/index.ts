@@ -16,6 +16,7 @@ export type {
 	GatewayResponseMetadata,
 	IncompleteStream,
 	ModelCallKind,
+	ProxyErrorCode,
 	RawRequestContext,
 	RawResponseContext,
 } from "./types";

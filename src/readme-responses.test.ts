@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const proxy = readFileSync(new URL("./proxy.ts", import.meta.url), "utf8");
+const types = readFileSync(new URL("./types.ts", import.meta.url), "utf8");
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 
 const LITERAL = /"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g;
@@ -57,22 +58,30 @@ function declaredLiterals(code: string, name: string, before: number): string[] 
 	return value ? literals(value[0]) : [];
 }
 
-function proxyErrorMessages(code: string): string[] {
-	const messages = new Set<string>();
+// Each pair is a code and the message sent with it; a ternary pairs its branches in order.
+function proxyErrors(code: string): [string, string][] {
+	const errors = new Map<string, [string, string]>();
 	for (const call of code.matchAll(/(?<!function )proxyErrorResponse\(/g)) {
 		const start = (call.index ?? 0) + call[0].length;
-		const message = callArguments(code, start)[2] ?? "";
-		const found = /^\w+$/.test(message)
+		const [, , codeArgument = "", message = ""] = callArguments(code, start);
+		const codes = literals(codeArgument);
+		const messages = /^\w+$/.test(message)
 			? declaredLiterals(code, message, call.index ?? 0)
 			: literals(message);
-		if (found.length === 0) {
-			throw new Error(`No literal message for proxyErrorResponse(${message})`);
+		if (messages.length === 0 || codes.length !== messages.length) {
+			throw new Error(
+				`No literal code and message for proxyErrorResponse(${codeArgument}, ${message})`,
+			);
 		}
-		for (const literal of found) {
-			messages.add(literal);
-		}
+		messages.forEach((literal, i) => {
+			errors.set(literal, [codes[i] ?? "", literal]);
+		});
 	}
-	return [...messages];
+	return [...errors.values()];
+}
+
+function proxyErrorMessages(code: string): string[] {
+	return proxyErrors(code).map(([, message]) => message);
 }
 
 function responsesTable(markdown: string): string {
@@ -96,5 +105,19 @@ describe("README responses table", () => {
 
 	it.each(proxyErrorMessages(proxy))("lists %s in README.md", (message) => {
 		expect(responsesTable(readme)).toContain(`| \`${message}\` |`);
+	});
+
+	it.each(proxyErrors(proxy))("lists code %s with its message in README.md", (code, message) => {
+		expect(responsesTable(readme)).toContain(`| \`${code}\` | \`${message}\` |`);
+	});
+
+	it("documents every ProxyErrorCode in the table, once, and no other code", () => {
+		const union = types.match(/export type ProxyErrorCode =([^;]*);/)?.[1] ?? "";
+		const declared = literals(union).sort();
+		const documented = [...responsesTable(readme).matchAll(/^\| [^|]+ \| [^|]+ \| `(\w+)` \|/gm)]
+			.map(([, code]) => code ?? "")
+			.sort();
+		expect(declared).toContain("credential_rejected");
+		expect(documented).toEqual(declared);
 	});
 });
