@@ -8,7 +8,16 @@
 		"ai-gateway",
 		"vercel",
 		"proxy",
-		"oidc"
+		"oidc",
+		"vercel-ai-gateway",
+		"nextjs",
+		"hono",
+		"express",
+		"route-handler",
+		"streaming",
+		"llm",
+		"metering",
+		"hooks"
 	],
 	"type": "module",
 	"sideEffects": false,
