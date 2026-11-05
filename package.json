@@ -78,6 +78,7 @@
 		"ai": "catalog:",
 		"bunchee": "catalog:",
 		"dotenv": "catalog:",
+		"hono": "catalog:",
 		"is-tree-shakable": "catalog:",
 		"knip": "catalog:",
 		"lefthook": "catalog:",

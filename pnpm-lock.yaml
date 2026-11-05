@@ -206,6 +206,9 @@ catalogs:
     dotenv:
       specifier: 18.0.9
       version: 18.0.9
+    hono:
+      specifier: 4.13.16
+      version: 4.13.16
     is-tree-shakable:
       specifier: 0.5.0
       version: 0.5.0
@@ -278,6 +281,9 @@ importers:
       dotenv:
         specifier: 'catalog:'
         version: 18.0.9
+      hono:
+        specifier: 'catalog:'
+        version: 4.13.16
       is-tree-shakable:
         specifier: 'catalog:'
         version: 0.5.0
@@ -1965,6 +1971,10 @@ packages:
 
   highlight.js@10.7.3:
     resolution: {integrity: sha512-tzcUFauisWKNHaRkN4Wjl/ZA07gENAjFl3J/c480dprkGTg5EQstgaNFqBfUqCq54kZRIEcreTsAgF/m2quD7A==}
+
+  hono@4.13.16:
+    resolution: {integrity: sha512-AOLOEhvrV+iH92xXCnFr/5+3KjPKcI3xP63XJtX5spAnkznPdHijlIsUTpi7/9EhWqrTCekw5c5zh1K+YsVw7A==}
+    engines: {node: '>=16.9.0'}
 
   human-id@4.2.2:
     resolution: {integrity: sha512-Z+8unD6em/MJwyrkWQ2M3wygRGI1+MztbutiNwk1DCuEPXOZRWGjtcMPZYP1exY9iNZMhd7ZOSMQSo9WYtiQRw==}
@@ -3848,6 +3858,8 @@ snapshots:
       function-bind: 1.1.2
 
   highlight.js@10.7.3: {}
+
+  hono@4.13.16: {}
 
   human-id@4.2.2: {}
 
