@@ -14,7 +14,7 @@ Steps 3 to 11 are the `check` script in `package.json`, kept as separate steps s
 6. `pnpm typecheck`
 7. `pnpm test`. The integration tests skip because no `AI_GATEWAY_API_KEY` is stored; `src/e2e.test.ts` covers the client to proxy to gateway path against a local fake gateway instead ([[testing]]).
 8. `pnpm build`
-9. `pnpm typecheck:example`: `tsc --noEmit` in `examples/nextjs`, which resolves `ai-gateway-proxy` to `dist`, so it runs after the build. The example is never run in CI, since that would call the gateway (#180, [[toolchain]]).
+9. `pnpm typecheck:example`: `tsc --noEmit` in `examples/nextjs`, which resolves `ai-gateway-proxy` to `dist`, so it runs after the build. The app is never started in CI, since that would call the gateway; step 7 runs its proxy route against `src` with `fetch` mocked (`src/example-nextjs.test.ts`, #180, [[toolchain]]).
 10. `pnpm is-tree-shakable`
 11. `pnpm attw`: `@arethetypeswrong/cli` packs the package with `npm pack` and checks that every resolution mode (node10, node16 from CommonJS and from ESM, bundler) finds declarations of the matching module format. Added on 2026-10-28, when it reported "Masquerading as ESM" for node16 from CommonJS ([[decisions/2025-12-28-bunchee-build]]).
 

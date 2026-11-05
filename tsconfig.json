@@ -9,6 +9,7 @@
 		"lib": ["dom", "ESNext"],
 		"module": "ESNext",
 		"moduleResolution": "bundler",
+		"paths": { "ai-gateway-proxy": ["./src/index.ts"] },
 		"skipLibCheck": true,
 		"strict": true,
 		"target": "ESNext"

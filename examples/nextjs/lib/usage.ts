@@ -9,11 +9,30 @@ export function usageFor(caller: string): CallerUsage {
 	return usageByCaller.get(caller) ?? { calls: 0, inputTokens: 0, outputTokens: 0 };
 }
 
-export function recordUsage(caller: string, inputTokens = 0, outputTokens = 0): void {
+// Charged before the call, so concurrent calls cannot each spend the same remainder.
+export function reserveOutputTokens(caller: string, requested: number): number | undefined {
+	const usage = usageFor(caller);
+	const remaining = OUTPUT_TOKEN_LIMIT - usage.outputTokens;
+	if (remaining <= 0) return undefined;
+	const cap = Math.max(0, Math.min(requested, remaining));
+	usageByCaller.set(caller, {
+		...usage,
+		calls: usage.calls + 1,
+		outputTokens: usage.outputTokens + cap,
+	});
+	return cap;
+}
+
+// Without a reported output count, as for a stream cancelled before finish, the call keeps its cap.
+export function settleUsage(
+	caller: string,
+	reserved: number,
+	reported: { inputTokens?: number; outputTokens?: number },
+): void {
 	const usage = usageFor(caller);
 	usageByCaller.set(caller, {
-		calls: usage.calls + 1,
-		inputTokens: usage.inputTokens + inputTokens,
-		outputTokens: usage.outputTokens + outputTokens,
+		...usage,
+		inputTokens: usage.inputTokens + (reported.inputTokens ?? 0),
+		outputTokens: usage.outputTokens - reserved + (reported.outputTokens ?? reserved),
 	});
 }

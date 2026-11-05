@@ -37,7 +37,7 @@ export const { GET, POST, PUT, DELETE, PATCH } = createGatewayProxy();
 
 The handler reads the path from the route's `segments` param. For a differently named catch-all, such as `app/api/ai/[...path]/route.ts`, pass `createGatewayProxy({ segmentsParam: "path" })`.
 
-[`examples/nextjs`](examples/nextjs) is a runnable App Router app built on this route: it checks the caller as in [Protecting the route](#protecting-the-route), caps and meters each caller's output tokens with `beforeRequest` and `afterResponse`, and streams from the browser with `streamText`.
+[`examples/nextjs`](examples/nextjs) is a runnable App Router app built on this route: it checks the caller as in [Protecting the route](#protecting-the-route), caps each caller's output tokens with `beforeRequest`, charging the cap until `afterResponse` reports the usage so a cancelled stream still counts, and streams from the browser with `streamText`.
 
 ### Hono
 
