@@ -170,6 +170,48 @@ Some gateway client calls do not go through the proxy:
 - `getCredits()`, `getSpendReport()` and `getGenerationInfo()` request `/v1/credits`, `/v1/report` and `/v1/generation` at the origin of `baseURL`, which is your app's host and not the proxy route.
 - `getToken()` on `experimental_realtime`, `experimental_transcription` and `experimental_speech` posts to `/v1/realtime/client-secrets` at the same origin, and the WebSocket URL it returns is under `baseURL`, so neither reaches the proxy.
 
+### Calling from another origin
+
+A page served from another origin than the route, such as `app.example.com` calling `api.example.com`, needs CORS headers on the route. The client sends `authorization`, `content-type` and `ai-*` headers, so the browser first sends an `OPTIONS` preflight, which the proxy does not answer, and the proxy forwards no `access-control-*` header. Answer the preflight and add the headers to every response:
+
+```typescript
+import { createGatewayProxy } from "ai-gateway-proxy";
+
+const proxy = createGatewayProxy();
+const allowedOrigins = new Set(["https://app.example.com"]);
+
+function corsHeaders(request: Request): Headers {
+  const headers = new Headers({ vary: "origin" });
+  const origin = request.headers.get("origin");
+  if (origin && allowedOrigins.has(origin)) {
+    headers.set("access-control-allow-origin", origin);
+    // Not safelisted, so without this the AI SDK cannot read the backoff of a cross-origin 429.
+    headers.set("access-control-expose-headers", "retry-after, retry-after-ms");
+  }
+  return headers;
+}
+
+export function OPTIONS(request: Request) {
+  const headers = corsHeaders(request);
+  headers.set("access-control-allow-methods", "GET, POST, PUT, DELETE, PATCH");
+  // A "*" would not cover authorization, so allow the headers the client asks for.
+  headers.set("access-control-allow-headers", request.headers.get("access-control-request-headers") ?? "");
+  headers.set("access-control-max-age", "600");
+  return new Response(null, { status: 204, headers });
+}
+
+async function handler(request: Request, context: { params: Promise<{ segments: string[] }> }) {
+  const response = await proxy(request, context);
+  const headers = new Headers(response.headers);
+  corsHeaders(request).forEach((value, name) => headers.set(name, value));
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+export { handler as GET, handler as POST, handler as PUT, handler as DELETE, handler as PATCH };
+```
+
+`allowedOrigins` lists the origins of your pages. A stream keeps flowing, since the response body is passed through. The preflight carries no `authorization` header, so when the route is also protected as above, keep `OPTIONS` outside the session check and run the check inside `handler`. CORS only stops a browser page on another origin from reading the answer; it does not stop other callers, so it does not replace that check. Other frameworks need the same headers.
+
 ## Authentication
 
 Without the `apiKey` option, the proxy gets a credential on every request with `getGatewayAuthToken()`, in this order:
