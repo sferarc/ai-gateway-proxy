@@ -21,7 +21,7 @@ const frameworks = [...quickStart.matchAll(/^### (.+)$/gm)]
 
 describe("package.json keywords", () => {
 	it("finds the frameworks of the Quick Start", () => {
-		expect(frameworks).toEqual(["nextjs", "hono", "express"]);
+		expect(frameworks).toEqual(["nextjs", "hono", "sveltekit", "astro", "express"]);
 	});
 
 	it.each(frameworks)("lists %s", (framework) => {
