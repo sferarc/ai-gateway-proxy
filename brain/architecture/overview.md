@@ -12,6 +12,10 @@ A TypeScript library published to npm as `ai-gateway-proxy`, shipped as ESM and 
 | `src/hook-result.ts` | `isRecord`, `gatewayResponseProblem`, `gatewayErrorProblem`, internal | Checks hook inputs and results: `isRecord` the request body and a `beforeRequest` result ([[proxy]] steps 5 and 6), `gatewayErrorProblem` an `onError` result (step 8, #77), `gatewayResponseProblem` an `afterResponse` result (step 9) |
 | `src/types.ts` | `CreateGatewayProxyOptions`, `CreateGatewayProxyFn`, `CreateGatewayProxyResult`, `GatewayResponse`, `GatewayResponseMetadata`, `GatewayError`, `IncompleteStream`, `ModelCallKind`, `RawRequestContext`, `RawResponseContext` | Option, hook context and result types |
 
+## Agent skill
+
+`skills/ai-gateway-proxy/SKILL.md` is an Agent Skills skill (https://agentskills.io) that tells a coding agent when the proxy is needed and how to set it up; `npx skills add sferarc/ai-gateway-proxy` installs it from the repository, not from the npm package, whose `files` hold only `dist` (#183). It restates the README, which stays the authority, so a change to an option or hook rule the skill names updates both. `src/skill.test.ts` type checks its samples ([[development/testing]]).
+
 ## Runtime dependencies
 
 `@ai-sdk/provider` (the `LanguageModelV4*` types), `@ai-sdk/provider-utils` (`EventSourceParserStream`) and `@vercel/oidc` (`getVercelOidcToken`), all from `package.json` `dependencies`. Versions are pinned in the `catalog` of `pnpm-workspace.yaml`.

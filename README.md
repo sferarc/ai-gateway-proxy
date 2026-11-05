@@ -23,6 +23,8 @@ It does not carry every gateway call either. Streaming speech, streaming transcr
 npm install ai-gateway-proxy
 ```
 
+To have a coding agent set it up, install the [agent skill](skills/ai-gateway-proxy/SKILL.md) with `npx skills add sferarc/ai-gateway-proxy`. It covers when the proxy is needed, the route per framework, the client, protecting the route and metering, without loading this README.
+
 ## Quick Start
 
 ### Next.js App Router
@@ -248,10 +250,17 @@ The three language model hooks together: cap output tokens, record usage, and ke
 
 ```typescript
 createGatewayProxy({
-  beforeRequest: ({ request }) => ({
-    ...request,
-    maxOutputTokens: Math.min(request.maxOutputTokens ?? 1024, 1024),
-  }),
+  beforeRequest: ({ request }) => {
+    // The body is the client's JSON, so the type does not hold until it is checked here.
+    const requested: unknown = request.maxOutputTokens;
+    if (requested !== undefined && (!Number.isSafeInteger(requested) || (requested as number) < 1)) {
+      return Response.json(
+        { error: { message: "maxOutputTokens must be a positive integer", type: "invalid_request_error" } },
+        { status: 400 },
+      );
+    }
+    return { ...request, maxOutputTokens: Math.min(request.maxOutputTokens ?? 1024, 1024) };
+  },
   afterResponse: async ({ request, modelId, response, incomplete }) => {
     // usage is undefined when a stream ended before its finish event.
     await meter({
@@ -270,7 +279,7 @@ createGatewayProxy({
 });
 ```
 
-`afterResponse` returns `response` unchanged, so the client gets the gateway's body on a non-streamed call and the upstream `finish` event on a stream. `request` is the body after `beforeRequest`, so `maxOutputTokens` is the capped value.
+`request` is the client's JSON, so `maxOutputTokens` may be a string, `null`, negative or a fraction; `Math.min` of a string is `NaN`, which reaches the gateway as `null` and lifts the cap, so `beforeRequest` answers 400 to any value that is not a positive integer. `afterResponse` returns `response` unchanged, so the client gets the gateway's body on a non-streamed call and the upstream `finish` event on a stream. `request` is the body after `beforeRequest`, so `maxOutputTokens` is the capped value.
 
 ### Refusing a call
 
