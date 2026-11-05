@@ -84,7 +84,9 @@ describe("redirecting gateway over HTTP", () => {
 		expect(error.statusCode).toBe(502);
 		expect(error.message).toBe(REFUSED);
 		expect(APICallError.isInstance(error.cause) ? error.cause.responseBody : undefined).toBe(
-			JSON.stringify({ error: { message: REFUSED, type: "proxy_error" } }),
+			JSON.stringify({
+				error: { message: REFUSED, type: "proxy_error", code: "upstream_redirect" },
+			}),
 		);
 	}
 

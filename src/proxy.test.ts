@@ -3,7 +3,12 @@ import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { embed, generateText } from "ai";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { createGatewayProxy } from "./proxy";
-import type { CreateGatewayProxyOptions, GatewayError, GatewayResponse } from "./types";
+import type {
+	CreateGatewayProxyOptions,
+	GatewayError,
+	GatewayResponse,
+	ProxyErrorCode,
+} from "./types";
 
 vi.mock("@vercel/oidc", () => ({
 	getVercelOidcToken: vi.fn(),
@@ -70,11 +75,12 @@ async function expectGatewayError(
 	response: Response,
 	status: number,
 	type: string,
+	code: ProxyErrorCode,
 	message: string,
 ): Promise<void> {
 	expect(response.status).toBe(status);
 	expect(response.headers.get("content-type")).toBe("application/json");
-	expect(await response.json()).toEqual({ error: { message, type } });
+	expect(await response.json()).toEqual({ error: { message, type, code } });
 }
 
 describe("createGatewayProxy", () => {
@@ -96,6 +102,7 @@ describe("createGatewayProxy", () => {
 			response,
 			424,
 			"proxy_error",
+			"after_response_failed",
 			"Error processing the AI Gateway response",
 		);
 		expect(consoleError).toHaveBeenCalledOnce();
@@ -106,7 +113,13 @@ describe("createGatewayProxy", () => {
 	}
 
 	async function expectProxyFailure(response: Response): Promise<void> {
-		await expectGatewayError(response, 500, "proxy_error", "Error proxying request to AI Gateway");
+		await expectGatewayError(
+			response,
+			500,
+			"proxy_error",
+			"proxy_failed",
+			"Error proxying request to AI Gateway",
+		);
 		expect(consoleError).toHaveBeenCalledOnce();
 		expect(consoleError).toHaveBeenCalledWith(
 			"AI Gateway proxy request failed:",
@@ -206,6 +219,7 @@ describe("createGatewayProxy", () => {
 				response,
 				500,
 				"proxy_error",
+				"auth_not_configured",
 				"AI Gateway authentication not configured: set AI_GATEWAY_API_KEY or deploy on Vercel with OIDC enabled",
 			);
 			expect(mockFetch).not.toHaveBeenCalled();
@@ -259,7 +273,7 @@ describe("createGatewayProxy", () => {
 					createMockRequest("http://localhost/api/chat", { body: { prompt: [] } }),
 					createMockContext(["chat"]),
 				);
-				await expectGatewayError(response, 500, "proxy_error", noKeyMessage);
+				await expectGatewayError(response, 500, "proxy_error", "api_key_missing", noKeyMessage);
 				expect(mockFetch).not.toHaveBeenCalled();
 				expect(getVercelOidcToken).not.toHaveBeenCalled();
 			}
@@ -369,7 +383,7 @@ describe("createGatewayProxy", () => {
 				expect(mockFetch).toHaveBeenCalledTimes(1);
 			});
 
-			it("retypes the error as proxy_error and keeps its status and other fields", async () => {
+			it("retypes the error as proxy_error with its code and keeps its status and other fields", async () => {
 				process.env.AI_GATEWAY_API_KEY = "revoked-gateway-key";
 				mockFetch.mockResolvedValueOnce(
 					createMockHttpResponse(
@@ -396,7 +410,7 @@ describe("createGatewayProxy", () => {
 					error: {
 						message: "AI Gateway rejected the proxy's credential: Invalid API key",
 						type: "proxy_error",
-						code: "invalid_key",
+						code: "credential_rejected",
 					},
 					generationId: "gen_1",
 				});
@@ -414,6 +428,7 @@ describe("createGatewayProxy", () => {
 							error: {
 								message: "AI Gateway rejected the proxy's credential: Invalid API key",
 								type: "proxy_error",
+								code: "credential_rejected",
 							},
 						},
 					}),
@@ -556,7 +571,13 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(segments));
 
-			await expectGatewayError(response, 400, "invalid_request_error", "Invalid path");
+			await expectGatewayError(
+				response,
+				400,
+				"invalid_request_error",
+				"invalid_path",
+				"Invalid path",
+			);
 			expect(mockFetch).not.toHaveBeenCalled();
 		});
 
@@ -570,7 +591,13 @@ describe("createGatewayProxy", () => {
 
 				const response = await proxy(request);
 
-				await expectGatewayError(response, 400, "invalid_request_error", "Invalid path");
+				await expectGatewayError(
+					response,
+					400,
+					"invalid_request_error",
+					"invalid_path",
+					"Invalid path",
+				);
 				expect(mockFetch).not.toHaveBeenCalled();
 			},
 		);
@@ -632,7 +659,13 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			await expectGatewayError(response, 400, "invalid_request_error", "Invalid JSON body");
+			await expectGatewayError(
+				response,
+				400,
+				"invalid_request_error",
+				"invalid_json_body",
+				"Invalid JSON body",
+			);
 		});
 
 		function createRawBodyRequest(body: string): Request {
@@ -666,6 +699,7 @@ describe("createGatewayProxy", () => {
 					response,
 					400,
 					"invalid_request_error",
+					"invalid_request_body",
 					"Invalid request body: a language model call must be a JSON object",
 				);
 				expect(mockFetch).not.toHaveBeenCalled();
@@ -881,7 +915,7 @@ describe("createGatewayProxy", () => {
 
 				const message =
 					"beforeRequest hook returned an invalid request: the result must be an object";
-				await expectGatewayError(response, 500, "proxy_error", message);
+				await expectGatewayError(response, 500, "proxy_error", "before_request_invalid", message);
 				expect(mockFetch).not.toHaveBeenCalled();
 				expect(onError).not.toHaveBeenCalled();
 				expect(consoleError).toHaveBeenCalledOnce();
@@ -1092,7 +1126,7 @@ describe("createGatewayProxy", () => {
 				const response = await proxy(request, createMockContext(["chat"]));
 
 				const message = `afterResponse hook returned an invalid response: ${problem}`;
-				await expectGatewayError(response, 424, "proxy_error", message);
+				await expectGatewayError(response, 424, "proxy_error", "after_response_invalid", message);
 				expect(consoleError).toHaveBeenCalledOnce();
 				expect(consoleError).toHaveBeenCalledWith(message);
 			},
@@ -1288,6 +1322,7 @@ describe("createGatewayProxy", () => {
 				response,
 				502,
 				"proxy_error",
+				"upstream_redirect",
 				"Upstream redirected, the proxy does not follow redirects",
 			);
 			expect(response.headers.get("location")).toBeNull();
@@ -1307,6 +1342,7 @@ describe("createGatewayProxy", () => {
 				response,
 				502,
 				"proxy_error",
+				"upstream_redirect",
 				"Upstream redirected, the proxy does not follow redirects",
 			);
 			expect(mockFetch.mock.calls[0][1]).toMatchObject({ redirect: "manual" });
@@ -2583,7 +2619,7 @@ describe("createGatewayProxy", () => {
 					createMockRequest("http://localhost/api/ai/language-model", { body: { prompt: [] } }),
 					createMockContext(["language-model"]),
 				);
-				await expectGatewayError(response, 500, "proxy_error", failedMessage);
+				await expectGatewayError(response, 500, "proxy_error", "team_option_failed", failedMessage);
 				expect(mockFetch).not.toHaveBeenCalled();
 			}
 
@@ -2690,7 +2726,13 @@ describe("createGatewayProxy", () => {
 				createMockRequest("http://localhost/api/ai/language-model", { body: { prompt: [] } }),
 				createMockContext(["language-model"]),
 			);
-			await expectGatewayError(response, 500, "proxy_error", failedMessage);
+			await expectGatewayError(
+				response,
+				500,
+				"proxy_error",
+				"headers_option_failed",
+				failedMessage,
+			);
 			expect(mockFetch).not.toHaveBeenCalled();
 		}
 
@@ -2833,6 +2875,7 @@ describe("createGatewayProxy", () => {
 				response,
 				502,
 				"proxy_error",
+				"upstream_redirect",
 				"Upstream redirected, the proxy does not follow redirects",
 			);
 		});
@@ -2853,6 +2896,7 @@ describe("createGatewayProxy", () => {
 				response,
 				500,
 				"proxy_error",
+				"proxy_failed",
 				"Error proxying request to AI Gateway",
 			);
 			expect(consoleError).toHaveBeenCalledWith(
@@ -3515,7 +3559,13 @@ describe("createGatewayProxy", () => {
 
 			const response = await proxy(request, createMockContext(["chat"]));
 
-			await expectGatewayError(response, 500, "proxy_error", "No response body");
+			await expectGatewayError(
+				response,
+				500,
+				"proxy_error",
+				"no_response_body",
+				"No response body",
+			);
 		});
 
 		it("passes an event stream through on a request not marked as streaming", async () => {
@@ -3915,7 +3965,7 @@ describe("createGatewayProxy", () => {
 			expect(await response.text()).toBe("<html>Bad gateway</html>");
 		});
 
-		it("retypes a gateway authentication_error on GET as proxy_error and keeps its fields and headers", async () => {
+		it("retypes a gateway authentication_error on GET as proxy_error with its code and keeps its other fields and headers", async () => {
 			mockFetch.mockResolvedValueOnce(
 				new Response(
 					JSON.stringify({
@@ -3946,7 +3996,7 @@ describe("createGatewayProxy", () => {
 				error: {
 					message: "AI Gateway rejected the proxy's credential: Invalid API key",
 					type: "proxy_error",
-					code: "invalid_key",
+					code: "credential_rejected",
 				},
 				generationId: "gen_1",
 			});
