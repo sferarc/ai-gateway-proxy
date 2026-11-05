@@ -27,10 +27,10 @@ Checked 2026-10-20 against `main` before #48 landed. The hash recorded then, fd2
 
 ## Current state
 
-As of 2026-11-02:
+As of 2026-11-05:
 
 - `RELEASE_ENABLED` is `true`, set on 2026-11-01 (`gh variable list`). The trusted publisher on npmjs.com and the shared `HQ_APP_ID` and `HQ_APP_PRIVATE_KEY` secrets are in place, so the owner steps that used to sit here are done (#112).
-- npm has `0.2.0` to `0.6.0` from this repository, published between 2026-11-01 and 2026-11-02 (`npm view ai-gateway-proxy time`), each tagged `v<version>`. The earlier `0.0.1` to `0.1.0` came from the monorepo, with the tags `ai-gateway-proxy@0.0.2` and `ai-gateway-proxy@0.1.0`.
+- Every npm version from `0.2.0` on comes from this repository, the first published on 2026-11-01, each tagged `v<version>`; `npm view ai-gateway-proxy time` lists them and `npm view ai-gateway-proxy version` names the latest. The earlier `0.0.1` to `0.1.0` came from the monorepo, with the tags `ai-gateway-proxy@0.0.2` and `ai-gateway-proxy@0.1.0`.
 - The version pull requests ("Version Packages", for example #116 and #127) are opened and merged by `sferarc-hq[bot]`, and the run on the merge commit publishes (run 41283580134 on c16f694 published 0.2.0, run 41395716488 on b0490aa published 0.6.0).
 - `release.yml` mints a sferarc-hq App token (`actions/create-github-app-token`, pinned to the same SHA as `sferarc/openapi`) and passes it to `changesets/action`, so no commit or pull request comes from a personal account (since 2026-10-31).
 

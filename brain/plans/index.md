@@ -1,6 +1,6 @@
 # Plans
 
-GitHub Issues are the source of truth for pending work: open issues labelled `product:ai-gateway-proxy`, grouped by the `roadmap` tracking issue #114 (owner questions on gateway errors and call coverage); #113 (first npm release) is done. [[roadmap]] keeps the vision and phases and links those issues. [[post-0-2-0-gaps]] keeps the history of the round after 0.2.0.
+GitHub Issues are the source of truth for pending work: open issues labelled `product:ai-gateway-proxy`, grouped by the `roadmap` tracking issues #114 (owner questions on gateway errors and call coverage), #181 (positioning, proof and listing) and #186 (findable and usable by AI agents); #113 (first npm release) is done. [[roadmap]] keeps the vision and phases and links those issues. [[post-0-2-0-gaps]] keeps the history of the round after 0.2.0.
 
 ## Landed on main
 
