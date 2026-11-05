@@ -26,6 +26,8 @@ export default function Page() {
 			const result = streamText({
 				model: gateway("openai/gpt-5"),
 				prompt,
+				// Without a cap the route reserves all the caller has left until the call settles.
+				maxOutputTokens: 1024,
 				onError: ({ error }) => setError(error instanceof Error ? error.message : String(error)),
 			});
 			for await (const delta of result.textStream) setText((current) => current + delta);

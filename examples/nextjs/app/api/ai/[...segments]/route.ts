@@ -1,17 +1,22 @@
 import { createGatewayProxy } from "ai-gateway-proxy";
 import { callerFor, signInRequired } from "../../../../lib/callers";
-import { reserveOutputTokens, settleUsage } from "../../../../lib/usage";
+import { isTokenCount, reserveOutputTokens, settleUsage } from "../../../../lib/usage";
 
 // 403 rather than 429: the AI SDK retries a 429, which cannot succeed here.
-function refused(message: string): Response {
-	return Response.json({ error: { message, type: "invalid_request_error" } }, { status: 403 });
+function refused(message: string, status = 403): Response {
+	return Response.json({ error: { message, type: "invalid_request_error" } }, { status });
 }
 
 const proxy = createGatewayProxy({
 	beforeRequest: ({ request, incomingRequest }) => {
 		const caller = callerFor(incomingRequest);
 		if (!caller) return signInRequired();
-		const cap = reserveOutputTokens(caller, request.maxOutputTokens ?? 1024);
+		// The body is the client's JSON, so the type does not hold until it is checked here.
+		const requested: unknown = request.maxOutputTokens;
+		if (requested !== undefined && !isTokenCount(requested)) {
+			return refused("maxOutputTokens must be a positive integer", 400);
+		}
+		const cap = reserveOutputTokens(caller, requested);
 		if (cap === undefined) return refused("Output token limit reached");
 		return { ...request, maxOutputTokens: cap };
 	},
