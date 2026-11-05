@@ -8,6 +8,8 @@ Releases use changesets. Publishing is on: `.github/workflows/release.yml` runs 
 2. On a push to `main`, `changesets/action` opens or updates a version pull request from the pending changesets.
 3. Merging that pull request runs the workflow again, which publishes through `pnpm release` (`pnpm build && changeset publish`).
 
+The job runs only on `main` (a `github.ref` guard beside `RELEASE_ENABLED`) and in the `release` environment, whose deployment branch policy allows `main` only, so a `workflow_dispatch` from another branch publishes nothing (sferarc/hq#912).
+
 The workflow authenticates to npm with trusted publishing: `id-token: write`, `publishConfig.provenance: true`, and no npm token stored. Each package's trusted publisher on npmjs.com must name this repository and `release.yml` (comments in `release.yml`); it does, since the runs in [[#Current state]] published through it. The action uses a sferarc-hq App token minted by `actions/create-github-app-token` from the `HQ_APP_ID` and `HQ_APP_PRIVATE_KEY` organization secrets, rather than `github.token`, because a version pull request merged by the Actions bot would otherwise not trigger the publish run. An App token does trigger workflows, and the version commits and pull requests are authored by `sferarc-hq[bot]` rather than a person, the same setup as `sferarc/openapi`.
 
 `.changeset/config.json`: base branch `main`, public access, the default changelog generator, no auto-commit.

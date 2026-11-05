@@ -17,7 +17,10 @@ permissions:
 jobs:
   release:
     name: Release
-    if: vars.RELEASE_ENABLED == 'true'
+    # A dispatch from any other branch would publish an unreviewed build.
+    if: github.ref == 'refs/heads/main' && vars.RELEASE_ENABLED == 'true'
+    # Its deployment branch policy allows main only.
+    environment: release
     runs-on: ubuntu-latest
     permissions:
       contents: write
