@@ -16,6 +16,10 @@ A TypeScript library published to npm as `ai-gateway-proxy`, shipped as ESM and 
 
 `skills/ai-gateway-proxy/SKILL.md` is an Agent Skills skill (https://agentskills.io) that tells a coding agent when the proxy is needed and how to set it up; `npx skills add sferarc/ai-gateway-proxy` installs it from the repository, not from the npm package, whose `files` hold only `dist` (#183). It restates the README, which stays the authority, so a change to an option or hook rule the skill names updates both. `src/skill.test.ts` type checks its samples ([[development/testing]]).
 
+## Context7
+
+`context7.json` at the root configures the Context7 docs index (https://context7.com) that agents query through its MCP server (#184). It indexes the Markdown of the README, `CHANGELOG.md`, `examples/` and `skills/`, excludes `brain/`, `.changeset/`, `.github/`, `src/` and `CLAUDE.md`, and gives agents rules that restate the README, starting with the proxy not being OpenAI compatible. Setting `excludeFiles` turns off Context7's default exclusions, which would drop the changelog. Context7 reads the file from `main` when it refreshes the library, so an edit lands on the next refresh. `src/context7.test.ts` holds it to the schema limits ([[development/testing]]).
+
 ## Runtime dependencies
 
 `@ai-sdk/provider` (the `LanguageModelV4*` types), `@ai-sdk/provider-utils` (`EventSourceParserStream`) and `@vercel/oidc` (`getVercelOidcToken`), all from `package.json` `dependencies`. Versions are pinned in the `catalog` of `pnpm-workspace.yaml`.
