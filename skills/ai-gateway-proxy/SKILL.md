@@ -67,6 +67,8 @@ const result = streamText({ model: gateway("openai/gpt-5"), prompt: "Hello" });
 
 Never give the client the real gateway key. On an unprotected route any non-empty `apiKey` works.
 
+A page on another origin than the route is blocked at the CORS preflight, which the proxy does not answer: wrap the route as in [references/cors.md](references/cors.md). A `*` in `access-control-allow-headers` does not cover `authorization`, and `retry-after` must be exposed for the AI SDK backoff.
+
 ## Server credential
 
 Without options the proxy uses `AI_GATEWAY_API_KEY`, then the Vercel OIDC token available when deployed on Vercel. With neither it answers 500 with code `auth_not_configured`. For a key from a secret store or per tenant, pass `apiKey`: a string, or a function of the incoming `Request` (read headers or URL, not the body). A missing result answers 500 and never falls back to the environment key.
