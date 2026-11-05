@@ -1,5 +1,19 @@
 # ai-gateway-proxy
 
+## 0.14.0
+
+### Minor Changes
+
+- 4c14ba8: Add a stable `error.code` to every error body the proxy generates itself, such as `api_key_missing`, `invalid_path` or `after_response_failed`, and export the codes as the `ProxyErrorCode` type. Callers can branch on the code instead of the message, which may be reworded between releases. A gateway `authentication_error` retyped as `proxy_error` now carries `credential_rejected` instead of the gateway's own code.
+
+### Patch Changes
+
+- 21004ef: Link the agent skill from the README: `npx skills add sferarc/ai-gateway-proxy` installs `skills/ai-gateway-proxy`, which tells a coding agent when the proxy is needed and how to add the route, point the client at it, protect it and meter calls.
+  
+  The README example "cap, meter and mask" now answers 400 to a `maxOutputTokens` that is not a positive integer before capping it: `Math.min` of a string is `NaN`, which reached the gateway as `null` and lifted the cap.
+- 7811c1a: Add npm keywords for the frameworks and uses the README covers (`vercel-ai-gateway`, `nextjs`, `hono`, `express`, `route-handler`, `streaming`, `llm`, `metering`, `hooks`) so npm search finds the package.
+- 00d1f89: Link a runnable Next.js example from the README Quick Start: an App Router app that checks the caller, caps and meters each caller's output tokens, and streams from the browser through the proxy route.
+
 ## 0.13.4
 
 ### Patch Changes
