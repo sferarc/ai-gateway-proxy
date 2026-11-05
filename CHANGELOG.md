@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.14.2
+
+### Patch Changes
+
+- 572391f: Show in the README how to mount the proxy in a SvelteKit or Astro rest route, and list both frameworks in the npm keywords.
+
 ## 0.14.1
 
 ### Patch Changes
