@@ -155,7 +155,10 @@ describe("agent skill", () => {
 	// The README copy is served over HTTP by readme-adapter.test.ts.
 	it("carries the README Express adapter unchanged", () => {
 		const reference = readFileSync(`${skillDir}references/express.md`, "utf8");
-		const readmeExpress = readme.slice(readme.indexOf("### Express"), readme.indexOf("### Client"));
+		const readmeExpress = readme.slice(
+			readme.indexOf("### Express"),
+			readme.indexOf("### Fastify"),
+		);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeExpress));
 	});
 
