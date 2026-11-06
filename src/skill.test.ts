@@ -46,6 +46,20 @@ declare module "express" {
 	}
 	export default function express(): Application;
 }
+declare module "astro" {
+	export type APIRoute = (context: {
+		request: Request;
+		params: Record<string, string | undefined>;
+	}) => Response | Promise<Response>;
+}
+`;
+
+// SvelteKit generates ./$types per route; a relative module cannot be declared ambiently.
+const svelteKitTypes = `
+export type RequestHandler = (event: {
+	request: Request;
+	params: { path: string };
+}) => Response | Promise<Response>;
 `;
 
 function typeErrors(samples: Map<string, string>): string[] {
@@ -53,6 +67,7 @@ function typeErrors(samples: Map<string, string>): string[] {
 	const { options } = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
 	const files = new Map(samples);
 	files.set(`${skillDir}ambient.d.ts`, ambient);
+	files.set(`${skillDir}$types.d.ts`, svelteKitTypes);
 	const host = ts.createCompilerHost({ ...options, noEmit: true });
 	const getSourceFile = host.getSourceFile.bind(host);
 	host.fileExists = (name) => files.has(name) || ts.sys.fileExists(name);
@@ -123,6 +138,18 @@ describe("agent skill", () => {
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeCors));
 	});
 
+	// The README copies run between a real gateway client and a fake gateway in readme-rest-routes.test.ts.
+	it("carries the README SvelteKit and Astro routes unchanged", () => {
+		expect(skill).toContain("](references/sveltekit-astro.md)");
+		const reference = readFileSync(`${skillDir}references/sveltekit-astro.md`, "utf8");
+		const readmeRoutes = readme.slice(
+			readme.indexOf("### SvelteKit"),
+			readme.indexOf("### Express"),
+		);
+		expect(typescriptBlocks(readmeRoutes)).toHaveLength(2);
+		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoutes));
+	});
+
 	it("is linked from the README", () => {
 		expect(readme).toContain("](skills/ai-gateway-proxy/SKILL.md)");
 	});
@@ -134,7 +161,7 @@ describe("agent skill", () => {
 				samples.set(`${skillDir}${file.replace(/[/.]/g, "-")}-${index}.ts`, code);
 			});
 		}
-		expect(samples.size).toBeGreaterThanOrEqual(6);
+		expect(samples.size).toBeGreaterThanOrEqual(8);
 		expect(typeErrors(samples)).toEqual([]);
 	}, 60_000);
 });
