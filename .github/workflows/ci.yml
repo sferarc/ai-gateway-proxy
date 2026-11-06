@@ -63,3 +63,7 @@ jobs:
       # CommonJS consumers must resolve the .d.cts declarations, not the ESM ones.
       - name: Package types
         run: pnpm attw
+
+      # High or critical advisories in what the package ships; accepted ones are in pnpm-workspace.yaml auditConfig.
+      - name: Runtime advisories
+        run: pnpm audit --prod --audit-level high
