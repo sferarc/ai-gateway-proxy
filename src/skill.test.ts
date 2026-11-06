@@ -91,7 +91,7 @@ export declare namespace Route {
 }
 `;
 
-// The Fastify route imports the Express adapter's handle from its own module.
+// The Fastify and Koa routes import the Express adapter's handle from its own module.
 const gatewayHandleTypes = `
 import type { IncomingMessage, ServerResponse } from "node:http";
 export declare function handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
@@ -231,6 +231,15 @@ describe("agent skill", () => {
 		expect(skill).toContain("](references/fastify.md)");
 		const reference = readFileSync(`${skillDir}references/fastify.md`, "utf8");
 		const readmeRoute = readme.slice(readme.indexOf("### Fastify"), readme.indexOf("### Koa"));
+		expect(typescriptBlocks(readmeRoute)).toHaveLength(1);
+		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));
+	});
+
+	// The README copy runs in a real Koa app between a real gateway client and a fake gateway in readme-koa.test.ts.
+	it("carries the README Koa route unchanged", () => {
+		expect(skill).toContain("](references/koa.md)");
+		const reference = readFileSync(`${skillDir}references/koa.md`, "utf8");
+		const readmeRoute = readme.slice(readme.indexOf("### Koa"), readme.indexOf("### Client"));
 		expect(typescriptBlocks(readmeRoute)).toHaveLength(1);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));
 	});
