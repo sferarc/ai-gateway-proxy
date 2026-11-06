@@ -7,7 +7,7 @@ For apps whose [AI SDK](https://ai-sdk.dev) code runs where a [Vercel AI Gateway
 - **Each call can be capped, metered, rewritten or refused:** `beforeRequest`, `afterResponse` and `onError` handle language model calls, and `beforeRawRequest` and `afterRawResponse` the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) ([Example: cap, meter and mask](#example-cap-meter-and-mask), [Refusing a call](#refusing-a-call), [Raw hooks](#raw-hooks)).
 - **Streams are forwarded as they arrive:** each SSE event reaches the client as the gateway sends it, and `afterResponse` gets the aggregated result when the stream finishes ([`afterResponse`](#afterresponse)).
 
-The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit, Astro, React Router and TanStack Start directly, into Nuxt through h3's `toWebRequest`, and into Express or `node:http` through a small adapter ([Quick Start](#quick-start)).
+The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit, Astro, React Router and TanStack Start directly, into Nuxt through h3's `toWebRequest`, and into Express, Fastify or `node:http` through a small adapter ([Quick Start](#quick-start)).
 
 ## When you do not need it
 
@@ -217,6 +217,27 @@ app.listen(3000);
 ```
 
 `/api/ai/*splat` is Express 5 syntax; Express 4 uses `/api/ai/*`. `handle` only uses `node:http` types, so it also works as a plain `createServer(handle)` callback.
+
+### Fastify
+
+Fastify reaches the same `handle` through `request.raw` and `reply.raw`, the `node:http` objects underneath. Move `handle` and its `proxy` from the Express section into their own module, here `./gateway-handle.ts`, and export `handle`. Fastify parses JSON bodies before the route runs, so the route lives in a plugin whose content type parser leaves the body unread for the proxy:
+
+```typescript
+import type { FastifyInstance } from "fastify";
+import { handle } from "./gateway-handle";
+
+export async function gatewayRoutes(app: FastifyInstance) {
+  app.removeAllContentTypeParsers();
+  app.addContentTypeParser("*", (_request, _payload, done) => done(null));
+
+  app.all("/api/ai/*", async (request, reply) => {
+    reply.hijack();
+    await handle(request.raw, reply.raw);
+  });
+}
+```
+
+Register it with `app.register(gatewayRoutes)`. The plugin keeps the parser change to its own routes, so the rest of the app still gets parsed JSON bodies, and `reply.hijack()` stops Fastify from sending a reply of its own while `handle` writes the response.
 
 ### Client
 

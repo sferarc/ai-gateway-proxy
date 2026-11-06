@@ -32,6 +32,7 @@ describe("package.json keywords", () => {
 			"tanstack-start",
 			"nuxt",
 			"express",
+			"fastify",
 		]);
 	});
 
