@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.14.4
+
+### Patch Changes
+
+- 465b1a2: Show in the README how to mount the proxy in a Nuxt server route, and list Nuxt in the npm keywords.
+
 ## 0.14.3
 
 ### Patch Changes
