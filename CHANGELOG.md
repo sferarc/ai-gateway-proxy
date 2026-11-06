@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.14.7
+
+### Patch Changes
+
+- e41aae2: Show in the README how to mount the proxy in Koa, and list Koa in the npm keywords.
+
 ## 0.14.6
 
 ### Patch Changes
