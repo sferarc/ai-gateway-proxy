@@ -15,6 +15,7 @@
 		"sveltekit",
 		"astro",
 		"react-router",
+		"tanstack-start",
 		"nuxt",
 		"express",
 		"route-handler",

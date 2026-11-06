@@ -1,7 +1,7 @@
 /**
- * The README's SvelteKit, Astro and React Router routes, run as written between a real
- * `@ai-sdk/gateway` client and a fake gateway, called as those frameworks call a rest or splat route:
- * the rest of the path is one string param. No gateway key, server or network is needed.
+ * The README's SvelteKit, Astro, React Router and TanStack Start routes, run as written between a
+ * real `@ai-sdk/gateway` client and a fake gateway, called as those frameworks call a rest or splat
+ * route: the rest of the path is one string param. No gateway key, server or network is needed.
  */
 
 import { readFileSync } from "node:fs";
@@ -34,6 +34,8 @@ const streamParts: LanguageModelV4StreamPart[] = [
 
 type RouteEvent = { request: Request; params: Record<string, string> };
 type RouteHandler = (event: RouteEvent) => Promise<Response>;
+type RouteModule = Record<string, unknown>;
+type FileRoute = { path: string; options: { server: { handlers: RouteModule } } };
 
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 
@@ -52,6 +54,14 @@ function readmeRoute(heading: string, proxyOptions: CreateGatewayProxyOptions) {
 	}).outputText;
 	const exports: Record<string, unknown> = {};
 	const require = (name: string) => {
+		// Stands in for TanStack Router, keeping the path and options the route file passes.
+		if (name === "@tanstack/react-router") {
+			return {
+				createFileRoute:
+					(path: string) =>
+					(options: FileRoute["options"]): FileRoute => ({ path, options }),
+			};
+		}
 		if (name !== "ai-gateway-proxy") throw new Error(`unexpected import ${name}`);
 		return {
 			createGatewayProxy: (options: CreateGatewayProxyOptions = {}) =>
@@ -62,7 +72,12 @@ function readmeRoute(heading: string, proxyOptions: CreateGatewayProxyOptions) {
 	return exports;
 }
 
-const routes: { framework: string; param: string; handler: (method: string) => string }[] = [
+const routes: {
+	framework: string;
+	param: string;
+	handlers?: (exports: RouteModule) => RouteModule;
+	handler: (method: string) => string;
+}[] = [
 	{ framework: "SvelteKit", param: "path", handler: () => "fallback" },
 	{ framework: "Astro", param: "path", handler: () => "ALL" },
 	// React Router sends GET and HEAD to loader and every other method to action.
@@ -71,9 +86,20 @@ const routes: { framework: string; param: string; handler: (method: string) => s
 		param: "*",
 		handler: (method) => (method === "GET" || method === "HEAD" ? "loader" : "action"),
 	},
+	// TanStack Start calls the handler named after the method in the route's server.handlers.
+	{
+		framework: "TanStack Start",
+		param: "_splat",
+		handlers: (exports) => {
+			const fileRoute = exports.Route as FileRoute;
+			expect(fileRoute.path).toBe("/api/ai/$");
+			return fileRoute.options.server.handlers;
+		},
+		handler: (method) => method,
+	},
 ];
 
-describe.each(routes)("README $framework route", ({ framework, param, handler }) => {
+describe.each(routes)("README $framework route", ({ framework, param, handlers, handler }) => {
 	let recorded: { url: string; method: string; authorization: string | null; body: string }[];
 	let respond: () => Response;
 
@@ -87,7 +113,7 @@ describe.each(routes)("README $framework route", ({ framework, param, handler })
 	});
 
 	function route(options: Omit<CreateGatewayProxyOptions, "fetch" | "segmentsParam"> = {}) {
-		const exports = readmeRoute(framework, {
+		const routeModule = readmeRoute(framework, {
 			...options,
 			baseUrl: GATEWAY_URL,
 			fetch: async (input, init) => {
@@ -101,6 +127,7 @@ describe.each(routes)("README $framework route", ({ framework, param, handler })
 				return respond();
 			},
 		});
+		const exports = handlers ? handlers(routeModule) : routeModule;
 		for (const method of ["GET", "POST"]) {
 			expect(exports[handler(method)]).toBeTypeOf("function");
 		}
