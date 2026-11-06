@@ -46,6 +46,15 @@ declare module "express" {
 	}
 	export default function express(): Application;
 }
+declare module "@react-router/dev/routes" {
+	export interface RouteConfigEntry {
+		path?: string;
+		file: string;
+		children?: RouteConfigEntry[];
+	}
+	export type RouteConfig = RouteConfigEntry[] | Promise<RouteConfigEntry[]>;
+	export function route(path: string, file: string, children?: RouteConfigEntry[]): RouteConfigEntry;
+}
 declare module "astro" {
 	export type APIRoute = (context: {
 		request: Request;
@@ -62,15 +71,27 @@ export type RequestHandler = (event: {
 }) => Response | Promise<Response>;
 `;
 
+// React Router generates ./+types/<route> per route module, likewise a virtual file here.
+const reactRouterTypes = `
+export declare namespace Route {
+	type LoaderArgs = { request: Request; params: { "*": string } };
+	type ActionArgs = LoaderArgs;
+}
+`;
+
 function typeErrors(samples: Map<string, string>): string[] {
 	const config = ts.readConfigFile(`${root}tsconfig.json`, ts.sys.readFile);
 	const { options } = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
 	const files = new Map(samples);
 	files.set(`${skillDir}ambient.d.ts`, ambient);
 	files.set(`${skillDir}$types.d.ts`, svelteKitTypes);
+	files.set(`${skillDir}+types/ai-proxy.d.ts`, reactRouterTypes);
 	const host = ts.createCompilerHost({ ...options, noEmit: true });
 	const getSourceFile = host.getSourceFile.bind(host);
 	host.fileExists = (name) => files.has(name) || ts.sys.fileExists(name);
+	host.directoryExists = (name) =>
+		[...files.keys()].some((file) => file.startsWith(`${name}/`)) ||
+		(ts.sys.directoryExists?.(name) ?? false);
 	host.readFile = (name) => files.get(name) ?? ts.sys.readFile(name);
 	host.getSourceFile = (name, language, ...rest) => {
 		const text = files.get(name);
@@ -148,6 +169,18 @@ describe("agent skill", () => {
 		);
 		expect(typescriptBlocks(readmeRoutes)).toHaveLength(2);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoutes));
+	});
+
+	// The README copy runs between a real gateway client and a fake gateway in readme-rest-routes.test.ts.
+	it("carries the README React Router route unchanged", () => {
+		expect(skill).toContain("](references/react-router.md)");
+		const reference = readFileSync(`${skillDir}references/react-router.md`, "utf8");
+		const readmeRoute = readme.slice(
+			readme.indexOf("### React Router"),
+			readme.indexOf("### Nuxt"),
+		);
+		expect(typescriptBlocks(readmeRoute)).toHaveLength(2);
+		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));
 	});
 
 	it("is linked from the README", () => {
