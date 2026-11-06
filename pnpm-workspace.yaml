@@ -12,7 +12,7 @@ catalog:
   '@types/node': 26.6.6
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
-  '@vercel/oidc': 4.0.7
+  '@vercel/oidc': 4.0.6
   ai: 7.0.159
   bunchee: 7.0.2
   dotenv: 18.0.9
@@ -42,10 +42,7 @@ overrides:
   postcss@<=8.5.22: ^8.5.23
   rollup@>=4.0.0 <4.59.0: ^4.59.0
   undici@>=8.0.0 <8.10.2: ^8.10.2
-# Advisories that CI's `pnpm audit --prod --audit-level high` accepts. One GHSA per line, with a
+# Advisories that CI's `pnpm --filter . audit --prod --audit-level high` accepts. One GHSA per line, with a
 # comment giving the reason and the condition that ends the exception.
 auditConfig:
   ignoreGhsas: []
-minimumReleaseAgeExclude:
-  - '@vercel/cli-config@0.3.7'
-  - '@vercel/oidc@4.0.7'
