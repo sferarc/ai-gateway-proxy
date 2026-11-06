@@ -276,7 +276,7 @@ describe("agent skill", () => {
 		const reference = readFileSync(`${skillDir}references/cloudflare-workers.md`, "utf8");
 		const readmeWorker = readme.slice(
 			readme.indexOf("### Cloudflare Workers"),
-			readme.indexOf("### SvelteKit"),
+			readme.indexOf("### Netlify Functions"),
 		);
 		expect(typescriptBlocks(readmeWorker)).toHaveLength(1);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeWorker));

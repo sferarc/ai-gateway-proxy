@@ -7,7 +7,7 @@ For apps whose [AI SDK](https://ai-sdk.dev) code runs where a [Vercel AI Gateway
 - **Each call can be capped, metered, rewritten or refused:** `beforeRequest`, `afterResponse` and `onError` handle language model calls, and `beforeRawRequest` and `afterRawResponse` the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) ([Example: cap, meter and mask](#example-cap-meter-and-mask), [Refusing a call](#refusing-a-call), [Raw hooks](#raw-hooks)).
 - **Streams are forwarded as they arrive:** each SSE event reaches the client as the gateway sends it, and `afterResponse` gets the aggregated result when the stream finishes ([`afterResponse`](#afterresponse)).
 
-The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, `Bun.serve`, `Deno.serve`, Cloudflare Workers, SvelteKit, Astro, React Router and TanStack Start directly, into Nuxt through h3's `toWebRequest`, and into Express, Fastify, Koa or `node:http` through a small adapter ([Quick Start](#quick-start)).
+The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, `Bun.serve`, `Deno.serve`, Cloudflare Workers, Netlify Functions, SvelteKit, Astro, React Router and TanStack Start directly, into Nuxt through h3's `toWebRequest`, and into Express, Fastify, Koa or `node:http` through a small adapter ([Quick Start](#quick-start)).
 
 ## When you do not need it
 
@@ -136,6 +136,27 @@ export default {
 ```
 
 Store the key with `npx wrangler secret put AI_GATEWAY_API_KEY`. The function form of `apiKey` never falls back to `process.env` or OIDC, so a missing secret answers 500 `api_key_missing` instead of looking elsewhere. Call the proxy with the request alone: `fetch` also gets `env` and the execution context, neither of which is the `{ params }` context the handler takes.
+
+### Netlify Functions
+
+A Netlify Function takes a Fetch `Request` and routes by its `config.path`, so a function file such as `netlify/functions/ai.mts` is the proxy with `extractPath` under a wildcard path:
+
+```typescript
+import { createGatewayProxy } from "ai-gateway-proxy";
+
+const proxy = createGatewayProxy({
+  extractPath: (request) => {
+    const url = new URL(request.url);
+    return url.pathname.replace(/^\/api\/ai\//, "");
+  },
+});
+
+export default (request: Request) => proxy(request);
+
+export const config = { path: "/api/ai/*" };
+```
+
+Netlify has no Vercel OIDC, so set `AI_GATEWAY_API_KEY` in the site's environment variables with the Functions scope; the proxy reads it from `process.env`. Pass the request alone: Netlify calls the function with its `Context` as the second argument, whose `params` holds the path's named groups, not the `segments` the handler would read.
 
 ### SvelteKit
 
