@@ -7,7 +7,7 @@ For apps whose [AI SDK](https://ai-sdk.dev) code runs where a [Vercel AI Gateway
 - **Each call can be capped, metered, rewritten or refused:** `beforeRequest`, `afterResponse` and `onError` handle language model calls, and `beforeRawRequest` and `afterRawResponse` the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) ([Example: cap, meter and mask](#example-cap-meter-and-mask), [Refusing a call](#refusing-a-call), [Raw hooks](#raw-hooks)).
 - **Streams are forwarded as they arrive:** each SSE event reaches the client as the gateway sends it, and `afterResponse` gets the aggregated result when the stream finishes ([`afterResponse`](#afterresponse)).
 
-The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit and Astro directly and into Express or `node:http` through a small adapter ([Quick Start](#quick-start)).
+The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit, Astro and React Router directly and into Express or `node:http` through a small adapter ([Quick Start](#quick-start)).
 
 ## When you do not need it
 
@@ -94,6 +94,36 @@ export const ALL: APIRoute = ({ request, params }) =>
 ```
 
 The route runs on demand, so the project needs a server adapter. `prerender = false` keeps it from being built as a static file under the default `static` output; with `output: "server"` it can go.
+
+### React Router
+
+In React Router framework mode, a route module that exports `loader` and `action` and no component answers requests directly. Create `app/routes/ai-proxy.ts`:
+
+```typescript
+import { createGatewayProxy } from "ai-gateway-proxy";
+import type { Route } from "./+types/ai-proxy";
+
+const proxy = createGatewayProxy({ segmentsParam: "*" });
+
+export const loader = ({ request, params }: Route.LoaderArgs) =>
+  proxy(request, { params: Promise.resolve(params) });
+
+export const action = ({ request, params }: Route.ActionArgs) =>
+  proxy(request, { params: Promise.resolve(params) });
+```
+
+Then register it as a splat route in `app/routes.ts`, which passes the rest of the path as `params["*"]`:
+
+```typescript
+import { type RouteConfig, route } from "@react-router/dev/routes";
+
+export default [
+  // ...your other routes
+  route("api/ai/*", "routes/ai-proxy.ts"),
+] satisfies RouteConfig;
+```
+
+`loader` answers the `GET` reads such as `getAvailableModels`, and `action` the `POST` model calls.
 
 ### Express
 

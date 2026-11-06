@@ -144,7 +144,7 @@ describe("agent skill", () => {
 		const reference = readFileSync(`${skillDir}references/sveltekit-astro.md`, "utf8");
 		const readmeRoutes = readme.slice(
 			readme.indexOf("### SvelteKit"),
-			readme.indexOf("### Express"),
+			readme.indexOf("### React Router"),
 		);
 		expect(typescriptBlocks(readmeRoutes)).toHaveLength(2);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoutes));
