@@ -7,7 +7,7 @@ For apps whose [AI SDK](https://ai-sdk.dev) code runs where a [Vercel AI Gateway
 - **Each call can be capped, metered, rewritten or refused:** `beforeRequest`, `afterResponse` and `onError` handle language model calls, and `beforeRawRequest` and `afterRawResponse` the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) ([Example: cap, meter and mask](#example-cap-meter-and-mask), [Refusing a call](#refusing-a-call), [Raw hooks](#raw-hooks)).
 - **Streams are forwarded as they arrive:** each SSE event reaches the client as the gateway sends it, and `afterResponse` gets the aggregated result when the stream finishes ([`afterResponse`](#afterresponse)).
 
-The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit, Astro and React Router directly and into Express or `node:http` through a small adapter ([Quick Start](#quick-start)).
+The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit, Astro and React Router directly, into Nuxt through h3's `toWebRequest`, and into Express or `node:http` through a small adapter ([Quick Start](#quick-start)).
 
 ## When you do not need it
 
@@ -124,6 +124,22 @@ export default [
 ```
 
 `loader` answers the `GET` reads such as `getAvailableModels`, and `action` the `POST` model calls.
+
+### Nuxt
+
+Create a catch-all server route at `server/api/ai/[...path].ts`. Nitro passes the rest of the path as the `path` router param, one string such as `batch/status`. A server route gets an h3 event rather than a Fetch `Request`, so `toWebRequest` builds one from it:
+
+```typescript
+import { createGatewayProxy } from "ai-gateway-proxy";
+
+const proxy = createGatewayProxy({ segmentsParam: "path" });
+
+export default defineEventHandler((event) =>
+  proxy(toWebRequest(event), { params: Promise.resolve(getRouterParams(event)) }),
+);
+```
+
+`defineEventHandler`, `toWebRequest` and `getRouterParams` are auto-imported in server routes, from the h3 v1 that Nuxt 3 and 4 ship. A file without a method suffix such as `.post.ts` answers every method, so the `POST` model calls and the `GET` reads such as `getAvailableModels` both reach the proxy, and h3 streams the returned `Response` back as the gateway sends it.
 
 ### Express
 
