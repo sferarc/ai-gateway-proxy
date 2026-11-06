@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.14.8
+
+### Patch Changes
+
+- 5648030: Show in the README how to serve the proxy with `Bun.serve` and `Deno.serve`, and list Bun and Deno in the npm keywords.
+
 ## 0.14.7
 
 ### Patch Changes
