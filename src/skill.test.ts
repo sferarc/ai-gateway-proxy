@@ -91,6 +91,12 @@ export declare namespace Route {
 }
 `;
 
+// The Fastify route imports the Express adapter's handle from its own module.
+const gatewayHandleTypes = `
+import type { IncomingMessage, ServerResponse } from "node:http";
+export declare function handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
+`;
+
 function typeErrors(samples: Map<string, string>): string[] {
 	const config = ts.readConfigFile(`${root}tsconfig.json`, ts.sys.readFile);
 	const { options } = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
@@ -98,6 +104,7 @@ function typeErrors(samples: Map<string, string>): string[] {
 	files.set(`${skillDir}ambient.d.ts`, ambient);
 	files.set(`${skillDir}$types.d.ts`, svelteKitTypes);
 	files.set(`${skillDir}+types/ai-proxy.d.ts`, reactRouterTypes);
+	files.set(`${skillDir}gateway-handle.d.ts`, gatewayHandleTypes);
 	const host = ts.createCompilerHost({ ...options, noEmit: true });
 	const getSourceFile = host.getSourceFile.bind(host);
 	host.fileExists = (name) => files.has(name) || ts.sys.fileExists(name);
@@ -215,6 +222,15 @@ describe("agent skill", () => {
 		expect(skill).toContain("](references/nuxt.md)");
 		const reference = readFileSync(`${skillDir}references/nuxt.md`, "utf8");
 		const readmeRoute = readme.slice(readme.indexOf("### Nuxt"), readme.indexOf("### Express"));
+		expect(typescriptBlocks(readmeRoute)).toHaveLength(1);
+		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));
+	});
+
+	// The README copy runs in a real Fastify app between a real gateway client and a fake gateway in readme-fastify.test.ts.
+	it("carries the README Fastify route unchanged", () => {
+		expect(skill).toContain("](references/fastify.md)");
+		const reference = readFileSync(`${skillDir}references/fastify.md`, "utf8");
+		const readmeRoute = readme.slice(readme.indexOf("### Fastify"), readme.indexOf("### Client"));
 		expect(typescriptBlocks(readmeRoute)).toHaveLength(1);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));
 	});
