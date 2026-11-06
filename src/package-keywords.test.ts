@@ -12,16 +12,15 @@ const quickStart = readme.split(/^## Quick Start$/m)[1]?.split(/^## /m)[0] ?? ""
 const frameworks = [...quickStart.matchAll(/^### (.+)$/gm)]
 	.map(([, heading]) => heading)
 	.filter((heading) => !notFrameworks.has(heading))
-	.map((heading) =>
-		heading
-			.split(" ")[0]
-			.toLowerCase()
-			.replace(/[^a-z]/g, ""),
+	.map(
+		(heading) =>
+			({ "Next.js App Router": "nextjs", "React Router": "react-router" })[heading] ??
+			heading.toLowerCase().replace(/[^a-z]/g, ""),
 	);
 
 describe("package.json keywords", () => {
 	it("finds the frameworks of the Quick Start", () => {
-		expect(frameworks).toEqual(["nextjs", "hono", "sveltekit", "astro", "express"]);
+		expect(frameworks).toEqual(["nextjs", "hono", "sveltekit", "astro", "react-router", "express"]);
 	});
 
 	it.each(frameworks)("lists %s", (framework) => {

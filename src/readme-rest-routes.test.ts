@@ -1,7 +1,7 @@
 /**
- * The README's SvelteKit and Astro routes, run as written between a real `@ai-sdk/gateway` client and
- * a fake gateway, called as those frameworks call a `[...path]` route: `params.path` is one string.
- * No gateway key, server or network is needed.
+ * The README's SvelteKit, Astro and React Router routes, run as written between a real
+ * `@ai-sdk/gateway` client and a fake gateway, called as those frameworks call a rest or splat route:
+ * the rest of the path is one string param. No gateway key, server or network is needed.
  */
 
 import { readFileSync } from "node:fs";
@@ -62,12 +62,18 @@ function readmeRoute(heading: string, proxyOptions: CreateGatewayProxyOptions) {
 	return exports;
 }
 
-const routes = [
-	{ framework: "SvelteKit", handler: "fallback" },
-	{ framework: "Astro", handler: "ALL" },
+const routes: { framework: string; param: string; handler: (method: string) => string }[] = [
+	{ framework: "SvelteKit", param: "path", handler: () => "fallback" },
+	{ framework: "Astro", param: "path", handler: () => "ALL" },
+	// React Router sends GET and HEAD to loader and every other method to action.
+	{
+		framework: "React Router",
+		param: "*",
+		handler: (method) => (method === "GET" || method === "HEAD" ? "loader" : "action"),
+	},
 ];
 
-describe.each(routes)("README $framework route", ({ framework, handler }) => {
+describe.each(routes)("README $framework route", ({ framework, param, handler }) => {
 	let recorded: { url: string; method: string; authorization: string | null; body: string }[];
 	let respond: () => Response;
 
@@ -95,15 +101,18 @@ describe.each(routes)("README $framework route", ({ framework, handler }) => {
 				return respond();
 			},
 		});
-		const routeHandler = exports[handler] as RouteHandler;
-		expect(routeHandler).toBeTypeOf("function");
+		for (const method of ["GET", "POST"]) {
+			expect(exports[handler(method)]).toBeTypeOf("function");
+		}
+		const routeHandler: RouteHandler = (event) =>
+			(exports[handler(event.request.method)] as RouteHandler)(event);
 		return routeHandler;
 	}
 
 	// The framework's side: the rest segment after the route's directory, slashes kept, undecoded.
 	function call(routeHandler: RouteHandler, request: Request) {
 		const path = new URL(request.url).pathname.slice(ROUTE_PREFIX.length);
-		return routeHandler({ request, params: { path } });
+		return routeHandler({ request, params: { [param]: path } });
 	}
 
 	function client(options: Omit<CreateGatewayProxyOptions, "fetch" | "segmentsParam"> = {}) {
