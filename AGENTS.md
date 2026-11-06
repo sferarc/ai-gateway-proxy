@@ -32,7 +32,7 @@ The `brain/` directory is an Obsidian vault: persistent notes on how the library
 
 ## Ground rules
 
-- Run `pnpm install --frozen-lockfile` then `pnpm check` before opening a pull request. `check` runs the same steps as CI in the same order, and `Check` is required to merge.
+- Run `pnpm install --frozen-lockfile` then `pnpm check` before opening a pull request. `check` runs the same steps as CI apart from its advisory audit, in the same order, and `Check` is required to merge.
 - Never add an `AI_GATEWAY_API_KEY` to CI or spend money on the gateway: the integration tests skip without it on purpose.
 - Add a changeset (`pnpm changeset`) for a change that should ship.
 - Edit this file, not `CLAUDE.md`, which only imports it for Claude Code.
