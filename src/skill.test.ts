@@ -67,6 +67,19 @@ declare module "@tanstack/react-router" {
 		server: { handlers: Partial<Record<"GET" | "POST" | "PUT" | "PATCH" | "DELETE", Handler>> };
 	}) => unknown;
 }
+// Each runtime calls the handler with a second argument that is not the proxy's { params } context.
+declare const Bun: {
+	serve(options: {
+		routes: Record<string, (request: Request, server: unknown) => Response | Promise<Response>>;
+		fetch: (request: Request, server: unknown) => Response | Promise<Response>;
+	}): unknown;
+};
+declare const Deno: {
+	serve(handler: (request: Request, info: unknown) => Response | Promise<Response>): unknown;
+};
+declare module "npm:ai-gateway-proxy" {
+	export * from "ai-gateway-proxy";
+}
 declare module "astro" {
 	export type APIRoute = (context: {
 		request: Request;
@@ -242,6 +255,16 @@ describe("agent skill", () => {
 		const readmeRoute = readme.slice(readme.indexOf("### Koa"), readme.indexOf("### Client"));
 		expect(typescriptBlocks(readmeRoute)).toHaveLength(1);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));
+	});
+
+	// The README copies run with Bun.serve and Deno.serve stubbed between a real gateway client and a fake gateway in readme-bun-deno.test.ts.
+	it("carries the README Bun and Deno servers unchanged", () => {
+		expect(skill).toContain("](references/bun-deno.md)");
+		const reference = readFileSync(`${skillDir}references/bun-deno.md`, "utf8");
+		const readmeServers = readme.slice(readme.indexOf("### Bun"), readme.indexOf("### SvelteKit"));
+		expect(typescriptBlocks(readmeServers)).toHaveLength(2);
+		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeServers));
+		expect(reference).toContain("--allow-env");
 	});
 
 	it("is linked from the README", () => {
