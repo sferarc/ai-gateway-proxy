@@ -7,7 +7,7 @@ For apps whose [AI SDK](https://ai-sdk.dev) code runs where a [Vercel AI Gateway
 - **Each call can be capped, metered, rewritten or refused:** `beforeRequest`, `afterResponse` and `onError` handle language model calls, and `beforeRawRequest` and `afterRawResponse` the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) ([Example: cap, meter and mask](#example-cap-meter-and-mask), [Refusing a call](#refusing-a-call), [Raw hooks](#raw-hooks)).
 - **Streams are forwarded as they arrive:** each SSE event reaches the client as the gateway sends it, and `afterResponse` gets the aggregated result when the stream finishes ([`afterResponse`](#afterresponse)).
 
-The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit, Astro and React Router directly, into Nuxt through h3's `toWebRequest`, and into Express or `node:http` through a small adapter ([Quick Start](#quick-start)).
+The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit, Astro, React Router and TanStack Start directly, into Nuxt through h3's `toWebRequest`, and into Express or `node:http` through a small adapter ([Quick Start](#quick-start)).
 
 ## When you do not need it
 
@@ -124,6 +124,28 @@ export default [
 ```
 
 `loader` answers the `GET` reads such as `getAvailableModels`, and `action` the `POST` model calls.
+
+### TanStack Start
+
+In TanStack Start, a file route with `server.handlers` answers requests directly. Create a splat route at `src/routes/api/ai/$.ts`, which passes the rest of the path as `params._splat`:
+
+```typescript
+import { createFileRoute } from "@tanstack/react-router";
+import { createGatewayProxy } from "ai-gateway-proxy";
+
+const proxy = createGatewayProxy({ segmentsParam: "_splat" });
+
+export const Route = createFileRoute("/api/ai/$")({
+  server: {
+    handlers: {
+      GET: ({ request, params }) => proxy(request, { params: Promise.resolve(params) }),
+      POST: ({ request, params }) => proxy(request, { params: Promise.resolve(params) }),
+    },
+  },
+});
+```
+
+`GET` answers the reads such as `getAvailableModels`, and `POST` the model calls; the gateway client sends no other method.
 
 ### Nuxt
 

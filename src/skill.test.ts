@@ -180,7 +180,7 @@ describe("agent skill", () => {
 		const reference = readFileSync(`${skillDir}references/react-router.md`, "utf8");
 		const readmeRoute = readme.slice(
 			readme.indexOf("### React Router"),
-			readme.indexOf("### Nuxt"),
+			readme.indexOf("### TanStack Start"),
 		);
 		expect(typescriptBlocks(readmeRoute)).toHaveLength(2);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));

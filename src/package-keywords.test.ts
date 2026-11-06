@@ -14,8 +14,11 @@ const frameworks = [...quickStart.matchAll(/^### (.+)$/gm)]
 	.filter((heading) => !notFrameworks.has(heading))
 	.map(
 		(heading) =>
-			({ "Next.js App Router": "nextjs", "React Router": "react-router" })[heading] ??
-			heading.toLowerCase().replace(/[^a-z]/g, ""),
+			({
+				"Next.js App Router": "nextjs",
+				"React Router": "react-router",
+				"TanStack Start": "tanstack-start",
+			})[heading] ?? heading.toLowerCase().replace(/[^a-z]/g, ""),
 	);
 
 describe("package.json keywords", () => {
@@ -26,6 +29,7 @@ describe("package.json keywords", () => {
 			"sveltekit",
 			"astro",
 			"react-router",
+			"tanstack-start",
 			"nuxt",
 			"express",
 		]);
