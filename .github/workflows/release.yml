@@ -52,7 +52,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Create version PR or publish
+        id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           publish-script: pnpm release
           github-token: ${{ steps.app.outputs.token }}
+
+      # The version PR only carries what `changeset version` generated, so the
+      # required checks are the whole review. Merging it publishes.
+      - name: Enable auto-merge on the version PR
+        if: steps.changesets.outputs.pr-number
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR_NUMBER: ${{ steps.changesets.outputs.pr-number }}
+        run: gh pr merge --squash --auto "$PR_NUMBER"

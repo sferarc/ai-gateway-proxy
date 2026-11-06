@@ -6,6 +6,7 @@ Releases use changesets. Publishing is on: `.github/workflows/release.yml` runs 
 
 1. A change that should ship carries a changeset from `pnpm changeset` (`.changeset/README.md`).
 2. On a push to `main`, `changesets/action` opens or updates a version pull request from the pending changesets.
+   The next step arms squash auto-merge on it (`gh pr merge --squash --auto` on the action's `pr-number` output) with the same App token, so it lands once the required `Check` passes, the same setup as `sferarc/openapi`.
 3. Merging that pull request runs the workflow again, which publishes through `pnpm release` (`pnpm build && changeset publish`).
 
 The job runs only on `main`: a `github.ref` guard beside `RELEASE_ENABLED`, so a `workflow_dispatch` from another branch publishes nothing (sferarc/hq#912). That guard is the only control in place. The job also names the `release` environment, which GitHub creates on the first run with no deployment branch policy; on 2026-11-05 `gh api repos/sferarc/ai-gateway-proxy/environments` returned `total_count: 0`. The main-only branch policy is pending: the sferarc-hq App gets a 403 creating it without Administration write, which waits on sferarc/hq#888.
