@@ -58,6 +58,15 @@ declare module "@react-router/dev/routes" {
 	export type RouteConfig = RouteConfigEntry[] | Promise<RouteConfigEntry[]>;
 	export function route(path: string, file: string, children?: RouteConfigEntry[]): RouteConfigEntry;
 }
+declare module "@tanstack/react-router" {
+	type Handler = (context: {
+		request: Request;
+		params: { _splat?: string };
+	}) => Response | Promise<Response>;
+	export function createFileRoute(path: string): (options: {
+		server: { handlers: Partial<Record<"GET" | "POST" | "PUT" | "PATCH" | "DELETE", Handler>> };
+	}) => unknown;
+}
 declare module "astro" {
 	export type APIRoute = (context: {
 		request: Request;
@@ -183,6 +192,18 @@ describe("agent skill", () => {
 			readme.indexOf("### TanStack Start"),
 		);
 		expect(typescriptBlocks(readmeRoute)).toHaveLength(2);
+		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));
+	});
+
+	// The README copy runs between a real gateway client and a fake gateway in readme-rest-routes.test.ts.
+	it("carries the README TanStack Start route unchanged", () => {
+		expect(skill).toContain("](references/tanstack-start.md)");
+		const reference = readFileSync(`${skillDir}references/tanstack-start.md`, "utf8");
+		const readmeRoute = readme.slice(
+			readme.indexOf("### TanStack Start"),
+			readme.indexOf("### Nuxt"),
+		);
+		expect(typescriptBlocks(readmeRoute)).toHaveLength(1);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));
 	});
 
