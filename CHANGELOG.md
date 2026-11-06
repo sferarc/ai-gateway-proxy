@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.14.10
+
+### Patch Changes
+
+- cac9b48: Show how to serve the proxy route from a Netlify Function, routed by `config.path` with `extractPath`, and list Netlify in the npm keywords.
+
 ## 0.14.9
 
 ### Patch Changes
