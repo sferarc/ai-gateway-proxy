@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.14.6
+
+### Patch Changes
+
+- d0b3c5a: Show in the README how to mount the proxy in Fastify, and list Fastify in the npm keywords.
+
 ## 0.14.5
 
 ### Patch Changes
