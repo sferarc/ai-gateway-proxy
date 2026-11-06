@@ -14,7 +14,7 @@ A TypeScript library published to npm as `ai-gateway-proxy`, shipped as ESM and 
 
 ## Agent skill
 
-`skills/ai-gateway-proxy/SKILL.md` is an Agent Skills skill (https://agentskills.io) that tells a coding agent when the proxy is needed and how to set it up; `npx skills add sferarc/ai-gateway-proxy` installs it from the repository, not from the npm package, whose `files` hold only `dist` (#183). Its `references/` hold the README's Express adapter, cross-origin (CORS) wrapper (#215) and SvelteKit and Astro routes (#221) verbatim. It restates the README, which stays the authority, so a change to an option or hook rule the skill names updates both. `src/skill.test.ts` type checks its samples ([[development/testing]]).
+`skills/ai-gateway-proxy/SKILL.md` is an Agent Skills skill (https://agentskills.io) that tells a coding agent when the proxy is needed and how to set it up; `npx skills add sferarc/ai-gateway-proxy` installs it from the repository, not from the npm package, whose `files` hold only `dist` (#183). Its `references/` hold the README's Express adapter, cross-origin (CORS) wrapper (#215), SvelteKit and Astro routes (#221) and React Router route (#228) verbatim. It restates the README, which stays the authority, so a change to an option or hook rule the skill names updates both. `src/skill.test.ts` type checks its samples ([[development/testing]]).
 
 ## Agent instructions
 
