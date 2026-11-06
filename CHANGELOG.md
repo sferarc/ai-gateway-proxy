@@ -1,5 +1,11 @@
 # ai-gateway-proxy
 
+## 0.14.9
+
+### Patch Changes
+
+- d2857fe: Show how to serve the proxy route from a Cloudflare Worker, with the key passed from `env` through `apiKey`, and list Cloudflare Workers in the npm keywords.
+
 ## 0.14.8
 
 ### Patch Changes
