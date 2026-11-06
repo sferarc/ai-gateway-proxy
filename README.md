@@ -7,7 +7,7 @@ For apps whose [AI SDK](https://ai-sdk.dev) code runs where a [Vercel AI Gateway
 - **Each call can be capped, metered, rewritten or refused:** `beforeRequest`, `afterResponse` and `onError` handle language model calls, and `beforeRawRequest` and `afterRawResponse` the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) ([Example: cap, meter and mask](#example-cap-meter-and-mask), [Refusing a call](#refusing-a-call), [Raw hooks](#raw-hooks)).
 - **Streams are forwarded as they arrive:** each SSE event reaches the client as the gateway sends it, and `afterResponse` gets the aggregated result when the stream finishes ([`afterResponse`](#afterresponse)).
 
-The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, `Bun.serve`, `Deno.serve`, SvelteKit, Astro, React Router and TanStack Start directly, into Nuxt through h3's `toWebRequest`, and into Express, Fastify, Koa or `node:http` through a small adapter ([Quick Start](#quick-start)).
+The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, `Bun.serve`, `Deno.serve`, Cloudflare Workers, SvelteKit, Astro, React Router and TanStack Start directly, into Nuxt through h3's `toWebRequest`, and into Express, Fastify, Koa or `node:http` through a small adapter ([Quick Start](#quick-start)).
 
 ## When you do not need it
 
@@ -106,6 +106,36 @@ Deno.serve((request) => {
 ```
 
 Run it with `deno run --allow-net --allow-env server.ts`: without `--allow-env` the proxy cannot read `AI_GATEWAY_API_KEY`. As with Bun, pass the request alone, since Deno's second argument is the connection info.
+
+### Cloudflare Workers
+
+A Worker gets its secrets as the `env` argument of `fetch` and has no Vercel OIDC, so pass the key with `apiKey` and create the proxy inside `fetch`, where `env` is in reach:
+
+```typescript
+import { createGatewayProxy } from "ai-gateway-proxy";
+
+interface Env {
+  AI_GATEWAY_API_KEY: string;
+}
+
+export default {
+  fetch(request: Request, env: Env) {
+    if (!new URL(request.url).pathname.startsWith("/api/ai/")) {
+      return new Response("Not found", { status: 404 });
+    }
+    const proxy = createGatewayProxy({
+      apiKey: () => env.AI_GATEWAY_API_KEY,
+      extractPath: (request) => {
+        const url = new URL(request.url);
+        return url.pathname.replace(/^\/api\/ai\//, "");
+      },
+    });
+    return proxy(request);
+  },
+};
+```
+
+Store the key with `npx wrangler secret put AI_GATEWAY_API_KEY`. The function form of `apiKey` never falls back to `process.env` or OIDC, so a missing secret answers 500 `api_key_missing` instead of looking elsewhere. Call the proxy with the request alone: `fetch` also gets `env` and the execution context, neither of which is the `{ params }` context the handler takes.
 
 ### SvelteKit
 
