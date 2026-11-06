@@ -1,6 +1,6 @@
 {
 	"name": "ai-gateway-proxy",
-	"version": "0.14.4",
+	"version": "0.14.5",
 	"description": "Forwards AI SDK gateway calls to the Vercel AI Gateway, with API key or Vercel OIDC authentication and request hooks",
 	"keywords": [
 		"ai",
