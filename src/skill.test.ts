@@ -23,7 +23,7 @@ function typescriptBlocks(markdown: string): string[] {
 	return [...markdown.matchAll(/^```typescript\n([\s\S]*?)^```$/gm)].map(([, code]) => code);
 }
 
-// Stand-ins for the app's own functions and for frameworks this repository does not install.
+// Stand-ins for the app's own functions and for frameworks this repository does not install; Nuxt's auto-imports come from the installed h3.
 const ambient = `
 declare const sessionToken: string;
 declare function isValidSession(token: string): Promise<boolean>;
@@ -33,6 +33,9 @@ declare function meter(
 	modelId: string | undefined,
 	usage: { inputTokens: number | undefined; outputTokens: number | undefined; complete: boolean },
 ): Promise<void>;
+declare const defineEventHandler: typeof import("h3").defineEventHandler;
+declare const toWebRequest: typeof import("h3").toWebRequest;
+declare const getRouterParams: typeof import("h3").getRouterParams;
 declare module "hono" {
 	export class Hono {
 		all(path: string, handler: (c: { req: { raw: Request } }) => Response | Promise<Response>): this;
@@ -180,6 +183,15 @@ describe("agent skill", () => {
 			readme.indexOf("### Nuxt"),
 		);
 		expect(typescriptBlocks(readmeRoute)).toHaveLength(2);
+		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));
+	});
+
+	// The README copy runs in a real h3 app between a real gateway client and a fake gateway in readme-nuxt.test.ts.
+	it("carries the README Nuxt route unchanged", () => {
+		expect(skill).toContain("](references/nuxt.md)");
+		const reference = readFileSync(`${skillDir}references/nuxt.md`, "utf8");
+		const readmeRoute = readme.slice(readme.indexOf("### Nuxt"), readme.indexOf("### Express"));
+		expect(typescriptBlocks(readmeRoute)).toHaveLength(1);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));
 	});
 

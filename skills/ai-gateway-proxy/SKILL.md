@@ -1,6 +1,6 @@
 ---
 name: ai-gateway-proxy
-description: Putting the Vercel AI Gateway behind your own route so the browser never holds the key, or metering and refusing calls. Use when AI SDK code runs in a browser, mobile or desktop app that must not see AI_GATEWAY_API_KEY, when adding a gateway proxy route to a Next.js, Hono, SvelteKit, Astro, React Router or Express app, or when capping, metering or refusing each caller's model calls in one place.
+description: Putting the Vercel AI Gateway behind your own route so the browser never holds the key, or metering and refusing calls. Use when AI SDK code runs in a browser, mobile or desktop app that must not see AI_GATEWAY_API_KEY, when adding a gateway proxy route to a Next.js, Hono, SvelteKit, Astro, React Router, Nuxt or Express app, or when capping, metering or refusing each caller's model calls in one place.
 license: MIT
 ---
 
@@ -48,7 +48,7 @@ const proxy = createGatewayProxy({
 app.all("/api/ai/*", (c) => proxy(c.req.raw));
 ```
 
-SvelteKit and Astro `[...path]` routes pass `params` as a plain object, so they wrap it in a promise for `segmentsParam: "path"`, as in [references/sveltekit-astro.md](references/sveltekit-astro.md). React Router framework mode takes a splat route module that exports `loader` and `action` with `segmentsParam: "*"`, as in [references/react-router.md](references/react-router.md). Express and `node:http` hand over `req` and `res`, not a Fetch `Request`, so they need the adapter in [references/express.md](references/express.md). Register it before `express.json()` or any other body parser.
+SvelteKit and Astro `[...path]` routes pass `params` as a plain object, so they wrap it in a promise for `segmentsParam: "path"`, as in [references/sveltekit-astro.md](references/sveltekit-astro.md). React Router framework mode takes a splat route module that exports `loader` and `action` with `segmentsParam: "*"`, as in [references/react-router.md](references/react-router.md). A Nuxt catch-all server route gets an h3 event, so it builds the `Request` with `toWebRequest` and passes `getRouterParams` for `segmentsParam: "path"`, as in [references/nuxt.md](references/nuxt.md). Express and `node:http` hand over `req` and `res`, not a Fetch `Request`, so they need the adapter in [references/express.md](references/express.md). Register it before `express.json()` or any other body parser.
 
 ## Point the client at it
 
