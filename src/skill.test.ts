@@ -283,6 +283,19 @@ describe("agent skill", () => {
 		expect(reference).toContain("wrangler secret put AI_GATEWAY_API_KEY");
 	});
 
+	// The README copy runs with a Netlify-like Context between a real gateway client and a fake gateway in readme-netlify.test.ts.
+	it("carries the README Netlify Function unchanged", () => {
+		expect(skill).toContain("](references/netlify.md)");
+		const reference = readFileSync(`${skillDir}references/netlify.md`, "utf8");
+		const readmeFunction = readme.slice(
+			readme.indexOf("### Netlify Functions"),
+			readme.indexOf("### SvelteKit"),
+		);
+		expect(typescriptBlocks(readmeFunction)).toHaveLength(1);
+		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeFunction));
+		expect(reference).toContain("Functions scope");
+	});
+
 	it("is linked from the README", () => {
 		expect(readme).toContain("](skills/ai-gateway-proxy/SKILL.md)");
 	});
