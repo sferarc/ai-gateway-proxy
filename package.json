@@ -12,6 +12,8 @@
 		"vercel-ai-gateway",
 		"nextjs",
 		"hono",
+		"bun",
+		"deno",
 		"sveltekit",
 		"astro",
 		"react-router",

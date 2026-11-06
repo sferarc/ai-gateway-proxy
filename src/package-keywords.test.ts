@@ -26,6 +26,8 @@ describe("package.json keywords", () => {
 		expect(frameworks).toEqual([
 			"nextjs",
 			"hono",
+			"bun",
+			"deno",
 			"sveltekit",
 			"astro",
 			"react-router",
