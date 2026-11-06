@@ -15,6 +15,7 @@
 		"bun",
 		"deno",
 		"cloudflare-workers",
+		"netlify",
 		"sveltekit",
 		"astro",
 		"react-router",

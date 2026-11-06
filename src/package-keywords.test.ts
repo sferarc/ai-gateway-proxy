@@ -19,6 +19,7 @@ const frameworks = [...quickStart.matchAll(/^### (.+)$/gm)]
 				"React Router": "react-router",
 				"TanStack Start": "tanstack-start",
 				"Cloudflare Workers": "cloudflare-workers",
+				"Netlify Functions": "netlify",
 			})[heading] ?? heading.toLowerCase().replace(/[^a-z]/g, ""),
 	);
 
@@ -30,6 +31,7 @@ describe("package.json keywords", () => {
 			"bun",
 			"deno",
 			"cloudflare-workers",
+			"netlify",
 			"sveltekit",
 			"astro",
 			"react-router",
