@@ -1,5 +1,12 @@
 # ai-gateway-proxy
 
+## 0.14.3
+
+### Patch Changes
+
+- f60c922: Raise `@vercel/oidc` to 4.0.6 so installs resolve `zod` 4.6.6 or later, which fixes the high advisory GHSA-mrhx-c7xc-m3w5 that `@vercel/oidc` 4.0.5 pulled in through `@vercel/cli-config`.
+- 56998b2: Show in the README how to mount the proxy in a React Router resource route, and list React Router in the npm keywords.
+
 ## 0.14.2
 
 ### Patch Changes
