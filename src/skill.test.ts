@@ -261,7 +261,10 @@ describe("agent skill", () => {
 	it("carries the README Bun and Deno servers unchanged", () => {
 		expect(skill).toContain("](references/bun-deno.md)");
 		const reference = readFileSync(`${skillDir}references/bun-deno.md`, "utf8");
-		const readmeServers = readme.slice(readme.indexOf("### Bun"), readme.indexOf("### SvelteKit"));
+		const readmeServers = readme.slice(
+			readme.indexOf("### Bun"),
+			readme.indexOf("### Cloudflare Workers"),
+		);
 		expect(typescriptBlocks(readmeServers)).toHaveLength(2);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeServers));
 		expect(reference).toContain("--allow-env");
