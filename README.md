@@ -7,7 +7,7 @@ For apps whose [AI SDK](https://ai-sdk.dev) code runs where a [Vercel AI Gateway
 - **Each call can be capped, metered, rewritten or refused:** `beforeRequest`, `afterResponse` and `onError` handle language model calls, and `beforeRawRequest` and `afterRawResponse` the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) ([Example: cap, meter and mask](#example-cap-meter-and-mask), [Refusing a call](#refusing-a-call), [Raw hooks](#raw-hooks)).
 - **Streams are forwarded as they arrive:** each SSE event reaches the client as the gateway sends it, and `afterResponse` gets the aggregated result when the stream finishes ([`afterResponse`](#afterresponse)).
 
-The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit, Astro, React Router and TanStack Start directly, into Nuxt through h3's `toWebRequest`, and into Express, Fastify, Koa or `node:http` through a small adapter ([Quick Start](#quick-start)).
+The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, `Bun.serve`, `Deno.serve`, SvelteKit, Astro, React Router and TanStack Start directly, into Nuxt through h3's `toWebRequest`, and into Express, Fastify, Koa or `node:http` through a small adapter ([Quick Start](#quick-start)).
 
 ## When you do not need it
 
@@ -60,6 +60,52 @@ const proxy = createGatewayProxy({
 
 app.all("/api/ai/*", (c) => proxy(c.req.raw));
 ```
+
+### Bun
+
+`Bun.serve` takes Fetch handlers too, so the route is the proxy with `extractPath` under a wildcard route (Bun 1.2.3 or later):
+
+```typescript
+import { createGatewayProxy } from "ai-gateway-proxy";
+
+const proxy = createGatewayProxy({
+  extractPath: (request) => {
+    const url = new URL(request.url);
+    return url.pathname.replace(/^\/api\/ai\//, "");
+  },
+});
+
+Bun.serve({
+  routes: {
+    "/api/ai/*": (request) => proxy(request),
+  },
+  fetch: () => new Response("Not found", { status: 404 }),
+});
+```
+
+Pass the request alone: Bun calls a route with the server as its second argument, which is not the `{ params }` context the handler takes.
+
+### Deno
+
+`Deno.serve` calls one Fetch handler for every request, so check the path before handing it to the proxy:
+
+```typescript
+import { createGatewayProxy } from "npm:ai-gateway-proxy";
+
+const proxy = createGatewayProxy({
+  extractPath: (request) => {
+    const url = new URL(request.url);
+    return url.pathname.replace(/^\/api\/ai\//, "");
+  },
+});
+
+Deno.serve((request) => {
+  if (new URL(request.url).pathname.startsWith("/api/ai/")) return proxy(request);
+  return new Response("Not found", { status: 404 });
+});
+```
+
+Run it with `deno run --allow-net --allow-env server.ts`: without `--allow-env` the proxy cannot read `AI_GATEWAY_API_KEY`. As with Bun, pass the request alone, since Deno's second argument is the connection info.
 
 ### SvelteKit
 
