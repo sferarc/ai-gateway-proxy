@@ -230,7 +230,7 @@ describe("agent skill", () => {
 	it("carries the README Fastify route unchanged", () => {
 		expect(skill).toContain("](references/fastify.md)");
 		const reference = readFileSync(`${skillDir}references/fastify.md`, "utf8");
-		const readmeRoute = readme.slice(readme.indexOf("### Fastify"), readme.indexOf("### Client"));
+		const readmeRoute = readme.slice(readme.indexOf("### Fastify"), readme.indexOf("### Koa"));
 		expect(typescriptBlocks(readmeRoute)).toHaveLength(1);
 		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeRoute));
 	});

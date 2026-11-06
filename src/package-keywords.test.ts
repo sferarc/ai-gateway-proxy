@@ -33,6 +33,7 @@ describe("package.json keywords", () => {
 			"nuxt",
 			"express",
 			"fastify",
+			"koa",
 		]);
 	});
 

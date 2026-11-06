@@ -19,6 +19,7 @@
 		"nuxt",
 		"express",
 		"fastify",
+		"koa",
 		"route-handler",
 		"streaming",
 		"llm",
@@ -79,6 +80,7 @@
 		"@arethetypeswrong/cli": "catalog:",
 		"@biomejs/biome": "catalog:",
 		"@changesets/cli": "catalog:",
+		"@types/koa": "catalog:",
 		"@types/node": "catalog:",
 		"@typescript/typescript6": "catalog:",
 		"ai": "catalog:",
@@ -89,6 +91,7 @@
 		"hono": "catalog:",
 		"is-tree-shakable": "catalog:",
 		"knip": "catalog:",
+		"koa": "catalog:",
 		"lefthook": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"

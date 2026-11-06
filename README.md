@@ -7,7 +7,7 @@ For apps whose [AI SDK](https://ai-sdk.dev) code runs where a [Vercel AI Gateway
 - **Each call can be capped, metered, rewritten or refused:** `beforeRequest`, `afterResponse` and `onError` handle language model calls, and `beforeRawRequest` and `afterRawResponse` the other calls (embedding, image, video, speech, transcription, reranking, decision, batch start) ([Example: cap, meter and mask](#example-cap-meter-and-mask), [Refusing a call](#refusing-a-call), [Raw hooks](#raw-hooks)).
 - **Streams are forwarded as they arrive:** each SSE event reaches the client as the gateway sends it, and `afterResponse` gets the aggregated result when the stream finishes ([`afterResponse`](#afterresponse)).
 
-The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit, Astro, React Router and TanStack Start directly, into Nuxt through h3's `toWebRequest`, and into Express, Fastify or `node:http` through a small adapter ([Quick Start](#quick-start)).
+The handler takes a Fetch `Request` and returns a `Response`, so it plugs into Next.js, Hono, SvelteKit, Astro, React Router and TanStack Start directly, into Nuxt through h3's `toWebRequest`, and into Express, Fastify, Koa or `node:http` through a small adapter ([Quick Start](#quick-start)).
 
 ## When you do not need it
 
@@ -238,6 +238,23 @@ export async function gatewayRoutes(app: FastifyInstance) {
 ```
 
 Register it with `app.register(gatewayRoutes)`. The plugin keeps the parser change to its own routes, so the rest of the app still gets parsed JSON bodies, and `reply.hijack()` stops Fastify from sending a reply of its own while `handle` writes the response.
+
+### Koa
+
+Koa reaches the same `handle` through `ctx.req` and `ctx.res`, the `node:http` objects underneath, with `handle` exported from `./gateway-handle` as in the Fastify section. Koa itself leaves the body unread, but a body parser such as `@koa/bodyparser` consumes it, so the route is a middleware that runs before the parser:
+
+```typescript
+import type { Middleware } from "koa";
+import { handle } from "./gateway-handle";
+
+export const gatewayRoute: Middleware = async (ctx, next) => {
+  if (!ctx.path.startsWith("/api/ai/")) return next();
+  ctx.respond = false;
+  await handle(ctx.req, ctx.res);
+};
+```
+
+Register it with `app.use(gatewayRoute)` ahead of the body parser. Other paths go on to the rest of the app, and `ctx.respond = false` stops Koa from sending a reply of its own once the middleware returns, while `handle` writes the response.
 
 ### Client
 
