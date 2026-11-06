@@ -270,6 +270,19 @@ describe("agent skill", () => {
 		expect(reference).toContain("--allow-env");
 	});
 
+	// The README copy runs with an env and an execution context between a real gateway client and a fake gateway in readme-cloudflare-workers.test.ts.
+	it("carries the README Cloudflare Worker unchanged", () => {
+		expect(skill).toContain("](references/cloudflare-workers.md)");
+		const reference = readFileSync(`${skillDir}references/cloudflare-workers.md`, "utf8");
+		const readmeWorker = readme.slice(
+			readme.indexOf("### Cloudflare Workers"),
+			readme.indexOf("### SvelteKit"),
+		);
+		expect(typescriptBlocks(readmeWorker)).toHaveLength(1);
+		expect(typescriptBlocks(reference)).toEqual(typescriptBlocks(readmeWorker));
+		expect(reference).toContain("wrangler secret put AI_GATEWAY_API_KEY");
+	});
+
 	it("is linked from the README", () => {
 		expect(readme).toContain("](skills/ai-gateway-proxy/SKILL.md)");
 	});
