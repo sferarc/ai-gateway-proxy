@@ -31,6 +31,31 @@ jobs:
         with:
           persist-credentials: false
 
+      # The action reuses only a mise in its own bin dir, else downloads one from GitHub releases.
+      - name: Reuse the runner image's mise
+        id: image-mise
+        run: |
+          image_mise=$(command -v mise || true)
+          if [ -z "$image_mise" ] && [ -x "$HOME/.local/bin/mise" ]; then image_mise="$HOME/.local/bin/mise"; fi
+          if [ -z "$image_mise" ]; then
+            echo "No mise on the runner image; the action downloads the pinned version"
+            exit 0
+          fi
+          version=$("$image_mise" version | awk 'NR==1 {print $1}')
+          if [ -z "$version" ]; then
+            echo "::warning::$image_mise reported no version; the action downloads the pinned version"
+            exit 0
+          fi
+          bin_dir="${MISE_DATA_DIR:-$HOME/.local/share/mise}/bin"
+          mkdir -p "$bin_dir"
+          if [ "$(readlink -f "$image_mise")" != "$(readlink -f "$bin_dir/mise")" ]; then
+            cp "$image_mise" "$bin_dir/mise"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # The image already runs the job, so its binary's own checksum is the trust anchor.
+          echo "sha256=$(sha256sum "$bin_dir/mise" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "Using the image's mise $version"
+
       # Only mise itself: the check needs Node 26 and none of the repository's own tools.
       - name: Install mise
         uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
@@ -38,6 +63,8 @@ jobs:
           install: false
           cache: false
           working_directory: ${{ runner.temp }}
+          version: ${{ steps.image-mise.outputs.version || '2026.11.2' }}
+          sha256: ${{ steps.image-mise.outputs.sha256 }}
 
       - name: Check the approved stack
         env:
@@ -828,12 +855,39 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
+      # The action reuses only a mise in its own bin dir, else downloads one from GitHub releases.
+      - name: Reuse the runner image's mise
+        id: image-mise
+        run: |
+          image_mise=$(command -v mise || true)
+          if [ -z "$image_mise" ] && [ -x "$HOME/.local/bin/mise" ]; then image_mise="$HOME/.local/bin/mise"; fi
+          if [ -z "$image_mise" ]; then
+            echo "No mise on the runner image; the action downloads the pinned version"
+            exit 0
+          fi
+          version=$("$image_mise" version | awk 'NR==1 {print $1}')
+          if [ -z "$version" ]; then
+            echo "::warning::$image_mise reported no version; the action downloads the pinned version"
+            exit 0
+          fi
+          bin_dir="${MISE_DATA_DIR:-$HOME/.local/share/mise}/bin"
+          mkdir -p "$bin_dir"
+          if [ "$(readlink -f "$image_mise")" != "$(readlink -f "$bin_dir/mise")" ]; then
+            cp "$image_mise" "$bin_dir/mise"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # The image already runs the job, so its binary's own checksum is the trust anchor.
+          echo "sha256=$(sha256sum "$bin_dir/mise" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "Using the image's mise $version"
+
       - name: Install mise
         uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         with:
           install: false
           cache: false
           working_directory: ${{ runner.temp }}
+          version: ${{ steps.image-mise.outputs.version || '2026.11.2' }}
+          sha256: ${{ steps.image-mise.outputs.sha256 }}
 
       - name: Check what would land for Claude attribution
         env:
