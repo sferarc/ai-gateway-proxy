@@ -1,0 +1,7 @@
+# Catalog keep-backs for pnpm-workspace.yaml. The Update Dependencies workflow merges this file
+# back over the catalog right after `pnpm update --latest`. Remove an entry in the pull request
+# that takes that upgrade on purpose.
+
+catalog:
+  # Nuxt ships the h3 v1 API that the README and src/readme-nuxt.test.ts document.
+  h3: 1.15.11

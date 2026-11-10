@@ -18,6 +18,7 @@ catalog:
   bunchee: 7.0.2
   dotenv: 18.0.9
   fastify: 5.12.8
+  # Held at h3 1.x: Nuxt ships the v1 API. See scripts/config/manual-catalog-pins.yaml.
   h3: 1.15.11
   hono: 4.13.16
   is-tree-shakable: 0.5.0
